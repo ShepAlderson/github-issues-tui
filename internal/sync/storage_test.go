@@ -371,3 +371,106 @@ func TestDatabasePermissions(t *testing.T) {
 		t.Logf("Warning: Database file has permissions %v, expected at least 0600", mode)
 	}
 }
+
+func TestLoadIssues(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	store, err := NewIssueStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewIssueStore() error = %v", err)
+	}
+	defer store.Close()
+
+	// Store test issues with different timestamps
+	now := time.Now()
+	issues := []*Issue{
+		{
+			Number:       1,
+			Title:        "First Issue",
+			State:        "open",
+			Author:       "user1",
+			CreatedAt:    now.Add(-3 * time.Hour),
+			UpdatedAt:    now.Add(-1 * time.Hour),
+			CommentCount: 5,
+			Labels:       []string{"bug"},
+		},
+		{
+			Number:       2,
+			Title:        "Second Issue",
+			State:        "open",
+			Author:       "user2",
+			CreatedAt:    now.Add(-2 * time.Hour),
+			UpdatedAt:    now.Add(-30 * time.Minute),
+			CommentCount: 3,
+			Labels:       []string{"feature"},
+		},
+		{
+			Number:       3,
+			Title:        "Third Issue",
+			State:        "open",
+			Author:       "user1",
+			CreatedAt:    now.Add(-1 * time.Hour),
+			UpdatedAt:    now,
+			CommentCount: 0,
+			Assignees:    []string{"dev1"},
+		},
+	}
+
+	for _, issue := range issues {
+		if err := store.StoreIssue(issue); err != nil {
+			t.Fatalf("StoreIssue() error = %v", err)
+		}
+	}
+
+	// Test loading all issues
+	loaded, err := store.LoadIssues()
+	if err != nil {
+		t.Fatalf("LoadIssues() error = %v", err)
+	}
+
+	if len(loaded) != 3 {
+		t.Errorf("LoadIssues() returned %d issues, want 3", len(loaded))
+	}
+
+	// Verify issues are sorted by updated_at DESC (most recent first)
+	if loaded[0].Number != 3 {
+		t.Errorf("First issue number = %d, want 3 (most recently updated)", loaded[0].Number)
+	}
+	if loaded[1].Number != 2 {
+		t.Errorf("Second issue number = %d, want 2", loaded[1].Number)
+	}
+	if loaded[2].Number != 1 {
+		t.Errorf("Third issue number = %d, want 1 (least recently updated)", loaded[2].Number)
+	}
+
+	// Verify labels and assignees are loaded
+	// Issue 3 has no labels
+	if len(loaded[0].Assignees) != 1 || loaded[0].Assignees[0] != "dev1" {
+		t.Errorf("Issue 3 assignees = %v, want [dev1]", loaded[0].Assignees)
+	}
+	if len(loaded[2].Labels) != 1 || loaded[2].Labels[0] != "bug" {
+		t.Errorf("Issue 1 labels = %v, want [bug]", loaded[2].Labels)
+	}
+}
+
+func TestLoadIssues_Empty(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	store, err := NewIssueStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewIssueStore() error = %v", err)
+	}
+	defer store.Close()
+
+	// Load from empty database
+	issues, err := store.LoadIssues()
+	if err != nil {
+		t.Fatalf("LoadIssues() error = %v", err)
+	}
+
+	if len(issues) != 0 {
+		t.Errorf("LoadIssues() returned %d issues, want 0", len(issues))
+	}
+}

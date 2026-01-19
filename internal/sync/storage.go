@@ -191,3 +191,74 @@ func (s *IssueStore) GetIssueCount() (int, error) {
 	}
 	return count, nil
 }
+
+// LoadIssues loads all issues from the database, sorted by updated_at DESC (most recent first)
+func (s *IssueStore) LoadIssues() ([]*Issue, error) {
+	query := `
+		SELECT number, title, body, state, author, created_at, updated_at, comment_count
+		FROM issues
+		ORDER BY updated_at DESC
+	`
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query issues: %w", err)
+	}
+	defer rows.Close()
+
+	var issues []*Issue
+	for rows.Next() {
+		issue := &Issue{}
+		err := rows.Scan(
+			&issue.Number,
+			&issue.Title,
+			&issue.Body,
+			&issue.State,
+			&issue.Author,
+			&issue.CreatedAt,
+			&issue.UpdatedAt,
+			&issue.CommentCount,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan issue: %w", err)
+		}
+
+		// Load labels for this issue
+		labelRows, err := s.db.Query("SELECT name FROM labels WHERE issue_number = ? ORDER BY name", issue.Number)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query labels: %w", err)
+		}
+		for labelRows.Next() {
+			var label string
+			if err := labelRows.Scan(&label); err != nil {
+				labelRows.Close()
+				return nil, fmt.Errorf("failed to scan label: %w", err)
+			}
+			issue.Labels = append(issue.Labels, label)
+		}
+		labelRows.Close()
+
+		// Load assignees for this issue
+		assigneeRows, err := s.db.Query("SELECT username FROM assignees WHERE issue_number = ? ORDER BY username", issue.Number)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query assignees: %w", err)
+		}
+		for assigneeRows.Next() {
+			var assignee string
+			if err := assigneeRows.Scan(&assignee); err != nil {
+				assigneeRows.Close()
+				return nil, fmt.Errorf("failed to scan assignee: %w", err)
+			}
+			issue.Assignees = append(issue.Assignees, assignee)
+		}
+		assigneeRows.Close()
+
+		issues = append(issues, issue)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating issues: %w", err)
+	}
+
+	return issues, nil
+}

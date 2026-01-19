@@ -125,3 +125,15 @@ func ValidateConfig(cfg *Config) error {
 
 	return nil
 }
+
+// GetDisplayColumns returns the columns to display in the issue list
+// Returns defaults if not configured or empty
+func GetDisplayColumns(cfg *Config) []string {
+	defaultColumns := []string{"number", "title", "author", "date", "comments"}
+
+	if len(cfg.Display.Columns) == 0 {
+		return defaultColumns
+	}
+
+	return cfg.Display.Columns
+}

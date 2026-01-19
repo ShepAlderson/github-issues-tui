@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"os"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/shepbook/github-issues-tui/internal/auth"
 	"github.com/shepbook/github-issues-tui/internal/config"
 	"github.com/shepbook/github-issues-tui/internal/database"
 	"github.com/shepbook/github-issues-tui/internal/prompt"
 	"github.com/shepbook/github-issues-tui/internal/sync"
+	"github.com/shepbook/github-issues-tui/internal/tui"
 )
 
 func main() {
@@ -109,13 +111,27 @@ func run() error {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
 
-	// TODO: Launch TUI (to be implemented in later user stories)
-	fmt.Printf("Configuration loaded successfully!\n")
-	fmt.Printf("Repository: %s\n", cfg.GitHub.Repository)
-	fmt.Printf("Auth method: %s\n", cfg.GitHub.AuthMethod)
-	fmt.Println("Authentication: ✓")
-	fmt.Printf("Database: %s\n", resolvedDBPath)
-	fmt.Println("\nTUI not yet implemented. Stay tuned!")
+	// Load issues from database
+	store, err := sync.NewIssueStore(resolvedDBPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer store.Close()
+
+	issues, err := store.LoadIssues()
+	if err != nil {
+		return fmt.Errorf("failed to load issues: %w", err)
+	}
+
+	// Get display columns from config
+	columns := config.GetDisplayColumns(cfg)
+
+	// Launch TUI
+	model := tui.NewModel(issues, columns)
+	p := tea.NewProgram(model, tea.WithAltScreen())
+	if _, err := p.Run(); err != nil {
+		return fmt.Errorf("TUI error: %w", err)
+	}
 
 	return nil
 }

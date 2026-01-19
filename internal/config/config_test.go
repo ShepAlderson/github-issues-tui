@@ -207,3 +207,102 @@ func TestValidateConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestGetDisplayColumns(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfg      *Config
+		expected []string
+	}{
+		{
+			name: "default columns when not configured",
+			cfg: &Config{
+				GitHub: GitHubConfig{
+					Repository: "owner/repo",
+					AuthMethod: "token",
+					Token:      "test",
+				},
+			},
+			expected: []string{"number", "title", "author", "date", "comments"},
+		},
+		{
+			name: "custom columns from config",
+			cfg: &Config{
+				GitHub: GitHubConfig{
+					Repository: "owner/repo",
+					AuthMethod: "token",
+					Token:      "test",
+				},
+				Display: DisplayConfig{
+					Columns: []string{"number", "title", "author"},
+				},
+			},
+			expected: []string{"number", "title", "author"},
+		},
+		{
+			name: "empty columns list returns defaults",
+			cfg: &Config{
+				GitHub: GitHubConfig{
+					Repository: "owner/repo",
+					AuthMethod: "token",
+					Token:      "test",
+				},
+				Display: DisplayConfig{
+					Columns: []string{},
+				},
+			},
+			expected: []string{"number", "title", "author", "date", "comments"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			columns := GetDisplayColumns(tt.cfg)
+			if len(columns) != len(tt.expected) {
+				t.Errorf("Expected %d columns, got %d", len(tt.expected), len(columns))
+			}
+			for i, col := range columns {
+				if col != tt.expected[i] {
+					t.Errorf("Column %d: expected %s, got %s", i, tt.expected[i], col)
+				}
+			}
+		})
+	}
+}
+
+func TestLoadConfigWithDisplayColumns(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.toml")
+
+	// Test config with display.columns
+	configContent := `
+[github]
+repository = "owner/repo"
+auth_method = "token"
+token = "ghp_test123"
+
+[display]
+columns = ["number", "title", "author"]
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to create test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	if len(cfg.Display.Columns) != 3 {
+		t.Errorf("Expected 3 columns, got %d", len(cfg.Display.Columns))
+	}
+	if cfg.Display.Columns[0] != "number" {
+		t.Errorf("Expected first column 'number', got '%s'", cfg.Display.Columns[0])
+	}
+	if cfg.Display.Columns[1] != "title" {
+		t.Errorf("Expected second column 'title', got '%s'", cfg.Display.Columns[1])
+	}
+	if cfg.Display.Columns[2] != "author" {
+		t.Errorf("Expected third column 'author', got '%s'", cfg.Display.Columns[2])
+	}
+}
