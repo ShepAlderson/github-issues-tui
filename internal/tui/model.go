@@ -15,6 +15,7 @@ import (
 const (
 	viewModeList = iota
 	viewModeComments
+	viewModeHelp
 )
 
 // Model represents the TUI state
@@ -28,13 +29,14 @@ type Model struct {
 	sortAscending       bool   // true for ascending, false for descending
 	showRawMarkdown     bool   // true to show raw markdown, false for rendered
 	detailScrollOffset  int    // scroll offset for detail panel
-	viewMode            int    // viewModeList or viewModeComments
+	viewMode            int    // viewModeList, viewModeComments, or viewModeHelp
 	commentsScrollOffset int    // scroll offset for comments view
 	currentComments     []*sync.Comment // cached comments for current issue
 	store               *sync.IssueStore // for loading comments
 	statusError         string // minor error shown in status bar
 	modalError          string // critical error shown as modal (blocks interaction)
 	lastSyncTime        time.Time // last successful sync time
+	previousViewMode    int    // view mode before opening help
 }
 
 // StatusErrorMsg is a message for minor errors displayed in status bar
@@ -106,6 +108,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// Handle view-specific keys
+		if m.viewMode == viewModeHelp {
+			return m.handleHelpViewKeys(msg)
+		}
 		if m.viewMode == viewModeComments {
 			return m.handleCommentsViewKeys(msg)
 		}
@@ -138,6 +143,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch string(msg.Runes) {
 			case "q":
 				return m, tea.Quit
+			case "?":
+				// Open help overlay
+				m.previousViewMode = m.viewMode
+				m.viewMode = viewModeHelp
 			case "j":
 				if m.cursor < len(m.issues)-1 {
 					m.cursor++
@@ -222,6 +231,10 @@ func (m Model) handleCommentsViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "m":
 			// Toggle markdown rendering
 			m.showRawMarkdown = !m.showRawMarkdown
+		case "?":
+			// Open help overlay
+			m.previousViewMode = m.viewMode
+			m.viewMode = viewModeHelp
 		}
 
 	case tea.KeyPgDown:
@@ -233,6 +246,28 @@ func (m Model) handleCommentsViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.commentsScrollOffset -= 10
 		if m.commentsScrollOffset < 0 {
 			m.commentsScrollOffset = 0
+		}
+	}
+
+	return m, nil
+}
+
+// handleHelpViewKeys handles key presses in help view
+func (m Model) handleHelpViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyCtrlC:
+		return m, tea.Quit
+
+	case tea.KeyEsc:
+		// Return to previous view
+		m.viewMode = m.previousViewMode
+		return m, nil
+
+	case tea.KeyRunes:
+		switch string(msg.Runes) {
+		case "?":
+			// Toggle help (dismiss)
+			m.viewMode = m.previousViewMode
 		}
 	}
 
@@ -257,6 +292,11 @@ func (m Model) View() string {
 
 		// Overlay modal error
 		return m.renderModalError(baseView)
+	}
+
+	// Handle help view
+	if m.viewMode == viewModeHelp {
+		return m.renderHelpView()
 	}
 
 	// Handle comments view
@@ -306,7 +346,7 @@ func (m Model) renderSimpleList() string {
 
 	// Footer
 	b.WriteString("\n")
-	b.WriteString(footerStyle.Render("j/k, ↑/↓: navigate • s: cycle sort • S: reverse order • q: quit"))
+	b.WriteString(footerStyle.Render(m.renderFooter()))
 
 	return b.String()
 }
@@ -363,7 +403,7 @@ func (m Model) renderSplitPane() string {
 
 	// Footer
 	b.WriteString("\n")
-	b.WriteString(footerStyle.Render("j/k, ↑/↓: navigate • Enter: comments • PgUp/PgDn: scroll • m: markdown • s: sort • S: reverse • q: quit"))
+	b.WriteString(footerStyle.Render(m.renderFooter()))
 
 	return b.String()
 }
@@ -486,9 +526,86 @@ func (m Model) renderCommentsView() string {
 
 	// Footer
 	b.WriteString("\n")
-	b.WriteString(footerStyle.Render("PgUp/PgDn: scroll • m: toggle markdown • Esc/q: back to list"))
+	b.WriteString(footerStyle.Render(m.renderFooter()))
 
 	return b.String()
+}
+
+// renderHelpView renders the help overlay with all keybindings
+func (m Model) renderHelpView() string {
+	var b strings.Builder
+
+	// Title
+	b.WriteString(helpTitleStyle.Render("Keybinding Help"))
+	b.WriteString("\n\n")
+
+	// Determine which context to show based on previous view
+	var context string
+	switch m.previousViewMode {
+	case viewModeList:
+		context = "Issue List View"
+	case viewModeComments:
+		context = "Comments View"
+	default:
+		context = "Issue List View"
+	}
+
+	b.WriteString(helpSectionStyle.Render("Current Context: " + context))
+	b.WriteString("\n\n")
+
+	// Navigation section
+	b.WriteString(helpSectionStyle.Render("Navigation"))
+	b.WriteString("\n")
+	b.WriteString(helpKeyStyle.Render("  j, ↓        "))
+	b.WriteString(helpDescStyle.Render("Move down (list view)"))
+	b.WriteString("\n")
+	b.WriteString(helpKeyStyle.Render("  k, ↑        "))
+	b.WriteString(helpDescStyle.Render("Move up (list view)"))
+	b.WriteString("\n")
+	b.WriteString(helpKeyStyle.Render("  Enter       "))
+	b.WriteString(helpDescStyle.Render("Open comments view for selected issue"))
+	b.WriteString("\n")
+	b.WriteString(helpKeyStyle.Render("  Esc, q      "))
+	b.WriteString(helpDescStyle.Render("Return to list view (from comments)"))
+	b.WriteString("\n")
+	b.WriteString(helpKeyStyle.Render("  PgUp/PgDn   "))
+	b.WriteString(helpDescStyle.Render("Scroll detail panel or comments"))
+	b.WriteString("\n\n")
+
+	// Sorting section
+	b.WriteString(helpSectionStyle.Render("Sorting"))
+	b.WriteString("\n")
+	b.WriteString(helpKeyStyle.Render("  s           "))
+	b.WriteString(helpDescStyle.Render("Cycle sort field (updated → created → number → comments)"))
+	b.WriteString("\n")
+	b.WriteString(helpKeyStyle.Render("  S           "))
+	b.WriteString(helpDescStyle.Render("Reverse sort order (ascending ↔ descending)"))
+	b.WriteString("\n\n")
+
+	// View options section
+	b.WriteString(helpSectionStyle.Render("View Options"))
+	b.WriteString("\n")
+	b.WriteString(helpKeyStyle.Render("  m           "))
+	b.WriteString(helpDescStyle.Render("Toggle markdown rendering (raw ↔ rendered)"))
+	b.WriteString("\n")
+	b.WriteString(helpKeyStyle.Render("  ?           "))
+	b.WriteString(helpDescStyle.Render("Show/hide this help"))
+	b.WriteString("\n\n")
+
+	// Application section
+	b.WriteString(helpSectionStyle.Render("Application"))
+	b.WriteString("\n")
+	b.WriteString(helpKeyStyle.Render("  q           "))
+	b.WriteString(helpDescStyle.Render("Quit application (from list view)"))
+	b.WriteString("\n")
+	b.WriteString(helpKeyStyle.Render("  Ctrl+C      "))
+	b.WriteString(helpDescStyle.Render("Quit application (from any view)"))
+	b.WriteString("\n\n")
+
+	// Footer
+	b.WriteString(helpFooterStyle.Render("Press ? or Esc to close this help"))
+
+	return helpOverlayStyle.Render(b.String())
 }
 
 // renderListPanel renders the left panel with issue list
@@ -669,6 +786,24 @@ func (m Model) renderIssue(issue *sync.Issue) string {
 		}
 	}
 	return strings.Join(parts, " ")
+}
+
+// renderFooter renders context-sensitive footer with keybindings
+func (m Model) renderFooter() string {
+	switch m.viewMode {
+	case viewModeList:
+		// Split-pane view or simple list
+		if m.width > 0 && m.height > 0 {
+			return "j/k, ↑/↓: navigate • Enter: comments • PgUp/PgDn: scroll • m: markdown • s: sort • S: reverse • ?: help • q: quit"
+		}
+		return "j/k, ↑/↓: navigate • s: sort • S: reverse • ?: help • q: quit"
+	case viewModeComments:
+		return "PgUp/PgDn: scroll • m: markdown • ?: help • Esc/q: back"
+	case viewModeHelp:
+		return "Press ? or Esc to close help"
+	default:
+		return ""
+	}
 }
 
 // renderStatus renders the status bar
@@ -862,6 +997,32 @@ var (
 	modalTitleStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(lipgloss.Color("196"))
+
+	helpOverlayStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("170")).
+				Padding(2, 4).
+				Width(80)
+
+	helpTitleStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("170")).
+			Underline(true)
+
+	helpSectionStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("39"))
+
+	helpKeyStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("170"))
+
+	helpDescStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("252"))
+
+	helpFooterStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("241")).
+				Italic(true)
 )
 
 // Helper functions

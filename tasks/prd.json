@@ -215,14 +215,15 @@
         "Updates after each successful sync"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-009"
       ],
       "labels": [
         "tui",
         "status"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-011",
@@ -310,6 +311,6 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-01-19T23:09:04.914Z"
+    "updatedAt": "2026-01-19T23:14:17.440Z"
   }
 }

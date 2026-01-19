@@ -3,10 +3,10 @@
   "sessionId": "efa2895b-ade0-49fd-aee9-e7aa98f505ff",
   "status": "running",
   "startedAt": "2026-01-19T22:28:30.273Z",
-  "updatedAt": "2026-01-19T23:09:04.927Z",
-  "currentIteration": 7,
+  "updatedAt": "2026-01-19T23:14:17.451Z",
+  "currentIteration": 8,
   "maxIterations": 10,
-  "tasksCompleted": 7,
+  "tasksCompleted": 8,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -71,8 +71,8 @@
       {
         "id": "US-010",
         "title": "Last Synced Indicator",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-011",
@@ -170,12 +170,22 @@
       "durationMs": 254843,
       "startedAt": "2026-01-19T23:04:49.047Z",
       "endedAt": "2026-01-19T23:09:03.890Z"
+    },
+    {
+      "iteration": 8,
+      "status": "completed",
+      "taskId": "US-010",
+      "taskTitle": "Last Synced Indicator",
+      "taskCompleted": true,
+      "durationMs": 311507,
+      "startedAt": "2026-01-19T23:09:04.914Z",
+      "endedAt": "2026-01-19T23:14:16.421Z"
     }
   ],
   "skippedTaskIds": [],
   "cwd": "/Users/shepbook/git/github-issues-tui",
   "activeTaskIds": [
-    "US-010"
+    "US-011"
   ],
   "subagentPanelVisible": false
 }

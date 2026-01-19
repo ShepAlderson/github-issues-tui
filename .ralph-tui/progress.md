@@ -544,3 +544,51 @@ This pattern provides appropriate feedback for different error severities withou
 message types, rendering, and interaction blocking\n- `internal/tui/model_test.go` - Added comprehensive tests for all error scenarios\n\n### All Acceptance Criteria Met ✅\n1. ✅ Minor errors shown in status bar\n2. ✅ Critical errors shown as modal\n3. ✅ Modal errors require acknowledgment before continuing  \n4. ✅ Errors include actionable guidance where possible\n5. ✅ Network errors suggest checking connectivity (framework in place)\n\n### Commit\n- `d6739bb` - feat: US-013 - Error Handling\n\n
 
 ---
+
+## [2026-01-19] - US-010 - Last Synced Indicator
+
+### What was implemented
+- Added lastSyncTime field to Model struct to track when data was last synced
+- Enhanced formatRelativeTime helper function to handle zero time (never synced)
+- Updated renderStatus to display "Last synced: <relative time>" in status bar
+- Modified NewModel to accept lastSyncTime parameter from GetLastSyncTime
+- Updated all test files to use new NewModel signature
+- Added comprehensive test coverage for formatRelativeTime and status bar display
+
+### Files changed
+- `internal/tui/model.go` - Added lastSyncTime field, updated NewModel, enhanced formatRelativeTime, updated renderStatus
+- `internal/tui/model_test.go` - Added TestFormatRelativeTime and TestModel_LastSyncedIndicator tests
+- `cmd/ghissues/main.go` - Updated to fetch last sync time from store and pass to Model
+
+### Learnings
+
+#### Patterns discovered
+1. **Relative time formatting pattern**: Use time.Since() with tiered thresholds (minute, hour, day, week) to convert timestamps to human-readable strings. Handle zero time as special case ("never").
+2. **Status bar composition**: Build status bar from multiple independent pieces (position, sort info, sync time, errors) joined with bullet separators. Makes each component easy to test and modify independently.
+3. **Model constructor evolution**: When adding new state to Model, update constructor signature and use sed to batch-update all test call sites. Pattern: `sed -i '' 's/NewModel(\([^)]*\), nil)/NewModel(\1, nil, time.Time{})/g'`.
+4. **Zero time as sentinel value**: Use time.Time{} (zero time) to represent "never synced" state. Check with t.IsZero() for clarity. More idiomatic than using pointers or special timestamp values.
+
+#### Gotchas encountered
+1. **Duplicate function from prior iteration**: formatRelativeTime already existed from an earlier iteration but wasn't handling zero time. Enhanced it rather than creating a duplicate.
+2. **sed pattern for different call signatures**: Needed two separate sed commands - one for `NewModel(..., nil)` calls and another for `NewModel(..., store)` calls. Single pattern couldn't handle both.
+3. **Batch updating test files**: When changing constructor signature, 20+ test files need updating. Using sed is faster and less error-prone than manual editing, but requires careful pattern matching.
+4. **Status bar length increasing**: Each feature adds more info to status bar. Now showing: position, sort, sync time, and errors. May need to consider truncation or overflow handling in future.
+
+#### Architecture decisions
+1. Added lastSyncTime field to Model struct rather than fetching it on every render. Reduces database queries and keeps render logic simple.
+2. GetLastSyncTime called once in main.go before creating Model, not inside Model. Keeps TUI layer decoupled from storage layer.
+3. formatRelativeTime uses weeks as largest unit. For very old syncs (months/years), weeks continue to increment. This is acceptable for sync time display - very old syncs indicate a problem that needs attention.
+4. Status bar shows sync time for all views (list, comments). User always knows data freshness regardless of current view.
+5. Enhanced existing formatRelativeTime rather than creating new function. Reusing existing functions keeps codebase smaller and more maintainable.
+6. Zero time displays as "never" rather than "unknown" or "-". Clear and concise for users who haven't synced yet.
+
+---
+## ✓ Iteration 8 - US-010: Last Synced Indicator
+*2026-01-19T23:14:16.431Z (312s)*
+
+**Status:** Completed
+
+**Notes:**
+iles Changed\n\n- `internal/tui/model.go` - Core implementation\n- `internal/tui/model_test.go` - Test coverage\n- `cmd/ghissues/main.go` - Integration with database\n\n### Acceptance Criteria Verification\n\n✅ Status bar shows \"Last synced: <relative time>\" (e.g., \"5 minutes ago\")  \n✅ Timestamp stored in database metadata table (from US-009)  \n✅ Updates after each successful sync (from US-009)\n\nAll tests pass, the application builds successfully, and the feature is fully functional!\n\n
+
+---

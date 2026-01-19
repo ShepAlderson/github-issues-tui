@@ -890,3 +890,215 @@ func findSubstring(s, substr string) bool {
 	}
 	return false
 }
+
+func TestModel_HelpOverlayFromListView(t *testing.T) {
+	// Test that ? key opens help overlay from list view
+	issues := []*sync.Issue{
+		{Number: 1, Title: "Test", State: "open", Author: "user1", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+	}
+
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil, time.Time{})
+
+	// Should start in list view
+	if model.viewMode != viewModeList {
+		t.Errorf("Initial viewMode = %d, want %d (viewModeList)", model.viewMode, viewModeList)
+	}
+
+	// Press ? to open help
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m := updatedModel.(Model)
+
+	if m.viewMode != viewModeHelp {
+		t.Errorf("After '?', viewMode = %d, want %d (viewModeHelp)", m.viewMode, viewModeHelp)
+	}
+}
+
+func TestModel_HelpOverlayFromCommentsView(t *testing.T) {
+	// Test that ? key opens help overlay from comments view
+	tmpDir := t.TempDir()
+	dbPath := tmpDir + "/test.db"
+
+	store, err := sync.NewIssueStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewIssueStore() error = %v", err)
+	}
+	defer store.Close()
+
+	// Store test issue
+	issue := &sync.Issue{
+		Number:    1,
+		Title:     "Test Issue",
+		State:     "open",
+		Author:    "user1",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	if err := store.StoreIssue(issue); err != nil {
+		t.Fatalf("StoreIssue() error = %v", err)
+	}
+
+	// Store test comment
+	comment := &sync.Comment{
+		ID:          1,
+		IssueNumber: 1,
+		Body:        "Test comment",
+		Author:      "user1",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	if err := store.StoreComment(comment); err != nil {
+		t.Fatalf("StoreComment() error = %v", err)
+	}
+
+	issues := []*sync.Issue{issue}
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, store, time.Time{})
+	model.width = 120
+	model.height = 30
+
+	// Enter comments view
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := updatedModel.(Model)
+
+	if m.viewMode != viewModeComments {
+		t.Errorf("After Enter, viewMode = %d, want %d (viewModeComments)", m.viewMode, viewModeComments)
+	}
+
+	// Press ? to open help
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m = updatedModel.(Model)
+
+	if m.viewMode != viewModeHelp {
+		t.Errorf("After '?' in comments view, viewMode = %d, want %d (viewModeHelp)", m.viewMode, viewModeHelp)
+	}
+}
+
+func TestModel_HelpOverlayDismissWithQuestionMark(t *testing.T) {
+	// Test that ? key dismisses help overlay
+	issues := []*sync.Issue{
+		{Number: 1, Title: "Test", State: "open", Author: "user1", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+	}
+
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil, time.Time{})
+
+	// Open help
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m := updatedModel.(Model)
+
+	// Press ? again to dismiss
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m = updatedModel.(Model)
+
+	if m.viewMode != viewModeList {
+		t.Errorf("After second '?', viewMode = %d, want %d (viewModeList)", m.viewMode, viewModeList)
+	}
+}
+
+func TestModel_HelpOverlayDismissWithEsc(t *testing.T) {
+	// Test that Esc key dismisses help overlay
+	issues := []*sync.Issue{
+		{Number: 1, Title: "Test", State: "open", Author: "user1", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+	}
+
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil, time.Time{})
+
+	// Open help
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m := updatedModel.(Model)
+
+	// Press Esc to dismiss
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updatedModel.(Model)
+
+	if m.viewMode != viewModeList {
+		t.Errorf("After Esc in help view, viewMode = %d, want %d (viewModeList)", m.viewMode, viewModeList)
+	}
+}
+
+func TestModel_HelpOverlayReturnsToCorrectView(t *testing.T) {
+	// Test that help overlay returns to the view it was opened from
+	tmpDir := t.TempDir()
+	dbPath := tmpDir + "/test.db"
+
+	store, err := sync.NewIssueStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewIssueStore() error = %v", err)
+	}
+	defer store.Close()
+
+	// Store test issue with comment
+	issue := &sync.Issue{
+		Number:    1,
+		Title:     "Test Issue",
+		State:     "open",
+		Author:    "user1",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	if err := store.StoreIssue(issue); err != nil {
+		t.Fatalf("StoreIssue() error = %v", err)
+	}
+
+	comment := &sync.Comment{
+		ID:          1,
+		IssueNumber: 1,
+		Body:        "Test comment",
+		Author:      "user1",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	if err := store.StoreComment(comment); err != nil {
+		t.Fatalf("StoreComment() error = %v", err)
+	}
+
+	issues := []*sync.Issue{issue}
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, store, time.Time{})
+	model.width = 120
+	model.height = 30
+
+	// Enter comments view
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := updatedModel.(Model)
+
+	// Open help from comments view
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m = updatedModel.(Model)
+
+	// Dismiss help - should return to comments view
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updatedModel.(Model)
+
+	if m.viewMode != viewModeComments {
+		t.Errorf("After dismissing help from comments view, viewMode = %d, want %d (viewModeComments)", m.viewMode, viewModeComments)
+	}
+}
+
+func TestModel_HelpOverlayBlocksOtherKeys(t *testing.T) {
+	// Test that other keys don't work when help overlay is active
+	issues := []*sync.Issue{
+		{Number: 1, Title: "Test", State: "open", Author: "user1", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+		{Number: 2, Title: "Second", State: "open", Author: "user2", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+	}
+
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil, time.Time{})
+
+	// Open help
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m := updatedModel.(Model)
+
+	// Try navigation (should not work)
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updatedModel.(Model)
+
+	if m.cursor != 0 {
+		t.Errorf("With help overlay active, cursor = %d after 'j', want 0 (navigation blocked)", m.cursor)
+	}
+
+	// Try sort (should not work)
+	initialSortBy := m.sortBy
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	m = updatedModel.(Model)
+
+	if m.sortBy != initialSortBy {
+		t.Errorf("With help overlay active, sortBy changed from %s to %s (sort blocked)", initialSortBy, m.sortBy)
+	}
+}
