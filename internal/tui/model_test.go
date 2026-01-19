@@ -646,3 +646,129 @@ func TestModel_CommentsViewWithEmptyIssueList(t *testing.T) {
 		t.Errorf("After Enter with empty issues, viewMode = %d, want %d (viewModeList)", m.viewMode, viewModeList)
 	}
 }
+
+func TestModel_StatusBarError(t *testing.T) {
+	// Test that status bar errors are displayed correctly
+	issues := []*sync.Issue{
+		{Number: 1, Title: "Test", State: "open", Author: "user1", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+	}
+
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
+
+	// Should have no error initially
+	if model.statusError != "" {
+		t.Errorf("Initial statusError = %q, want empty string", model.statusError)
+	}
+
+	// Send error message
+	updatedModel, _ := model.Update(StatusErrorMsg{Err: "Network timeout"})
+	m := updatedModel.(Model)
+
+	if m.statusError != "Network timeout" {
+		t.Errorf("After StatusErrorMsg, statusError = %q, want \"Network timeout\"", m.statusError)
+	}
+
+	// Status bar should include error
+	status := m.renderStatus()
+	if status == "" {
+		t.Error("renderStatus() returned empty string with status error")
+	}
+
+	// Clear error message
+	updatedModel, _ = m.Update(ClearStatusErrorMsg{})
+	m = updatedModel.(Model)
+
+	if m.statusError != "" {
+		t.Errorf("After ClearStatusErrorMsg, statusError = %q, want empty string", m.statusError)
+	}
+}
+
+func TestModel_ModalError(t *testing.T) {
+	// Test that modal errors require acknowledgment
+	issues := []*sync.Issue{
+		{Number: 1, Title: "Test", State: "open", Author: "user1", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+	}
+
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
+
+	// Should have no error initially
+	if model.modalError != "" {
+		t.Errorf("Initial modalError = %q, want empty string", model.modalError)
+	}
+
+	// Send modal error message
+	updatedModel, _ := model.Update(ModalErrorMsg{Err: "Database corruption detected"})
+	m := updatedModel.(Model)
+
+	if m.modalError != "Database corruption detected" {
+		t.Errorf("After ModalErrorMsg, modalError = %q, want \"Database corruption detected\"", m.modalError)
+	}
+
+	// Navigation should not work when modal is active
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updatedModel.(Model)
+	if m.cursor != 0 {
+		t.Errorf("With modal error, cursor = %d after 'j', want 0 (navigation blocked)", m.cursor)
+	}
+
+	// Press Enter to acknowledge error
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updatedModel.(Model)
+
+	if m.modalError != "" {
+		t.Errorf("After Enter to acknowledge, modalError = %q, want empty string", m.modalError)
+	}
+
+	// Navigation should work again after acknowledgment
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updatedModel.(Model)
+	if len(m.issues) > 1 && m.cursor == 0 {
+		t.Error("After acknowledging modal error, navigation still blocked")
+	}
+}
+
+func TestModel_LoadCommentsError(t *testing.T) {
+	// Test error handling when loading comments fails
+	// Create a store that will fail to load comments (closed database)
+	tmpDir := t.TempDir()
+	dbPath := tmpDir + "/test.db"
+
+	store, err := sync.NewIssueStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewIssueStore() error = %v", err)
+	}
+
+	// Store test issue
+	issue := &sync.Issue{
+		Number:    1,
+		Title:     "Test Issue",
+		State:     "open",
+		Author:    "user1",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	if err := store.StoreIssue(issue); err != nil {
+		t.Fatalf("StoreIssue() error = %v", err)
+	}
+
+	// Close the store to cause errors
+	store.Close()
+
+	// Create model with closed store
+	issues := []*sync.Issue{issue}
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, store)
+
+	// Try to enter comments view (should fail to load comments)
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := updatedModel.(Model)
+
+	// Should have status error set
+	if m.statusError == "" {
+		t.Error("Expected statusError after failing to load comments, got empty string")
+	}
+
+	// Should remain in list view
+	if m.viewMode != viewModeList {
+		t.Errorf("After failed comment load, viewMode = %d, want %d (viewModeList)", m.viewMode, viewModeList)
+	}
+}

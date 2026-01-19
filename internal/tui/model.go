@@ -32,6 +32,21 @@ type Model struct {
 	commentsScrollOffset int    // scroll offset for comments view
 	currentComments     []*sync.Comment // cached comments for current issue
 	store               *sync.IssueStore // for loading comments
+	statusError         string // minor error shown in status bar
+	modalError          string // critical error shown as modal (blocks interaction)
+}
+
+// StatusErrorMsg is a message for minor errors displayed in status bar
+type StatusErrorMsg struct {
+	Err string
+}
+
+// ClearStatusErrorMsg clears the status bar error
+type ClearStatusErrorMsg struct{}
+
+// ModalErrorMsg is a message for critical errors displayed as modal
+type ModalErrorMsg struct {
+	Err string
 }
 
 // NewModel creates a new TUI model
@@ -57,12 +72,37 @@ func (m Model) Init() tea.Cmd {
 // Update handles messages and updates the model
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case StatusErrorMsg:
+		m.statusError = msg.Err
+		return m, nil
+
+	case ClearStatusErrorMsg:
+		m.statusError = ""
+		return m, nil
+
+	case ModalErrorMsg:
+		m.modalError = msg.Err
+		return m, nil
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, nil
 
 	case tea.KeyMsg:
+		// If modal error is active, only allow Enter to acknowledge and Ctrl+C to quit
+		if m.modalError != "" {
+			switch msg.Type {
+			case tea.KeyCtrlC:
+				return m, tea.Quit
+			case tea.KeyEnter:
+				// Acknowledge modal error
+				m.modalError = ""
+				return m, nil
+			}
+			// Block all other keys when modal is active
+			return m, nil
+		}
 		// Handle view-specific keys
 		if m.viewMode == viewModeComments {
 			return m.handleCommentsViewKeys(msg)
@@ -80,11 +120,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if selected != nil {
 					// Load comments for the selected issue
 					comments, err := m.store.LoadComments(selected.Number)
-					if err == nil {
-						m.currentComments = comments
-						m.viewMode = viewModeComments
-						m.commentsScrollOffset = 0
+					if err != nil {
+						// Show error in status bar
+						m.statusError = fmt.Sprintf("Failed to load comments: %v", err)
+						return m, nil
 					}
+					m.currentComments = comments
+					m.viewMode = viewModeComments
+					m.commentsScrollOffset = 0
 				}
 			}
 			return m, nil
@@ -196,6 +239,24 @@ func (m Model) handleCommentsViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // View renders the TUI
 func (m Model) View() string {
+	// If modal error is active, show modal overlay
+	if m.modalError != "" {
+		// Render the underlying view first
+		var baseView string
+		if m.viewMode == viewModeComments {
+			baseView = m.renderCommentsView()
+		} else if len(m.issues) == 0 {
+			baseView = noIssuesStyle.Render("No issues found. Run 'ghissues sync' to fetch issues.")
+		} else if m.width == 0 || m.height == 0 {
+			baseView = m.renderSimpleList()
+		} else {
+			baseView = m.renderSplitPane()
+		}
+
+		// Overlay modal error
+		return m.renderModalError(baseView)
+	}
+
 	// Handle comments view
 	if m.viewMode == viewModeComments {
 		return m.renderCommentsView()
@@ -303,6 +364,29 @@ func (m Model) renderSplitPane() string {
 	b.WriteString(footerStyle.Render("j/k, ↑/↓: navigate • Enter: comments • PgUp/PgDn: scroll • m: markdown • s: sort • S: reverse • q: quit"))
 
 	return b.String()
+}
+
+// renderModalError overlays a modal error dialog on top of the base view
+func (m Model) renderModalError(baseView string) string {
+	// Build modal content
+	var b strings.Builder
+	b.WriteString(modalTitleStyle.Render("Error"))
+	b.WriteString("\n\n")
+	b.WriteString(m.modalError)
+	b.WriteString("\n\n")
+	b.WriteString(footerStyle.Render("Press Enter to continue"))
+
+	modal := modalStyle.Render(b.String())
+
+	// For simple overlay, just append modal to base view
+	// In a full implementation, you'd center the modal on screen
+	var output strings.Builder
+	output.WriteString(baseView)
+	output.WriteString("\n\n")
+	output.WriteString(modal)
+	output.WriteString("\n")
+
+	return output.String()
 }
 
 // renderCommentsView renders the full-screen comments view
@@ -597,10 +681,20 @@ func (m Model) renderStatus() string {
 	}
 	sortDesc := fmt.Sprintf("sort: %s (%s)", m.sortBy, sortOrder)
 
+	// Build base status
+	var baseStatus string
 	if total == 0 {
-		return fmt.Sprintf("No issues • %s", sortDesc)
+		baseStatus = fmt.Sprintf("No issues • %s", sortDesc)
+	} else {
+		baseStatus = fmt.Sprintf("Issue %d of %d • %s", current, total, sortDesc)
 	}
-	return fmt.Sprintf("Issue %d of %d • %s", current, total, sortDesc)
+
+	// Append status error if present
+	if m.statusError != "" {
+		return baseStatus + " • " + errorStyle.Render("Error: "+m.statusError)
+	}
+
+	return baseStatus
 }
 
 // SelectedIssue returns the currently selected issue
@@ -700,6 +794,20 @@ var (
 
 	commentSeparatorStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("241"))
+
+	errorStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("196")).
+			Bold(true)
+
+	modalStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("196")).
+			Padding(1, 2).
+			Width(60)
+
+	modalTitleStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("196"))
 )
 
 // Helper functions
