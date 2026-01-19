@@ -10,6 +10,7 @@ import (
 	"github.com/shepbook/github-issues-tui/internal/database"
 	"github.com/shepbook/github-issues-tui/internal/prompt"
 	"github.com/shepbook/github-issues-tui/internal/sync"
+	"github.com/shepbook/github-issues-tui/internal/theme"
 	"github.com/shepbook/github-issues-tui/internal/tui"
 )
 
@@ -60,6 +61,9 @@ func run() error {
 		case "config":
 			// Force re-run setup
 			return runSetup(configPath, true)
+		case "themes":
+			// List available themes
+			return runThemes()
 		case "--help", "-h":
 			printHelp()
 			return nil
@@ -147,6 +151,9 @@ func run() error {
 	sortBy := config.GetSortBy(cfg)
 	sortAscending := config.GetSortAscending(cfg)
 
+	// Get theme from config
+	themeName := config.GetTheme(cfg)
+
 	// Get last sync time
 	lastSyncTime, err := store.GetLastSyncTime()
 	if err != nil {
@@ -154,7 +161,7 @@ func run() error {
 	}
 
 	// Launch TUI
-	model := tui.NewModel(issues, columns, sortBy, sortAscending, store, lastSyncTime)
+	model := tui.NewModel(issues, columns, sortBy, sortAscending, store, lastSyncTime, themeName)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("TUI error: %w", err)
@@ -297,6 +304,39 @@ func runRefresh(configPath string, dbPath string) error {
 	return nil
 }
 
+func runThemes() error {
+	fmt.Println("Available Themes")
+	fmt.Println("================")
+	fmt.Println()
+
+	themes := theme.ListThemes()
+	for _, t := range themes {
+		// Show theme name with a sample of its colors
+		fmt.Printf("  %s\n", t.Name)
+
+		// Show sample colored text using the theme
+		fmt.Print("    ")
+		fmt.Print(t.HeaderStyle.Render("Header"))
+		fmt.Print("  ")
+		fmt.Print(t.SelectedStyle.Render("Selected"))
+		fmt.Print("  ")
+		fmt.Print(t.DetailTitleStyle.Render("Title"))
+		fmt.Print("  ")
+		fmt.Print(t.ErrorStyle.Render("Error"))
+		fmt.Println()
+	}
+
+	fmt.Println()
+	fmt.Println("To use a theme, set display.theme in ~/.config/ghissues/config.toml")
+	fmt.Println()
+	fmt.Println("Example:")
+	fmt.Println("  [display]")
+	fmt.Println("  theme = \"dracula\"")
+	fmt.Println()
+
+	return nil
+}
+
 func printHelp() {
 	fmt.Println("ghissues - GitHub Issues TUI")
 	fmt.Println()
@@ -304,6 +344,7 @@ func printHelp() {
 	fmt.Println("  ghissues                Start the TUI (auto-refreshes on launch)")
 	fmt.Println("  ghissues sync           Fetch and sync all open issues from GitHub (full sync)")
 	fmt.Println("  ghissues refresh        Update issues changed since last sync (incremental)")
+	fmt.Println("  ghissues themes         List available color themes")
 	fmt.Println("  ghissues --db PATH      Specify database file location")
 	fmt.Println("  ghissues config         Run/re-run interactive configuration")
 	fmt.Println("  ghissues --help         Show this help message")

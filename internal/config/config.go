@@ -167,3 +167,28 @@ func GetSortBy(cfg *Config) string {
 func GetSortAscending(cfg *Config) bool {
 	return cfg.Display.SortAscending
 }
+
+// GetTheme returns the theme name to use
+// Returns "default" if not configured or if unknown theme specified
+func GetTheme(cfg *Config) string {
+	if cfg.Display.Theme == "" {
+		return "default"
+	}
+
+	// List of valid themes
+	validThemes := map[string]bool{
+		"default":         true,
+		"dracula":         true,
+		"gruvbox":         true,
+		"nord":            true,
+		"solarized-dark":  true,
+		"solarized-light": true,
+	}
+
+	theme := strings.ToLower(strings.TrimSpace(cfg.Display.Theme))
+	if !validThemes[theme] {
+		return "default"
+	}
+
+	return theme
+}

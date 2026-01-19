@@ -3,10 +3,10 @@
   "sessionId": "efa2895b-ade0-49fd-aee9-e7aa98f505ff",
   "status": "running",
   "startedAt": "2026-01-19T22:28:30.273Z",
-  "updatedAt": "2026-01-19T23:14:17.451Z",
-  "currentIteration": 8,
+  "updatedAt": "2026-01-19T23:19:16.475Z",
+  "currentIteration": 9,
   "maxIterations": 10,
-  "tasksCompleted": 8,
+  "tasksCompleted": 9,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -77,8 +77,8 @@
       {
         "id": "US-011",
         "title": "Keybinding Help",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-012",
@@ -180,12 +180,22 @@
       "durationMs": 311507,
       "startedAt": "2026-01-19T23:09:04.914Z",
       "endedAt": "2026-01-19T23:14:16.421Z"
+    },
+    {
+      "iteration": 9,
+      "status": "completed",
+      "taskId": "US-011",
+      "taskTitle": "Keybinding Help",
+      "taskCompleted": true,
+      "durationMs": 298005,
+      "startedAt": "2026-01-19T23:14:17.439Z",
+      "endedAt": "2026-01-19T23:19:15.444Z"
     }
   ],
   "skippedTaskIds": [],
   "cwd": "/Users/shepbook/git/github-issues-tui",
   "activeTaskIds": [
-    "US-011"
+    "US-012"
   ],
   "subagentPanelVisible": false
 }

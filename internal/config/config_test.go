@@ -480,3 +480,74 @@ sort_ascending = true
 		t.Errorf("Expected SortAscending true, got false")
 	}
 }
+
+func TestGetTheme(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfg      *Config
+		expected string
+	}{
+		{
+			name: "default theme when not configured",
+			cfg: &Config{
+				GitHub: GitHubConfig{
+					Repository: "owner/repo",
+					AuthMethod: "token",
+					Token:      "test",
+				},
+			},
+			expected: "default",
+		},
+		{
+			name: "custom theme from config",
+			cfg: &Config{
+				GitHub: GitHubConfig{
+					Repository: "owner/repo",
+					AuthMethod: "token",
+					Token:      "test",
+				},
+				Display: DisplayConfig{
+					Theme: "dracula",
+				},
+			},
+			expected: "dracula",
+		},
+		{
+			name: "unknown theme returns default",
+			cfg: &Config{
+				GitHub: GitHubConfig{
+					Repository: "owner/repo",
+					AuthMethod: "token",
+					Token:      "test",
+				},
+				Display: DisplayConfig{
+					Theme: "unknown",
+				},
+			},
+			expected: "default",
+		},
+		{
+			name: "gruvbox theme",
+			cfg: &Config{
+				GitHub: GitHubConfig{
+					Repository: "owner/repo",
+					AuthMethod: "token",
+					Token:      "test",
+				},
+				Display: DisplayConfig{
+					Theme: "gruvbox",
+				},
+			},
+			expected: "gruvbox",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			themeName := GetTheme(tt.cfg)
+			if themeName != tt.expected {
+				t.Errorf("Expected theme %s, got %s", tt.expected, themeName)
+			}
+		})
+	}
+}

@@ -7,8 +7,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/shepbook/github-issues-tui/internal/sync"
+	"github.com/shepbook/github-issues-tui/internal/theme"
 )
 
 // View mode constants
@@ -37,6 +37,7 @@ type Model struct {
 	modalError          string // critical error shown as modal (blocks interaction)
 	lastSyncTime        time.Time // last successful sync time
 	previousViewMode    int    // view mode before opening help
+	theme               theme.Theme // color theme for the TUI
 }
 
 // StatusErrorMsg is a message for minor errors displayed in status bar
@@ -53,7 +54,7 @@ type ModalErrorMsg struct {
 }
 
 // NewModel creates a new TUI model
-func NewModel(issues []*sync.Issue, columns []string, sortBy string, sortAscending bool, store *sync.IssueStore, lastSyncTime time.Time) Model {
+func NewModel(issues []*sync.Issue, columns []string, sortBy string, sortAscending bool, store *sync.IssueStore, lastSyncTime time.Time, themeName string) Model {
 	m := Model{
 		issues:        issues,
 		columns:       columns,
@@ -63,6 +64,7 @@ func NewModel(issues []*sync.Issue, columns []string, sortBy string, sortAscendi
 		viewMode:      viewModeList,
 		store:         store,
 		lastSyncTime:  lastSyncTime,
+		theme:         theme.GetTheme(themeName),
 	}
 	m.sortIssues() // Apply initial sort
 	return m
@@ -283,7 +285,7 @@ func (m Model) View() string {
 		if m.viewMode == viewModeComments {
 			baseView = m.renderCommentsView()
 		} else if len(m.issues) == 0 {
-			baseView = noIssuesStyle.Render("No issues found. Run 'ghissues sync' to fetch issues.")
+			baseView = m.theme.NoIssuesStyle.Render("No issues found. Run 'ghissues sync' to fetch issues.")
 		} else if m.width == 0 || m.height == 0 {
 			baseView = m.renderSimpleList()
 		} else {
@@ -306,7 +308,7 @@ func (m Model) View() string {
 
 	// List view
 	if len(m.issues) == 0 {
-		return noIssuesStyle.Render("No issues found. Run 'ghissues sync' to fetch issues.")
+		return m.theme.NoIssuesStyle.Render("No issues found. Run 'ghissues sync' to fetch issues.")
 	}
 
 	// If no dimensions set yet, render simple list (will be set on first WindowSizeMsg)
@@ -323,16 +325,16 @@ func (m Model) renderSimpleList() string {
 	var b strings.Builder
 
 	// Header
-	b.WriteString(headerStyle.Render(m.renderHeader()))
+	b.WriteString(m.theme.HeaderStyle.Render(m.renderHeader()))
 	b.WriteString("\n\n")
 
 	// Issue list
 	for i, issue := range m.issues {
 		cursor := " "
-		style := normalStyle
+		style := m.theme.NormalStyle
 		if i == m.cursor {
 			cursor = ">"
-			style = selectedStyle
+			style = m.theme.SelectedStyle
 		}
 
 		line := fmt.Sprintf("%s %s", cursor, m.renderIssue(issue))
@@ -342,11 +344,11 @@ func (m Model) renderSimpleList() string {
 
 	// Status bar
 	b.WriteString("\n")
-	b.WriteString(statusStyle.Render(m.renderStatus()))
+	b.WriteString(m.theme.StatusStyle.Render(m.renderStatus()))
 
 	// Footer
 	b.WriteString("\n")
-	b.WriteString(footerStyle.Render(m.renderFooter()))
+	b.WriteString(m.theme.FooterStyle.Render(m.renderFooter()))
 
 	return b.String()
 }
@@ -399,11 +401,11 @@ func (m Model) renderSplitPane() string {
 
 	// Status bar
 	b.WriteString("\n")
-	b.WriteString(statusStyle.Render(m.renderStatus()))
+	b.WriteString(m.theme.StatusStyle.Render(m.renderStatus()))
 
 	// Footer
 	b.WriteString("\n")
-	b.WriteString(footerStyle.Render(m.renderFooter()))
+	b.WriteString(m.theme.FooterStyle.Render(m.renderFooter()))
 
 	return b.String()
 }
@@ -412,13 +414,13 @@ func (m Model) renderSplitPane() string {
 func (m Model) renderModalError(baseView string) string {
 	// Build modal content
 	var b strings.Builder
-	b.WriteString(modalTitleStyle.Render("Error"))
+	b.WriteString(m.theme.ModalTitleStyle.Render("Error"))
 	b.WriteString("\n\n")
 	b.WriteString(m.modalError)
 	b.WriteString("\n\n")
-	b.WriteString(footerStyle.Render("Press Enter to continue"))
+	b.WriteString(m.theme.FooterStyle.Render("Press Enter to continue"))
 
-	modal := modalStyle.Render(b.String())
+	modal := m.theme.ModalStyle.Render(b.String())
 
 	// For simple overlay, just append modal to base view
 	// In a full implementation, you'd center the modal on screen
@@ -435,29 +437,29 @@ func (m Model) renderModalError(baseView string) string {
 func (m Model) renderCommentsView() string {
 	selected := m.SelectedIssue()
 	if selected == nil {
-		return noIssuesStyle.Render("No issue selected")
+		return m.theme.NoIssuesStyle.Render("No issue selected")
 	}
 
 	var b strings.Builder
 
 	// Header with issue info
-	b.WriteString(commentsHeaderStyle.Render(fmt.Sprintf("#%d - %s", selected.Number, selected.Title)))
+	b.WriteString(m.theme.CommentsHeaderStyle.Render(fmt.Sprintf("#%d - %s", selected.Number, selected.Title)))
 	b.WriteString("\n")
-	b.WriteString(commentsMetaStyle.Render(fmt.Sprintf("State: %s | Author: %s | Comments: %d", selected.State, selected.Author, len(m.currentComments))))
+	b.WriteString(m.theme.CommentsMetaStyle.Render(fmt.Sprintf("State: %s | Author: %s | Comments: %d", selected.State, selected.Author, len(m.currentComments))))
 	b.WriteString("\n\n")
 
 	// Render comments
 	if len(m.currentComments) == 0 {
-		b.WriteString(commentsMetaStyle.Render("No comments on this issue"))
+		b.WriteString(m.theme.CommentsMetaStyle.Render("No comments on this issue"))
 		b.WriteString("\n\n")
 	} else {
 		// Build full content first
 		var contentBuilder strings.Builder
 		for i, comment := range m.currentComments {
 			// Comment header
-			contentBuilder.WriteString(commentAuthorStyle.Render(fmt.Sprintf("@%s", comment.Author)))
+			contentBuilder.WriteString(m.theme.CommentAuthorStyle.Render(fmt.Sprintf("@%s", comment.Author)))
 			contentBuilder.WriteString(" • ")
-			contentBuilder.WriteString(commentsMetaStyle.Render(formatRelativeTime(comment.CreatedAt)))
+			contentBuilder.WriteString(m.theme.CommentsMetaStyle.Render(formatRelativeTime(comment.CreatedAt)))
 			contentBuilder.WriteString("\n")
 
 			// Comment body
@@ -483,7 +485,7 @@ func (m Model) renderCommentsView() string {
 			// Separator between comments (except last one)
 			if i < len(m.currentComments)-1 {
 				contentBuilder.WriteString("\n")
-				contentBuilder.WriteString(commentSeparatorStyle.Render(strings.Repeat("─", min(m.width, 80))))
+				contentBuilder.WriteString(m.theme.CommentSeparatorStyle.Render(strings.Repeat("─", min(m.width, 80))))
 				contentBuilder.WriteString("\n\n")
 			}
 		}
@@ -522,11 +524,11 @@ func (m Model) renderCommentsView() string {
 	if len(m.currentComments) > 0 {
 		statusText += fmt.Sprintf(" | Total: %d", len(m.currentComments))
 	}
-	b.WriteString(statusStyle.Render(statusText))
+	b.WriteString(m.theme.StatusStyle.Render(statusText))
 
 	// Footer
 	b.WriteString("\n")
-	b.WriteString(footerStyle.Render(m.renderFooter()))
+	b.WriteString(m.theme.FooterStyle.Render(m.renderFooter()))
 
 	return b.String()
 }
@@ -536,7 +538,7 @@ func (m Model) renderHelpView() string {
 	var b strings.Builder
 
 	// Title
-	b.WriteString(helpTitleStyle.Render("Keybinding Help"))
+	b.WriteString(m.theme.HelpTitleStyle.Render("Keybinding Help"))
 	b.WriteString("\n\n")
 
 	// Determine which context to show based on previous view
@@ -550,62 +552,62 @@ func (m Model) renderHelpView() string {
 		context = "Issue List View"
 	}
 
-	b.WriteString(helpSectionStyle.Render("Current Context: " + context))
+	b.WriteString(m.theme.HelpSectionStyle.Render("Current Context: " + context))
 	b.WriteString("\n\n")
 
 	// Navigation section
-	b.WriteString(helpSectionStyle.Render("Navigation"))
+	b.WriteString(m.theme.HelpSectionStyle.Render("Navigation"))
 	b.WriteString("\n")
-	b.WriteString(helpKeyStyle.Render("  j, ↓        "))
-	b.WriteString(helpDescStyle.Render("Move down (list view)"))
+	b.WriteString(m.theme.HelpKeyStyle.Render("  j, ↓        "))
+	b.WriteString(m.theme.HelpDescStyle.Render("Move down (list view)"))
 	b.WriteString("\n")
-	b.WriteString(helpKeyStyle.Render("  k, ↑        "))
-	b.WriteString(helpDescStyle.Render("Move up (list view)"))
+	b.WriteString(m.theme.HelpKeyStyle.Render("  k, ↑        "))
+	b.WriteString(m.theme.HelpDescStyle.Render("Move up (list view)"))
 	b.WriteString("\n")
-	b.WriteString(helpKeyStyle.Render("  Enter       "))
-	b.WriteString(helpDescStyle.Render("Open comments view for selected issue"))
+	b.WriteString(m.theme.HelpKeyStyle.Render("  Enter       "))
+	b.WriteString(m.theme.HelpDescStyle.Render("Open comments view for selected issue"))
 	b.WriteString("\n")
-	b.WriteString(helpKeyStyle.Render("  Esc, q      "))
-	b.WriteString(helpDescStyle.Render("Return to list view (from comments)"))
+	b.WriteString(m.theme.HelpKeyStyle.Render("  Esc, q      "))
+	b.WriteString(m.theme.HelpDescStyle.Render("Return to list view (from comments)"))
 	b.WriteString("\n")
-	b.WriteString(helpKeyStyle.Render("  PgUp/PgDn   "))
-	b.WriteString(helpDescStyle.Render("Scroll detail panel or comments"))
+	b.WriteString(m.theme.HelpKeyStyle.Render("  PgUp/PgDn   "))
+	b.WriteString(m.theme.HelpDescStyle.Render("Scroll detail panel or comments"))
 	b.WriteString("\n\n")
 
 	// Sorting section
-	b.WriteString(helpSectionStyle.Render("Sorting"))
+	b.WriteString(m.theme.HelpSectionStyle.Render("Sorting"))
 	b.WriteString("\n")
-	b.WriteString(helpKeyStyle.Render("  s           "))
-	b.WriteString(helpDescStyle.Render("Cycle sort field (updated → created → number → comments)"))
+	b.WriteString(m.theme.HelpKeyStyle.Render("  s           "))
+	b.WriteString(m.theme.HelpDescStyle.Render("Cycle sort field (updated → created → number → comments)"))
 	b.WriteString("\n")
-	b.WriteString(helpKeyStyle.Render("  S           "))
-	b.WriteString(helpDescStyle.Render("Reverse sort order (ascending ↔ descending)"))
+	b.WriteString(m.theme.HelpKeyStyle.Render("  S           "))
+	b.WriteString(m.theme.HelpDescStyle.Render("Reverse sort order (ascending ↔ descending)"))
 	b.WriteString("\n\n")
 
 	// View options section
-	b.WriteString(helpSectionStyle.Render("View Options"))
+	b.WriteString(m.theme.HelpSectionStyle.Render("View Options"))
 	b.WriteString("\n")
-	b.WriteString(helpKeyStyle.Render("  m           "))
-	b.WriteString(helpDescStyle.Render("Toggle markdown rendering (raw ↔ rendered)"))
+	b.WriteString(m.theme.HelpKeyStyle.Render("  m           "))
+	b.WriteString(m.theme.HelpDescStyle.Render("Toggle markdown rendering (raw ↔ rendered)"))
 	b.WriteString("\n")
-	b.WriteString(helpKeyStyle.Render("  ?           "))
-	b.WriteString(helpDescStyle.Render("Show/hide this help"))
+	b.WriteString(m.theme.HelpKeyStyle.Render("  ?           "))
+	b.WriteString(m.theme.HelpDescStyle.Render("Show/hide this help"))
 	b.WriteString("\n\n")
 
 	// Application section
-	b.WriteString(helpSectionStyle.Render("Application"))
+	b.WriteString(m.theme.HelpSectionStyle.Render("Application"))
 	b.WriteString("\n")
-	b.WriteString(helpKeyStyle.Render("  q           "))
-	b.WriteString(helpDescStyle.Render("Quit application (from list view)"))
+	b.WriteString(m.theme.HelpKeyStyle.Render("  q           "))
+	b.WriteString(m.theme.HelpDescStyle.Render("Quit application (from list view)"))
 	b.WriteString("\n")
-	b.WriteString(helpKeyStyle.Render("  Ctrl+C      "))
-	b.WriteString(helpDescStyle.Render("Quit application (from any view)"))
+	b.WriteString(m.theme.HelpKeyStyle.Render("  Ctrl+C      "))
+	b.WriteString(m.theme.HelpDescStyle.Render("Quit application (from any view)"))
 	b.WriteString("\n\n")
 
 	// Footer
-	b.WriteString(helpFooterStyle.Render("Press ? or Esc to close this help"))
+	b.WriteString(m.theme.HelpFooterStyle.Render("Press ? or Esc to close this help"))
 
-	return helpOverlayStyle.Render(b.String())
+	return m.theme.HelpOverlayStyle.Render(b.String())
 }
 
 // renderListPanel renders the left panel with issue list
@@ -613,7 +615,7 @@ func (m Model) renderListPanel(width, height int) string {
 	var b strings.Builder
 
 	// Header
-	b.WriteString(headerStyle.Render(m.renderHeader()))
+	b.WriteString(m.theme.HeaderStyle.Render(m.renderHeader()))
 	b.WriteString("\n\n")
 
 	// Issue list (limit to height)
@@ -624,10 +626,10 @@ func (m Model) renderListPanel(width, height int) string {
 		}
 
 		cursor := " "
-		style := normalStyle
+		style := m.theme.NormalStyle
 		if i == m.cursor {
 			cursor = ">"
-			style = selectedStyle
+			style = m.theme.SelectedStyle
 		}
 
 		line := fmt.Sprintf("%s %s", cursor, m.renderIssue(issue))
@@ -647,34 +649,34 @@ func (m Model) renderListPanel(width, height int) string {
 func (m Model) renderDetailPanel(width, height int) string {
 	selected := m.SelectedIssue()
 	if selected == nil {
-		return detailPanelStyle.Width(width).Height(height).Render("No issue selected")
+		return m.theme.DetailPanelStyle.Width(width).Height(height).Render("No issue selected")
 	}
 
 	var b strings.Builder
 
 	// Header: issue number, title, state
-	b.WriteString(detailHeaderStyle.Render(fmt.Sprintf("#%d • %s", selected.Number, selected.State)))
+	b.WriteString(m.theme.DetailHeaderStyle.Render(fmt.Sprintf("#%d • %s", selected.Number, selected.State)))
 	b.WriteString("\n")
-	b.WriteString(detailTitleStyle.Render(selected.Title))
+	b.WriteString(m.theme.DetailTitleStyle.Render(selected.Title))
 	b.WriteString("\n\n")
 
 	// Metadata: author, dates
-	b.WriteString(detailMetaStyle.Render(fmt.Sprintf("Author: %s", selected.Author)))
+	b.WriteString(m.theme.DetailMetaStyle.Render(fmt.Sprintf("Author: %s", selected.Author)))
 	b.WriteString("\n")
-	b.WriteString(detailMetaStyle.Render(fmt.Sprintf("Created: %s", formatRelativeTime(selected.CreatedAt))))
+	b.WriteString(m.theme.DetailMetaStyle.Render(fmt.Sprintf("Created: %s", formatRelativeTime(selected.CreatedAt))))
 	b.WriteString("\n")
-	b.WriteString(detailMetaStyle.Render(fmt.Sprintf("Updated: %s", formatRelativeTime(selected.UpdatedAt))))
+	b.WriteString(m.theme.DetailMetaStyle.Render(fmt.Sprintf("Updated: %s", formatRelativeTime(selected.UpdatedAt))))
 	b.WriteString("\n")
 
 	// Labels (if any)
 	if len(selected.Labels) > 0 {
-		b.WriteString(detailMetaStyle.Render(fmt.Sprintf("Labels: %s", strings.Join(selected.Labels, ", "))))
+		b.WriteString(m.theme.DetailMetaStyle.Render(fmt.Sprintf("Labels: %s", strings.Join(selected.Labels, ", "))))
 		b.WriteString("\n")
 	}
 
 	// Assignees (if any)
 	if len(selected.Assignees) > 0 {
-		b.WriteString(detailMetaStyle.Render(fmt.Sprintf("Assignees: %s", strings.Join(selected.Assignees, ", "))))
+		b.WriteString(m.theme.DetailMetaStyle.Render(fmt.Sprintf("Assignees: %s", strings.Join(selected.Assignees, ", "))))
 		b.WriteString("\n")
 	}
 
@@ -831,7 +833,7 @@ func (m Model) renderStatus() string {
 
 	// Append status error if present
 	if m.statusError != "" {
-		return baseStatus + " • " + errorStyle.Render("Error: "+m.statusError)
+		return baseStatus + " • " + m.theme.ErrorStyle.Render("Error: "+m.statusError)
 	}
 
 	return baseStatus
@@ -933,97 +935,6 @@ func formatRelativeTime(t time.Time) string {
 	}
 	return fmt.Sprintf("%d weeks ago", weeks)
 }
-
-// Styles
-var (
-	headerStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("39"))
-
-	normalStyle = lipgloss.NewStyle()
-
-	selectedStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("170"))
-
-	statusStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241"))
-
-	footerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241"))
-
-	noIssuesStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241")).
-			Italic(true)
-
-	detailPanelStyle = lipgloss.NewStyle().
-				Padding(1)
-
-	detailHeaderStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("170"))
-
-	detailTitleStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("39"))
-
-	detailMetaStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("241"))
-
-	commentsHeaderStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("170"))
-
-	commentsMetaStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("241"))
-
-	commentAuthorStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("39"))
-
-	commentSeparatorStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("241"))
-
-	errorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196")).
-			Bold(true)
-
-	modalStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("196")).
-			Padding(1, 2).
-			Width(60)
-
-	modalTitleStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("196"))
-
-	helpOverlayStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("170")).
-				Padding(2, 4).
-				Width(80)
-
-	helpTitleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("170")).
-			Underline(true)
-
-	helpSectionStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("39"))
-
-	helpKeyStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("170"))
-
-	helpDescStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("252"))
-
-	helpFooterStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("241")).
-				Italic(true)
-)
 
 // Helper functions
 
