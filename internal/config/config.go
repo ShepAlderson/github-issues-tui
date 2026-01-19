@@ -12,16 +12,23 @@ import (
 
 // Config represents the application configuration
 type Config struct {
-	GitHub   GitHubConfig   `toml:"github"`
-	Database DatabaseConfig `toml:"database,omitempty"`
-	Display  DisplayConfig  `toml:"display,omitempty"`
+	GitHub       GitHubConfig        `toml:"github"`
+	Database     DatabaseConfig      `toml:"database,omitempty"`
+	Display      DisplayConfig       `toml:"display,omitempty"`
+	Repositories []RepositoryConfig  `toml:"repositories,omitempty"`
 }
 
 // GitHubConfig contains GitHub-related settings
 type GitHubConfig struct {
-	Repository string `toml:"repository"`
-	AuthMethod string `toml:"auth_method"`
-	Token      string `toml:"token,omitempty"`
+	Repository        string `toml:"repository,omitempty"`        // Legacy single repository support
+	AuthMethod        string `toml:"auth_method"`
+	Token             string `toml:"token,omitempty"`
+	DefaultRepository string `toml:"default_repository,omitempty"`
+}
+
+// RepositoryConfig represents a configured repository
+type RepositoryConfig struct {
+	Name string `toml:"name"`
 }
 
 // DatabaseConfig contains database-related settings
@@ -96,16 +103,6 @@ func SaveConfig(cfg *Config, path string) error {
 
 // ValidateConfig validates the configuration
 func ValidateConfig(cfg *Config) error {
-	if cfg.GitHub.Repository == "" {
-		return errors.New("repository is required")
-	}
-
-	// Validate repository format (owner/repo)
-	parts := strings.Split(cfg.GitHub.Repository, "/")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return errors.New("repository must be in owner/repo format")
-	}
-
 	// Validate auth method
 	if cfg.GitHub.AuthMethod == "" {
 		return errors.New("auth_method is required")
@@ -123,6 +120,41 @@ func ValidateConfig(cfg *Config) error {
 	// If auth method is token, token must be provided
 	if cfg.GitHub.AuthMethod == "token" && cfg.GitHub.Token == "" {
 		return errors.New("token is required when auth_method is 'token'")
+	}
+
+	// Check if we have any repositories configured
+	if len(cfg.Repositories) == 0 && cfg.GitHub.Repository == "" {
+		return errors.New("at least one repository must be configured")
+	}
+
+	// Validate legacy single repository if set
+	if cfg.GitHub.Repository != "" {
+		parts := strings.Split(cfg.GitHub.Repository, "/")
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return errors.New("repository must be in owner/repo format")
+		}
+	}
+
+	// Validate all repositories in the list
+	for _, repo := range cfg.Repositories {
+		parts := strings.Split(repo.Name, "/")
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return fmt.Errorf("repository '%s' must be in owner/repo format", repo.Name)
+		}
+	}
+
+	// Validate default_repository is in the configured list
+	if cfg.GitHub.DefaultRepository != "" && len(cfg.Repositories) > 0 {
+		found := false
+		for _, repo := range cfg.Repositories {
+			if repo.Name == cfg.GitHub.DefaultRepository {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("default_repository '%s' is not in the configured repositories list", cfg.GitHub.DefaultRepository)
+		}
 	}
 
 	return nil
@@ -191,4 +223,78 @@ func GetTheme(cfg *Config) string {
 	}
 
 	return theme
+}
+
+// GetRepository resolves which repository to use based on precedence:
+// 1. Command-line --repo flag (highest priority)
+// 2. Default repository in config
+// 3. First repository in list
+// 4. Legacy single repository field
+func GetRepository(cfg *Config, repoFlag string) (string, error) {
+	// If flag is provided, use it (must be in configured list)
+	if repoFlag != "" {
+		// Check if it's in the configured repositories
+		if len(cfg.Repositories) > 0 {
+			for _, repo := range cfg.Repositories {
+				if repo.Name == repoFlag {
+					return repoFlag, nil
+				}
+			}
+			return "", fmt.Errorf("repository '%s' is not configured", repoFlag)
+		}
+		// For legacy single repository, allow flag if it matches
+		if cfg.GitHub.Repository == repoFlag {
+			return repoFlag, nil
+		}
+		return "", fmt.Errorf("repository '%s' is not configured", repoFlag)
+	}
+
+	// If default repository is set, use it
+	if cfg.GitHub.DefaultRepository != "" {
+		return cfg.GitHub.DefaultRepository, nil
+	}
+
+	// Use first repository in list
+	if len(cfg.Repositories) > 0 {
+		return cfg.Repositories[0].Name, nil
+	}
+
+	// Fall back to legacy single repository
+	if cfg.GitHub.Repository != "" {
+		return cfg.GitHub.Repository, nil
+	}
+
+	return "", errors.New("no repository configured")
+}
+
+// ListRepositories returns a list of all configured repositories
+func ListRepositories(cfg *Config) []string {
+	if len(cfg.Repositories) > 0 {
+		repos := make([]string, len(cfg.Repositories))
+		for i, repo := range cfg.Repositories {
+			repos[i] = repo.Name
+		}
+		return repos
+	}
+
+	// Fall back to legacy single repository
+	if cfg.GitHub.Repository != "" {
+		return []string{cfg.GitHub.Repository}
+	}
+
+	return []string{}
+}
+
+// GetDatabasePathForRepository returns the database path for a specific repository
+// Databases are stored in ~/.local/share/ghissues/<owner_repo>.db
+func GetDatabasePathForRepository(repo string) string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		// Fall back to current directory if home dir not available
+		return strings.ReplaceAll(repo, "/", "_") + ".db"
+	}
+
+	// Convert owner/repo to owner_repo for filename
+	dbName := strings.ReplaceAll(repo, "/", "_") + ".db"
+	return filepath.Join(homeDir, ".local", "share", "ghissues", dbName)
 }

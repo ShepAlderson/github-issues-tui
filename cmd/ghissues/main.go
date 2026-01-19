@@ -30,6 +30,7 @@ func run() error {
 
 	// Parse command line arguments
 	var dbPath string
+	var repoFlag string
 	args := os.Args[1:]
 
 	// Parse flags
@@ -48,16 +49,31 @@ func run() error {
 			continue
 		}
 
+		// Handle --repo flag
+		if arg == "--repo" {
+			if i+1 >= len(args) {
+				return fmt.Errorf("--repo flag requires a repository argument (owner/repo format)")
+			}
+			repoFlag = args[i+1]
+			// Remove --repo and its value from args
+			args = append(args[:i], args[i+2:]...)
+			i-- // Adjust index after removal
+			continue
+		}
+
 		// Handle other flags and commands
 		switch arg {
 		case "sync":
 			// Remove sync command from args
 			args = append(args[:i], args[i+1:]...)
-			return runSync(configPath, dbPath)
+			return runSync(configPath, dbPath, repoFlag)
 		case "refresh":
 			// Remove refresh command from args
 			args = append(args[:i], args[i+1:]...)
-			return runRefresh(configPath, dbPath)
+			return runRefresh(configPath, dbPath, repoFlag)
+		case "repos":
+			// List configured repositories
+			return runRepos(configPath)
 		case "config":
 			// Force re-run setup
 			return runSetup(configPath, true)
@@ -108,10 +124,22 @@ func run() error {
 		return fmt.Errorf("token validation failed: %w", err)
 	}
 
-	// Get database path (flag takes precedence over config)
-	resolvedDBPath, err := database.GetDatabasePath(cfg, dbPath)
+	// Resolve which repository to use
+	repository, err := config.GetRepository(cfg, repoFlag)
 	if err != nil {
-		return fmt.Errorf("failed to resolve database path: %w", err)
+		return fmt.Errorf("failed to resolve repository: %w", err)
+	}
+
+	// Get database path (use per-repo path unless --db flag is set)
+	var resolvedDBPath string
+	if dbPath != "" {
+		resolvedDBPath, err = database.GetDatabasePath(cfg, dbPath)
+		if err != nil {
+			return fmt.Errorf("failed to resolve database path: %w", err)
+		}
+	} else {
+		// Use per-repository database path
+		resolvedDBPath = config.GetDatabasePathForRepository(repository)
 	}
 
 	// Initialize database
@@ -120,13 +148,13 @@ func run() error {
 	}
 
 	// Auto-refresh: Perform incremental sync on app launch
-	fmt.Println("Checking for updates...")
+	fmt.Printf("Checking for updates (%s)...\n", repository)
 	syncer, err := sync.NewSyncer(token, resolvedDBPath)
 	if err != nil {
 		return fmt.Errorf("failed to create syncer: %w", err)
 	}
 
-	if err := syncer.RefreshIssues(cfg.GitHub.Repository); err != nil {
+	if err := syncer.RefreshIssues(repository); err != nil {
 		fmt.Printf("Warning: Auto-refresh failed: %v\n", err)
 		fmt.Println("Continuing with cached data...")
 	}
@@ -198,7 +226,7 @@ func runSetup(configPath string, force bool) error {
 	return nil
 }
 
-func runSync(configPath string, dbPath string) error {
+func runSync(configPath string, dbPath string, repoFlag string) error {
 	// Load config
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
@@ -224,10 +252,22 @@ func runSync(configPath string, dbPath string) error {
 	fmt.Println("Authentication: ✓")
 	fmt.Println()
 
-	// Get database path
-	resolvedDBPath, err := database.GetDatabasePath(cfg, dbPath)
+	// Resolve which repository to use
+	repository, err := config.GetRepository(cfg, repoFlag)
 	if err != nil {
-		return fmt.Errorf("failed to resolve database path: %w", err)
+		return fmt.Errorf("failed to resolve repository: %w", err)
+	}
+
+	// Get database path (use per-repo path unless --db flag is set)
+	var resolvedDBPath string
+	if dbPath != "" {
+		resolvedDBPath, err = database.GetDatabasePath(cfg, dbPath)
+		if err != nil {
+			return fmt.Errorf("failed to resolve database path: %w", err)
+		}
+	} else {
+		// Use per-repository database path
+		resolvedDBPath = config.GetDatabasePathForRepository(repository)
 	}
 
 	// Initialize database
@@ -243,15 +283,15 @@ func runSync(configPath string, dbPath string) error {
 	defer syncer.Close()
 
 	// Run sync
-	fmt.Printf("Syncing issues from %s...\n\n", cfg.GitHub.Repository)
-	if err := syncer.SyncIssues(cfg.GitHub.Repository); err != nil {
+	fmt.Printf("Syncing issues from %s...\n\n", repository)
+	if err := syncer.SyncIssues(repository); err != nil {
 		return fmt.Errorf("sync failed: %w", err)
 	}
 
 	return nil
 }
 
-func runRefresh(configPath string, dbPath string) error {
+func runRefresh(configPath string, dbPath string, repoFlag string) error {
 	// Load config
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
@@ -277,10 +317,22 @@ func runRefresh(configPath string, dbPath string) error {
 	fmt.Println("Authentication: ✓")
 	fmt.Println()
 
-	// Get database path
-	resolvedDBPath, err := database.GetDatabasePath(cfg, dbPath)
+	// Resolve which repository to use
+	repository, err := config.GetRepository(cfg, repoFlag)
 	if err != nil {
-		return fmt.Errorf("failed to resolve database path: %w", err)
+		return fmt.Errorf("failed to resolve repository: %w", err)
+	}
+
+	// Get database path (use per-repo path unless --db flag is set)
+	var resolvedDBPath string
+	if dbPath != "" {
+		resolvedDBPath, err = database.GetDatabasePath(cfg, dbPath)
+		if err != nil {
+			return fmt.Errorf("failed to resolve database path: %w", err)
+		}
+	} else {
+		// Use per-repository database path
+		resolvedDBPath = config.GetDatabasePathForRepository(repository)
 	}
 
 	// Initialize database
@@ -296,10 +348,55 @@ func runRefresh(configPath string, dbPath string) error {
 	defer syncer.Close()
 
 	// Run refresh
-	fmt.Printf("Refreshing issues from %s...\n\n", cfg.GitHub.Repository)
-	if err := syncer.RefreshIssues(cfg.GitHub.Repository); err != nil {
+	fmt.Printf("Refreshing issues from %s...\n\n", repository)
+	if err := syncer.RefreshIssues(repository); err != nil {
 		return fmt.Errorf("refresh failed: %w", err)
 	}
+
+	return nil
+}
+
+func runRepos(configPath string) error {
+	// Load config
+	cfg, err := config.LoadConfig(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w\n\nRun 'ghissues config' to configure", err)
+	}
+
+	// Get list of configured repositories
+	repos := config.ListRepositories(cfg)
+
+	if len(repos) == 0 {
+		fmt.Println("No repositories configured.")
+		fmt.Println()
+		fmt.Println("Run 'ghissues config' to configure repositories.")
+		return nil
+	}
+
+	fmt.Println("Configured Repositories")
+	fmt.Println("=======================")
+	fmt.Println()
+
+	// Show default repository if set
+	defaultRepo := ""
+	if cfg.GitHub.DefaultRepository != "" {
+		defaultRepo = cfg.GitHub.DefaultRepository
+	} else if len(repos) > 0 {
+		defaultRepo = repos[0]
+	}
+
+	for _, repo := range repos {
+		if repo == defaultRepo {
+			fmt.Printf("  %s (default)\n", repo)
+		} else {
+			fmt.Printf("  %s\n", repo)
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("Use --repo flag to select a specific repository:")
+	fmt.Println("  ghissues --repo owner/repo")
+	fmt.Println()
 
 	return nil
 }
@@ -341,22 +438,29 @@ func printHelp() {
 	fmt.Println("ghissues - GitHub Issues TUI")
 	fmt.Println()
 	fmt.Println("USAGE:")
-	fmt.Println("  ghissues                Start the TUI (auto-refreshes on launch)")
-	fmt.Println("  ghissues sync           Fetch and sync all open issues from GitHub (full sync)")
-	fmt.Println("  ghissues refresh        Update issues changed since last sync (incremental)")
-	fmt.Println("  ghissues themes         List available color themes")
-	fmt.Println("  ghissues --db PATH      Specify database file location")
-	fmt.Println("  ghissues config         Run/re-run interactive configuration")
-	fmt.Println("  ghissues --help         Show this help message")
-	fmt.Println("  ghissues --version      Show version information")
+	fmt.Println("  ghissues                   Start the TUI (auto-refreshes on launch)")
+	fmt.Println("  ghissues sync              Fetch and sync all open issues from GitHub (full sync)")
+	fmt.Println("  ghissues refresh           Update issues changed since last sync (incremental)")
+	fmt.Println("  ghissues repos             List configured repositories")
+	fmt.Println("  ghissues themes            List available color themes")
+	fmt.Println("  ghissues --repo owner/repo Select which repository to use")
+	fmt.Println("  ghissues --db PATH         Specify database file location")
+	fmt.Println("  ghissues config            Run/re-run interactive configuration")
+	fmt.Println("  ghissues --help            Show this help message")
+	fmt.Println("  ghissues --version         Show version information")
 	fmt.Println()
 	fmt.Println("CONFIGURATION:")
 	fmt.Printf("  Config file: ~/.config/ghissues/config.toml\n")
 	fmt.Println()
+	fmt.Println("MULTI-REPOSITORY SUPPORT:")
+	fmt.Println("  Each repository has its own database file")
+	fmt.Println("  Database location: ~/.local/share/ghissues/<owner_repo>.db")
+	fmt.Println("  Set default_repository in config to specify which repo to use by default")
+	fmt.Println("  Use --repo flag to override and select a specific repository")
+	fmt.Println()
 	fmt.Println("DATABASE:")
-	fmt.Println("  Default location: .ghissues.db (in current directory)")
-	fmt.Println("  Override via: --db flag or database.path in config file")
-	fmt.Println("  Flag takes precedence over config file")
+	fmt.Println("  Per-repository databases stored in: ~/.local/share/ghissues/")
+	fmt.Println("  Override via: --db flag (applies to selected repository)")
 	fmt.Println()
 	fmt.Println("AUTHENTICATION METHODS:")
 	fmt.Println("  env    - Use GITHUB_TOKEN environment variable")
