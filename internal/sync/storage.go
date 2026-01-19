@@ -3,6 +3,7 @@ package sync
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -86,6 +87,11 @@ func (s *IssueStore) InitSchema() error {
 		);
 
 		CREATE INDEX IF NOT EXISTS idx_assignees_issue ON assignees(issue_number);
+
+		CREATE TABLE IF NOT EXISTS metadata (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL
+		);
 	`
 
 	_, err := s.db.Exec(schema)
@@ -301,4 +307,48 @@ func (s *IssueStore) LoadComments(issueNumber int) ([]*Comment, error) {
 	}
 
 	return comments, nil
+}
+
+// GetLastSyncTime retrieves the last sync timestamp from metadata
+func (s *IssueStore) GetLastSyncTime() (time.Time, error) {
+	var timeStr string
+	err := s.db.QueryRow("SELECT value FROM metadata WHERE key = ?", "last_sync_time").Scan(&timeStr)
+	if err == sql.ErrNoRows {
+		// No sync time recorded yet - return zero time
+		return time.Time{}, nil
+	}
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to query last sync time: %w", err)
+	}
+
+	// Parse the time string
+	t, err := time.Parse(time.RFC3339, timeStr)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to parse last sync time: %w", err)
+	}
+
+	return t, nil
+}
+
+// SetLastSyncTime updates the last sync timestamp in metadata
+func (s *IssueStore) SetLastSyncTime(t time.Time) error {
+	timeStr := t.Format(time.RFC3339)
+	_, err := s.db.Exec(`
+		INSERT OR REPLACE INTO metadata (key, value)
+		VALUES (?, ?)
+	`, "last_sync_time", timeStr)
+	if err != nil {
+		return fmt.Errorf("failed to set last sync time: %w", err)
+	}
+	return nil
+}
+
+// RemoveClosedIssues removes all closed issues from the database
+// This is used during incremental sync to clean up issues that have been closed
+func (s *IssueStore) RemoveClosedIssues() error {
+	_, err := s.db.Exec("DELETE FROM issues WHERE state = ?", "closed")
+	if err != nil {
+		return fmt.Errorf("failed to remove closed issues: %w", err)
+	}
+	return nil
 }

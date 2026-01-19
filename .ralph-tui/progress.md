@@ -382,3 +382,12 @@ ding the task description... The acceptance criteria lists \"Enter on issue list
 This pattern scales well for multiple views (e.g., could add viewModeHelp, viewModeSettings) without making Model struct unwieldy.
 
 ---
+## ✓ Iteration 5 - US-008: Comments View
+*2026-01-19T22:57:15.245Z (435s)*
+
+**Status:** Completed
+
+**Notes:**
+aving to free memory\n\n### All Acceptance Criteria Met ✅\n\n- ✅ Drill-down view replaces main interface when activated\n- ✅ Shows issue title/number as header\n- ✅ Comments displayed chronologically\n- ✅ Each comment shows: author, date, body (markdown rendered)\n- ✅ Toggle markdown rendering with m key\n- ✅ Scrollable comment list\n- ✅ Esc or q returns to issue list view\n\n### Commits\n\n- `3e29382` - feat: US-008 - Comments View\n- `e081594` - docs: document US-008 learnings and patterns\n\n
+
+---

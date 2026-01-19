@@ -29,7 +29,7 @@ func TestInitSchema(t *testing.T) {
 	}
 
 	// Verify tables exist
-	tables := []string{"issues", "comments", "labels", "assignees"}
+	tables := []string{"issues", "comments", "labels", "assignees", "metadata"}
 	for _, table := range tables {
 		var name string
 		err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&name)
@@ -41,6 +41,130 @@ func TestInitSchema(t *testing.T) {
 	// Verify idempotency - running again should not fail
 	if err := store.InitSchema(); err != nil {
 		t.Errorf("InitSchema() should be idempotent, error = %v", err)
+	}
+}
+
+func TestGetLastSyncTime(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	store, err := NewIssueStore(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	// Test: First time should return zero time
+	lastSync, err := store.GetLastSyncTime()
+	if err != nil {
+		t.Fatalf("GetLastSyncTime() error = %v", err)
+	}
+	if !lastSync.IsZero() {
+		t.Errorf("Expected zero time on first call, got %v", lastSync)
+	}
+
+	// Test: After setting, should return the set time
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := store.SetLastSyncTime(now); err != nil {
+		t.Fatalf("SetLastSyncTime() error = %v", err)
+	}
+
+	lastSync, err = store.GetLastSyncTime()
+	if err != nil {
+		t.Fatalf("GetLastSyncTime() error = %v", err)
+	}
+	if !lastSync.Equal(now) {
+		t.Errorf("GetLastSyncTime() = %v, want %v", lastSync, now)
+	}
+
+	// Test: Updating should replace the value
+	later := now.Add(1 * time.Hour)
+	if err := store.SetLastSyncTime(later); err != nil {
+		t.Fatalf("SetLastSyncTime() error = %v", err)
+	}
+
+	lastSync, err = store.GetLastSyncTime()
+	if err != nil {
+		t.Fatalf("GetLastSyncTime() error = %v", err)
+	}
+	if !lastSync.Equal(later) {
+		t.Errorf("GetLastSyncTime() = %v, want %v", lastSync, later)
+	}
+}
+
+func TestRemoveClosedIssues(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	store, err := NewIssueStore(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	// Store multiple issues with different states
+	issues := []*Issue{
+		{
+			Number:    1,
+			Title:     "Open Issue 1",
+			State:     "open",
+			Author:    "user1",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		},
+		{
+			Number:    2,
+			Title:     "Closed Issue",
+			State:     "closed",
+			Author:    "user2",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		},
+		{
+			Number:    3,
+			Title:     "Open Issue 2",
+			State:     "open",
+			Author:    "user3",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		},
+	}
+
+	for _, issue := range issues {
+		if err := store.StoreIssue(issue); err != nil {
+			t.Fatalf("Failed to store issue: %v", err)
+		}
+	}
+
+	// Verify all issues are stored
+	allIssues, err := store.LoadIssues()
+	if err != nil {
+		t.Fatalf("Failed to load issues: %v", err)
+	}
+	if len(allIssues) != 3 {
+		t.Fatalf("Expected 3 issues, got %d", len(allIssues))
+	}
+
+	// Remove closed issues
+	if err := store.RemoveClosedIssues(); err != nil {
+		t.Fatalf("RemoveClosedIssues() error = %v", err)
+	}
+
+	// Verify only open issues remain
+	remainingIssues, err := store.LoadIssues()
+	if err != nil {
+		t.Fatalf("Failed to load issues after removal: %v", err)
+	}
+
+	if len(remainingIssues) != 2 {
+		t.Errorf("Expected 2 issues remaining, got %d", len(remainingIssues))
+	}
+
+	// Verify all remaining issues are open
+	for _, issue := range remainingIssues {
+		if issue.State != "open" {
+			t.Errorf("Found non-open issue after removal: #%d with state %s", issue.Number, issue.State)
+		}
 	}
 }
 

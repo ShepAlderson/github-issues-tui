@@ -3,10 +3,10 @@
   "sessionId": "efa2895b-ade0-49fd-aee9-e7aa98f505ff",
   "status": "running",
   "startedAt": "2026-01-19T22:28:30.273Z",
-  "updatedAt": "2026-01-19T22:50:00.338Z",
-  "currentIteration": 4,
+  "updatedAt": "2026-01-19T22:57:16.271Z",
+  "currentIteration": 5,
   "maxIterations": 10,
-  "tasksCompleted": 4,
+  "tasksCompleted": 5,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -59,8 +59,8 @@
       {
         "id": "US-008",
         "title": "Comments View",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-009",
@@ -140,12 +140,22 @@
       "durationMs": 292733,
       "startedAt": "2026-01-19T22:45:06.568Z",
       "endedAt": "2026-01-19T22:49:59.301Z"
+    },
+    {
+      "iteration": 5,
+      "status": "completed",
+      "taskId": "US-008",
+      "taskTitle": "Comments View",
+      "taskCompleted": true,
+      "durationMs": 434911,
+      "startedAt": "2026-01-19T22:50:00.322Z",
+      "endedAt": "2026-01-19T22:57:15.233Z"
     }
   ],
   "skippedTaskIds": [],
   "cwd": "/Users/shepbook/git/github-issues-tui",
   "activeTaskIds": [
-    "US-008"
+    "US-009"
   ],
   "subagentPanelVisible": false
 }

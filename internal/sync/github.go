@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const (
@@ -39,6 +40,89 @@ func (c *GitHubClient) FetchIssues(ctx context.Context, repo string) ([]*Issue, 
 		// Build URL
 		url := fmt.Sprintf("%s/repos/%s/issues?state=open&per_page=%d&page=%d",
 			c.baseURL, repo, perPage, page)
+
+		// Create request
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+
+		// Set headers
+		req.Header.Set("Authorization", "Bearer "+c.token)
+		req.Header.Set("Accept", "application/vnd.github.v3+json")
+
+		// Execute request
+		resp, err := c.client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch issues: %w", err)
+		}
+		defer resp.Body.Close()
+
+		// Check status code
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("GitHub API error (status %d): %s", resp.StatusCode, string(body))
+		}
+
+		// Parse response
+		var ghIssues []GitHubIssueResponse
+		if err := json.NewDecoder(resp.Body).Decode(&ghIssues); err != nil {
+			return nil, fmt.Errorf("failed to decode response: %w", err)
+		}
+
+		// Convert to internal format
+		for _, ghIssue := range ghIssues {
+			// Skip pull requests (they appear in the issues API)
+			if ghIssue.IsPullRequest() {
+				continue
+			}
+
+			issue := &Issue{
+				Number:       ghIssue.Number,
+				Title:        ghIssue.Title,
+				Body:         ghIssue.Body,
+				State:        ghIssue.State,
+				Author:       ghIssue.User.Login,
+				CreatedAt:    ghIssue.CreatedAt,
+				UpdatedAt:    ghIssue.UpdatedAt,
+				CommentCount: ghIssue.Comments,
+			}
+
+			// Extract labels
+			for _, label := range ghIssue.Labels {
+				issue.Labels = append(issue.Labels, label.Name)
+			}
+
+			// Extract assignees
+			for _, assignee := range ghIssue.Assignees {
+				issue.Assignees = append(issue.Assignees, assignee.Login)
+			}
+
+			allIssues = append(allIssues, issue)
+		}
+
+		// Check for next page
+		linkHeader := resp.Header.Get("Link")
+		if !hasNextPage(linkHeader) {
+			break
+		}
+
+		page++
+	}
+
+	return allIssues, nil
+}
+
+// FetchIssuesSince fetches issues updated since a specific time (incremental sync)
+// Uses state=all to get both open and closed issues (to detect deletions)
+func (c *GitHubClient) FetchIssuesSince(ctx context.Context, repo string, since time.Time) ([]*Issue, error) {
+	var allIssues []*Issue
+	page := 1
+
+	for {
+		// Build URL with since parameter and state=all
+		url := fmt.Sprintf("%s/repos/%s/issues?state=all&per_page=%d&page=%d&since=%s",
+			c.baseURL, repo, perPage, page, since.Format(time.RFC3339))
 
 		// Create request
 		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)

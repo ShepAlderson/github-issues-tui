@@ -172,14 +172,15 @@
         "Esc or q returns to issue list view"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-007"
       ],
       "labels": [
         "tui",
         "comments"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-009",
@@ -307,6 +308,6 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-01-19T22:50:00.323Z"
+    "updatedAt": "2026-01-19T22:57:16.256Z"
   }
 }

@@ -267,3 +267,90 @@ func TestContextCancellation(t *testing.T) {
 		t.Error("Expected error from cancelled context, got nil")
 	}
 }
+
+// TestFetchIssuesSince tests fetching issues updated since a specific time
+func TestFetchIssuesSince(t *testing.T) {
+	sinceTime := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify since parameter is present
+		since := r.URL.Query().Get("since")
+		if since == "" {
+			t.Errorf("Expected since parameter in URL, got none")
+		}
+
+		// Verify it's in the correct format (ISO 8601)
+		expectedSince := sinceTime.Format(time.RFC3339)
+		if since != expectedSince {
+			t.Errorf("since parameter = %s, want %s", since, expectedSince)
+		}
+
+		// Verify state=all instead of state=open for incremental sync
+		state := r.URL.Query().Get("state")
+		if state != "all" {
+			t.Errorf("Expected state=all for incremental sync, got %s", state)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`[
+			{
+				"number": 1,
+				"title": "Updated Issue",
+				"body": "Updated body",
+				"state": "open",
+				"user": {"login": "testuser"},
+				"created_at": "2024-01-10T00:00:00Z",
+				"updated_at": "2024-01-16T00:00:00Z",
+				"comments": 3,
+				"labels": [],
+				"assignees": []
+			},
+			{
+				"number": 2,
+				"title": "Closed Issue",
+				"body": "Closed",
+				"state": "closed",
+				"user": {"login": "testuser2"},
+				"created_at": "2024-01-12T00:00:00Z",
+				"updated_at": "2024-01-17T00:00:00Z",
+				"comments": 0,
+				"labels": [],
+				"assignees": []
+			}
+		]`))
+	}))
+	defer server.Close()
+
+	client := &GitHubClient{
+		baseURL: server.URL,
+		token:   "test-token",
+		client:  &http.Client{},
+	}
+
+	issues, err := client.FetchIssuesSince(context.Background(), "owner/repo", sinceTime)
+	if err != nil {
+		t.Fatalf("FetchIssuesSince() error = %v", err)
+	}
+
+	if len(issues) != 2 {
+		t.Errorf("Expected 2 issues, got %d", len(issues))
+	}
+
+	// Verify we get both open and closed issues
+	openCount := 0
+	closedCount := 0
+	for _, issue := range issues {
+		if issue.State == "open" {
+			openCount++
+		} else if issue.State == "closed" {
+			closedCount++
+		}
+	}
+
+	if openCount != 1 {
+		t.Errorf("Expected 1 open issue, got %d", openCount)
+	}
+	if closedCount != 1 {
+		t.Errorf("Expected 1 closed issue, got %d", closedCount)
+	}
+}

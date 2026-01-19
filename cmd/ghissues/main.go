@@ -53,6 +53,10 @@ func run() error {
 			// Remove sync command from args
 			args = append(args[:i], args[i+1:]...)
 			return runSync(configPath, dbPath)
+		case "refresh":
+			// Remove refresh command from args
+			args = append(args[:i], args[i+1:]...)
+			return runRefresh(configPath, dbPath)
 		case "config":
 			// Force re-run setup
 			return runSetup(configPath, true)
@@ -110,6 +114,19 @@ func run() error {
 	if err := database.InitDatabase(resolvedDBPath); err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
+
+	// Auto-refresh: Perform incremental sync on app launch
+	fmt.Println("Checking for updates...")
+	syncer, err := sync.NewSyncer(token, resolvedDBPath)
+	if err != nil {
+		return fmt.Errorf("failed to create syncer: %w", err)
+	}
+
+	if err := syncer.RefreshIssues(cfg.GitHub.Repository); err != nil {
+		fmt.Printf("Warning: Auto-refresh failed: %v\n", err)
+		fmt.Println("Continuing with cached data...")
+	}
+	syncer.Close()
 
 	// Load issues from database
 	store, err := sync.NewIssueStore(resolvedDBPath)
@@ -221,12 +238,66 @@ func runSync(configPath string, dbPath string) error {
 	return nil
 }
 
+func runRefresh(configPath string, dbPath string) error {
+	// Load config
+	cfg, err := config.LoadConfig(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w\n\nRun 'ghissues config' to configure", err)
+	}
+
+	// Validate config
+	if err := config.ValidateConfig(cfg); err != nil {
+		return fmt.Errorf("invalid config: %w\n\nRun 'ghissues config' to reconfigure", err)
+	}
+
+	// Get authentication token
+	token, err := auth.GetToken(cfg)
+	if err != nil {
+		return fmt.Errorf("authentication failed: %w", err)
+	}
+
+	// Validate token with GitHub API
+	fmt.Println("Validating GitHub token...")
+	if err := auth.ValidateToken(token); err != nil {
+		return fmt.Errorf("token validation failed: %w", err)
+	}
+	fmt.Println("Authentication: ✓")
+	fmt.Println()
+
+	// Get database path
+	resolvedDBPath, err := database.GetDatabasePath(cfg, dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve database path: %w", err)
+	}
+
+	// Initialize database
+	if err := database.InitDatabase(resolvedDBPath); err != nil {
+		return fmt.Errorf("failed to initialize database: %w", err)
+	}
+
+	// Create syncer
+	syncer, err := sync.NewSyncer(token, resolvedDBPath)
+	if err != nil {
+		return fmt.Errorf("failed to create syncer: %w", err)
+	}
+	defer syncer.Close()
+
+	// Run refresh
+	fmt.Printf("Refreshing issues from %s...\n\n", cfg.GitHub.Repository)
+	if err := syncer.RefreshIssues(cfg.GitHub.Repository); err != nil {
+		return fmt.Errorf("refresh failed: %w", err)
+	}
+
+	return nil
+}
+
 func printHelp() {
 	fmt.Println("ghissues - GitHub Issues TUI")
 	fmt.Println()
 	fmt.Println("USAGE:")
-	fmt.Println("  ghissues                Start the TUI (runs setup if needed)")
-	fmt.Println("  ghissues sync           Fetch and sync all open issues from GitHub")
+	fmt.Println("  ghissues                Start the TUI (auto-refreshes on launch)")
+	fmt.Println("  ghissues sync           Fetch and sync all open issues from GitHub (full sync)")
+	fmt.Println("  ghissues refresh        Update issues changed since last sync (incremental)")
 	fmt.Println("  ghissues --db PATH      Specify database file location")
 	fmt.Println("  ghissues config         Run/re-run interactive configuration")
 	fmt.Println("  ghissues --help         Show this help message")
