@@ -1,0 +1,15 @@
+{
+  "id": "6700ace9-747a-479d-87d7-2d919e1e4bff",
+  "status": "completed",
+  "startedAt": "2026-01-19T18:22:32.322Z",
+  "updatedAt": "2026-01-19T18:22:38.081Z",
+  "agentPlugin": "claude",
+  "trackerPlugin": "json",
+  "prdPath": "./tasks/prd.json",
+  "currentIteration": 0,
+  "maxIterations": 10,
+  "totalTasks": 0,
+  "tasksCompleted": 0,
+  "cwd": "/Users/shepbook/git/github-issues-tui",
+  "endedAt": "2026-01-19T18:22:38.081Z"
+}
