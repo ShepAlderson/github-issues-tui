@@ -77,6 +77,7 @@ after each iteration and included in agent prompts for context.
 - **Conditional rendering**: Render simple view before dimensions arrive (WindowSizeMsg), switch to rich layout after
 - **Glamour for markdown**: Use glamour.NewTermRenderer with WithAutoStyle() and WithWordWrap() for terminal markdown rendering
 - **Scrollable panels**: Track scroll offset, split content into lines, slice visible range, clamp offsets to prevent bounds errors
+- **View mode with lazy loading**: Use viewMode field (integer constants) to switch between views. Add view-specific state fields. Dispatch in Update() and View() based on mode. Load data only when entering view, clear when leaving.
 
 ---
 
@@ -314,5 +315,70 @@ keybinding (s to cycle, S to reverse)** - Implemented in model.go:61-85 with 's'
 
 **Notes:**
 ding the task description... The acceptance criteria lists \"Enter on issue list opens dedicated comments view\" but the description says \"As a user, I want to view the full details of a selected issue so that I can understand the issue context\". The Enter key for comments seems like it should be a separate story (US-008 or similar for comments view). The core detail view functionality is complete.\n\nAll core acceptance criteria for viewing issue details are met! Let me signal completion:\n\n
+
+---
+
+## [2026-01-19] - US-008 - Comments View
+
+### What was implemented
+- Full-screen comments view activated with Enter key from issue list
+- LoadComments method in IssueStore to fetch comments for a specific issue
+- View mode system (viewModeList, viewModeComments) for switching between list and comments
+- Chronological comment display with author, date, and body
+- Scrollable comments list with PageUp/PageDown navigation
+- Markdown rendering toggle with 'm' key (shared with detail panel)
+- Return to list view with Esc or 'q' keys
+- Header showing issue number, title, state, author, and comment count
+- Comment separators for visual distinction between comments
+
+### Files changed
+- `internal/sync/storage.go` - Added LoadComments() method to fetch comments by issue number
+- `internal/sync/storage_test.go` - Added comprehensive tests for LoadComments with multiple scenarios
+- `internal/tui/model.go` - Added view mode system, comments view rendering, and key handling
+- `internal/tui/model_test.go` - Added tests for comments view navigation, scrolling, and markdown toggle
+- `cmd/ghissues/main.go` - Updated to pass IssueStore reference to Model for on-demand comment loading
+
+### Learnings
+
+#### Patterns discovered
+1. **View mode state management**: Used integer constants (viewModeList, viewModeComments) to represent different views. Simple and efficient for switching between modes.
+2. **Lazy loading comments**: Comments are loaded only when user presses Enter, not upfront. Reduces memory usage and startup time.
+3. **View-specific key handlers**: Created handleCommentsViewKeys() to isolate comments view key logic from main Update(). Keeps code organized and testable.
+4. **Context-sensitive 'q' key**: In list view, 'q' quits the app. In comments view, 'q' returns to list. User-friendly navigation pattern.
+5. **Full-screen drill-down**: Comments view takes over entire screen (not split pane). Provides more space for reading discussions.
+6. **Comment separator styling**: Used horizontal line (─) with dim color to visually separate comments without being distracting.
+7. **Chronological comment ordering**: LoadComments sorts by created_at ASC (oldest first). Mirrors GitHub's display order for natural conversation flow.
+8. **Shared markdown toggle**: Reused showRawMarkdown field for both detail panel and comments view. Single toggle state across views.
+
+#### Gotchas encountered
+1. **Store reference in Model**: Had to add *IssueStore field to Model, which required updating all NewModel() calls across tests. Used sed to batch update test calls.
+2. **Test data setup for comments view**: Tests need real IssueStore with populated database, not nil. Created temporary databases in each test using t.TempDir().
+3. **Enter key does nothing if store is nil**: Added guard clause to check store != nil before loading comments. Prevents panic in edge cases.
+4. **View() dispatcher complexity**: View() now has three paths: comments view, simple list (no dimensions), split pane. Must check view mode first, then dimensions.
+5. **Footer text getting long**: Had to abbreviate footer keybindings (e.g., "markdown" → "markdown"). May need help overlay (?) in future.
+6. **Scroll offset persistence**: When switching from list to comments, commentsScrollOffset resets to 0. Returning to list preserves cursor position. Asymmetric but intuitive.
+7. **Glamour width calculation**: Pass width-4 to renderMarkdown in comments view to account for padding. Prevents line wrap issues at screen edge.
+8. **Empty comments case**: Handle len(currentComments) == 0 gracefully by showing "No comments on this issue" message. Better UX than blank screen.
+
+#### Architecture decisions
+1. Extended Model struct with viewMode, commentsScrollOffset, currentComments, and store fields. Keeps all view state centralized.
+2. LoadComments() returns chronologically sorted comments (created_at ASC). Alternative would be reverse chronological, but oldest-first matches GitHub and conversation flow.
+3. Comments view is modal (takes over full screen). Alternative would be split pane with comments list, but full screen provides more reading space.
+4. Store reference passed to NewModel constructor. Alternative would be passing store to Update() as message, but constructor is simpler.
+5. Used handleCommentsViewKeys() to isolate comments view logic. Makes Update() method easier to understand and test.
+6. Reused existing markdown rendering infrastructure (renderMarkdown, showRawMarkdown). No need for duplicate logic.
+7. Comments cached in currentComments field. Avoids re-fetching from database on every render. Cleared when returning to list view.
+8. Footer shows scroll position and comment count. Helps user understand how much content is available and where they are.
+
+### New codebase pattern discovered
+**View mode with lazy loading**: When implementing multi-view TUIs, use view mode constants and lazy load data only when entering a view. Structure:
+- Add viewMode field to Model (integer constants for each view)
+- Add view-specific state fields (e.g., commentsScrollOffset, currentComments)
+- Check viewMode in Update() to dispatch to view-specific key handlers
+- Check viewMode in View() to dispatch to view-specific rendering
+- Load data only when switching to view (not upfront)
+- Clear data when leaving view to free memory
+
+This pattern scales well for multiple views (e.g., could add viewModeHelp, viewModeSettings) without making Model struct unwieldy.
 
 ---
