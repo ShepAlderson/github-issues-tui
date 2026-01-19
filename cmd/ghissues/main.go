@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/shepbook/github-issues-tui/internal/auth"
 	"github.com/shepbook/github-issues-tui/internal/config"
 	"github.com/shepbook/github-issues-tui/internal/prompt"
 )
@@ -60,10 +61,23 @@ func run() error {
 		return fmt.Errorf("invalid config: %w\n\nRun 'ghissues config' to reconfigure", err)
 	}
 
+	// Get authentication token
+	token, err := auth.GetToken(cfg)
+	if err != nil {
+		return fmt.Errorf("authentication failed: %w", err)
+	}
+
+	// Validate token with GitHub API
+	fmt.Println("Validating GitHub token...")
+	if err := auth.ValidateToken(token); err != nil {
+		return fmt.Errorf("token validation failed: %w", err)
+	}
+
 	// TODO: Launch TUI (to be implemented in later user stories)
 	fmt.Printf("Configuration loaded successfully!\n")
 	fmt.Printf("Repository: %s\n", cfg.GitHub.Repository)
 	fmt.Printf("Auth method: %s\n", cfg.GitHub.AuthMethod)
+	fmt.Println("Authentication: ✓")
 	fmt.Println("\nTUI not yet implemented. Stay tuned!")
 
 	return nil
