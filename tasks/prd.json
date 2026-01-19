@@ -195,14 +195,15 @@
         "Handles new comments on existing issues"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-003"
       ],
       "labels": [
         "sync",
         "api"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-010",
@@ -275,14 +276,15 @@
         "Network errors suggest checking connectivity and retrying"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-005"
       ],
       "labels": [
         "tui",
         "errors"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-014",
@@ -308,6 +310,6 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-01-19T22:57:16.256Z"
+    "updatedAt": "2026-01-19T23:09:04.914Z"
   }
 }

@@ -147,8 +147,14 @@ func run() error {
 	sortBy := config.GetSortBy(cfg)
 	sortAscending := config.GetSortAscending(cfg)
 
+	// Get last sync time
+	lastSyncTime, err := store.GetLastSyncTime()
+	if err != nil {
+		return fmt.Errorf("failed to get last sync time: %w", err)
+	}
+
 	// Launch TUI
-	model := tui.NewModel(issues, columns, sortBy, sortAscending, store)
+	model := tui.NewModel(issues, columns, sortBy, sortAscending, store, lastSyncTime)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("TUI error: %w", err)

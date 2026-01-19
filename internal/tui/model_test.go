@@ -16,7 +16,7 @@ func TestModel_Navigation(t *testing.T) {
 		{Number: 3, Title: "Third", State: "open", Author: "user3", CreatedAt: time.Now(), UpdatedAt: time.Now()},
 	}
 
-	model := NewModel(issues, []string{"number", "title", "author"}, "updated", false, nil)
+	model := NewModel(issues, []string{"number", "title", "author"}, "updated", false, nil, time.Time{})
 
 	// Test initial state
 	if model.cursor != 0 {
@@ -72,7 +72,7 @@ func TestModel_ArrowKeyNavigation(t *testing.T) {
 		{Number: 2, Title: "Second", State: "open", Author: "user2", CreatedAt: time.Now(), UpdatedAt: time.Now()},
 	}
 
-	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil, time.Time{})
 
 	// Test down arrow
 	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyDown})
@@ -94,7 +94,7 @@ func TestModel_Quit(t *testing.T) {
 		{Number: 1, Title: "Test", State: "open", Author: "user1", CreatedAt: time.Now(), UpdatedAt: time.Now()},
 	}
 
-	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil, time.Time{})
 
 	// Test 'q' quits
 	_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -111,7 +111,7 @@ func TestModel_Quit(t *testing.T) {
 
 func TestModel_EmptyIssues(t *testing.T) {
 	// Test with no issues
-	model := NewModel([]*sync.Issue{}, []string{"number", "title"}, "updated", false, nil)
+	model := NewModel([]*sync.Issue{}, []string{"number", "title"}, "updated", false, nil, time.Time{})
 
 	if model.cursor != 0 {
 		t.Errorf("Empty model cursor = %d, want 0", model.cursor)
@@ -132,7 +132,7 @@ func TestModel_SelectedIssue(t *testing.T) {
 		{Number: 2, Title: "Second", State: "open", Author: "user2", CreatedAt: now.Add(-1 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
 	}
 
-	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil, time.Time{})
 
 	// Get initially selected issue (should be #2 since it's most recently updated)
 	selected := model.SelectedIssue()
@@ -156,7 +156,7 @@ func TestModel_SelectedIssue(t *testing.T) {
 }
 
 func TestModel_SelectedIssue_Empty(t *testing.T) {
-	model := NewModel([]*sync.Issue{}, []string{"number", "title"}, "updated", false, nil)
+	model := NewModel([]*sync.Issue{}, []string{"number", "title"}, "updated", false, nil, time.Time{})
 
 	selected := model.SelectedIssue()
 	if selected != nil {
@@ -169,7 +169,7 @@ func TestModel_SortKeyCycling(t *testing.T) {
 		{Number: 1, Title: "First", State: "open", Author: "user1", CreatedAt: time.Now(), UpdatedAt: time.Now()},
 	}
 
-	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil, time.Time{})
 
 	// Initial sort should be "updated"
 	if model.sortBy != "updated" {
@@ -213,7 +213,7 @@ func TestModel_SortOrderReversal(t *testing.T) {
 		{Number: 1, Title: "First", State: "open", Author: "user1", CreatedAt: time.Now(), UpdatedAt: time.Now()},
 	}
 
-	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil, time.Time{})
 
 	// Initial should be descending (false)
 	if model.sortAscending {
@@ -302,7 +302,7 @@ func TestModel_IssueSorting(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create model and set sort parameters
-			model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
+			model := NewModel(issues, []string{"number", "title"}, "updated", false, nil, time.Time{})
 			model.sortBy = tt.sortBy
 			model.sortAscending = tt.sortAscending
 
@@ -337,7 +337,7 @@ func TestModel_DetailPanelWithDimensions(t *testing.T) {
 		},
 	}
 
-	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil, time.Time{})
 
 	// Set window size
 	updatedModel, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
@@ -371,7 +371,7 @@ func TestModel_MarkdownToggle(t *testing.T) {
 		},
 	}
 
-	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil, time.Time{})
 
 	// Initial state should be rendered markdown (showRawMarkdown = false)
 	if model.showRawMarkdown {
@@ -412,7 +412,7 @@ func TestModel_DetailPanelScrolling(t *testing.T) {
 		},
 	}
 
-	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil, time.Time{})
 	model.width = 120
 	model.height = 30
 
@@ -484,7 +484,7 @@ func TestModel_CommentsViewNavigation(t *testing.T) {
 
 	// Create model with store
 	issues := []*sync.Issue{issue}
-	model := NewModel(issues, []string{"number", "title"}, "updated", false, store)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, store, time.Time{})
 
 	// Initial view mode should be list
 	if model.viewMode != viewModeList {
@@ -562,7 +562,7 @@ func TestModel_CommentsViewScrolling(t *testing.T) {
 
 	// Create model with store
 	issues := []*sync.Issue{issue}
-	model := NewModel(issues, []string{"number", "title"}, "updated", false, store)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, store, time.Time{})
 	model.width = 120
 	model.height = 30
 
@@ -607,7 +607,7 @@ func TestModel_CommentsViewMarkdownToggle(t *testing.T) {
 		{Number: 1, Title: "Test", State: "open", Author: "user1", CreatedAt: time.Now(), UpdatedAt: time.Now()},
 	}
 
-	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil, time.Time{})
 
 	// Enter comments view
 	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -635,7 +635,7 @@ func TestModel_CommentsViewMarkdownToggle(t *testing.T) {
 
 func TestModel_CommentsViewWithEmptyIssueList(t *testing.T) {
 	// Test that Enter doesn't crash with empty issue list
-	model := NewModel([]*sync.Issue{}, []string{"number", "title"}, "updated", false, nil)
+	model := NewModel([]*sync.Issue{}, []string{"number", "title"}, "updated", false, nil, time.Time{})
 
 	// Try to enter comments view
 	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -653,7 +653,7 @@ func TestModel_StatusBarError(t *testing.T) {
 		{Number: 1, Title: "Test", State: "open", Author: "user1", CreatedAt: time.Now(), UpdatedAt: time.Now()},
 	}
 
-	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil, time.Time{})
 
 	// Should have no error initially
 	if model.statusError != "" {
@@ -689,7 +689,7 @@ func TestModel_ModalError(t *testing.T) {
 		{Number: 1, Title: "Test", State: "open", Author: "user1", CreatedAt: time.Now(), UpdatedAt: time.Now()},
 	}
 
-	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil, time.Time{})
 
 	// Should have no error initially
 	if model.modalError != "" {
@@ -756,7 +756,7 @@ func TestModel_LoadCommentsError(t *testing.T) {
 
 	// Create model with closed store
 	issues := []*sync.Issue{issue}
-	model := NewModel(issues, []string{"number", "title"}, "updated", false, store)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, store, time.Time{})
 
 	// Try to enter comments view (should fail to load comments)
 	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -771,4 +771,122 @@ func TestModel_LoadCommentsError(t *testing.T) {
 	if m.viewMode != viewModeList {
 		t.Errorf("After failed comment load, viewMode = %d, want %d (viewModeList)", m.viewMode, viewModeList)
 	}
+}
+
+func TestFormatRelativeTime(t *testing.T) {
+	now := time.Now()
+
+	tests := []struct {
+		name     string
+		t        time.Time
+		expected string
+	}{
+		{
+			name:     "zero time",
+			t:        time.Time{},
+			expected: "never",
+		},
+		{
+			name:     "just now (5 seconds ago)",
+			t:        now.Add(-5 * time.Second),
+			expected: "just now",
+		},
+		{
+			name:     "1 minute ago",
+			t:        now.Add(-1 * time.Minute),
+			expected: "1 minute ago",
+		},
+		{
+			name:     "5 minutes ago",
+			t:        now.Add(-5 * time.Minute),
+			expected: "5 minutes ago",
+		},
+		{
+			name:     "1 hour ago",
+			t:        now.Add(-1 * time.Hour),
+			expected: "1 hour ago",
+		},
+		{
+			name:     "3 hours ago",
+			t:        now.Add(-3 * time.Hour),
+			expected: "3 hours ago",
+		},
+		{
+			name:     "1 day ago",
+			t:        now.Add(-24 * time.Hour),
+			expected: "1 day ago",
+		},
+		{
+			name:     "5 days ago",
+			t:        now.Add(-5 * 24 * time.Hour),
+			expected: "5 days ago",
+		},
+		{
+			name:     "1 week ago",
+			t:        now.Add(-7 * 24 * time.Hour),
+			expected: "1 week ago",
+		},
+		{
+			name:     "2 weeks ago",
+			t:        now.Add(-14 * 24 * time.Hour),
+			expected: "2 weeks ago",
+		},
+		{
+			name:     "35 days ago (shows weeks)",
+			t:        now.Add(-35 * 24 * time.Hour),
+			expected: "5 weeks ago",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatRelativeTime(tt.t)
+			if result != tt.expected {
+				t.Errorf("formatRelativeTime(%v) = %q, want %q", tt.t, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestModel_LastSyncedIndicator(t *testing.T) {
+	// Create test issues
+	issues := []*sync.Issue{
+		{Number: 1, Title: "First", State: "open", Author: "user1", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+	}
+
+	// Test with recent sync (5 minutes ago)
+	lastSync := time.Now().Add(-5 * time.Minute)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil, lastSync)
+
+	status := model.renderStatus()
+
+	// Status should include "Last synced: 5 minutes ago"
+	if !contains(status, "Last synced:") {
+		t.Errorf("Status bar should contain 'Last synced:', got: %s", status)
+	}
+	if !contains(status, "minutes ago") {
+		t.Errorf("Status bar should contain relative time, got: %s", status)
+	}
+
+	// Test with zero time (never synced)
+	model = NewModel(issues, []string{"number", "title"}, "updated", false, nil, time.Time{})
+	status = model.renderStatus()
+
+	// Status should include "Last synced: never"
+	if !contains(status, "Last synced: never") {
+		t.Errorf("Status bar should contain 'Last synced: never' for zero time, got: %s", status)
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && findSubstring(s, substr))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

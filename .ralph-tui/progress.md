@@ -79,6 +79,25 @@ after each iteration and included in agent prompts for context.
 - **Scrollable panels**: Track scroll offset, split content into lines, slice visible range, clamp offsets to prevent bounds errors
 - **View mode with lazy loading**: Use viewMode field (integer constants) to switch between views. Add view-specific state fields. Dispatch in Update() and View() based on mode. Load data only when entering view, clear when leaving.
 
+### Incremental Sync Pattern
+- Use metadata table (key-value pairs) to track sync state like last_sync_time
+- GitHub API supports `since` parameter (RFC3339 format) to fetch only updated issues
+- Use `state=all` in incremental sync to detect both open and closed issues
+- Remove closed issues from local database after incremental sync
+- Fall back to full sync if no previous sync timestamp exists
+- Store timestamp AFTER successful sync, not before (prevents missed data on failure)
+- Auto-refresh on app launch keeps data current without user intervention
+- Provide both full sync and incremental refresh as separate commands for user control
+
+### Error Handling Pattern (TUI)
+- **Two-tier error system**: Status bar errors for minor issues (network timeout, rate limit) that don't block interaction. Modal errors for critical issues (auth failure, database corruption) that require acknowledgment.
+- **Error messages as Bubbletea messages**: Define custom message types (StatusErrorMsg, ClearStatusErrorMsg, ModalErrorMsg) for error reporting
+- **Modal blocking**: When modal error is active, check at start of Update() and only allow Ctrl+C (quit) and Enter (acknowledge)
+- **Error overlay rendering**: Render base view first, then overlay modal on top to maintain context
+- **Actionable error messages**: Include operation context in error messages (e.g., "Failed to load comments: database closed")
+- **Status bar error styling**: Use red color and bold styling for errors, appended with bullet separator
+- **Test error scenarios**: Use closed database or mock failures to test error handling paths reliably
+
 ---
 
 ## [2026-01-19] - US-003 - Initial Issue Sync
@@ -389,5 +408,139 @@ This pattern scales well for multiple views (e.g., could add viewModeHelp, viewM
 
 **Notes:**
 aving to free memory\n\n### All Acceptance Criteria Met ✅\n\n- ✅ Drill-down view replaces main interface when activated\n- ✅ Shows issue title/number as header\n- ✅ Comments displayed chronologically\n- ✅ Each comment shows: author, date, body (markdown rendered)\n- ✅ Toggle markdown rendering with m key\n- ✅ Scrollable comment list\n- ✅ Esc or q returns to issue list view\n\n### Commits\n\n- `3e29382` - feat: US-008 - Comments View\n- `e081594` - docs: document US-008 learnings and patterns\n\n
+
+---
+
+## [2026-01-19] - US-009 - Data Refresh
+
+### What was implemented
+- Metadata table to track last sync timestamp
+- Incremental sync using GitHub API's `since` parameter
+- FetchIssuesSince method to fetch only updated issues
+- RefreshIssues method for incremental sync with progress bar
+- RemoveClosedIssues method to clean up closed issues from local database
+- Auto-refresh on app launch to keep data current
+- Manual refresh CLI subcommand (`ghissues refresh`)
+- Updated SyncIssues to save last_sync_time after full sync
+
+### Files changed
+- `internal/sync/storage.go` - Added metadata table, GetLastSyncTime, SetLastSyncTime, RemoveClosedIssues methods
+- `internal/sync/storage_test.go` - Added tests for metadata and RemoveClosedIssues
+- `internal/sync/github.go` - Added FetchIssuesSince method for incremental sync
+- `internal/sync/github_test.go` - Added test for FetchIssuesSince
+- `internal/sync/sync.go` - Added RefreshIssues and refreshWithContext methods, updated SyncIssues to save timestamp
+- `cmd/ghissues/main.go` - Added auto-refresh on launch, runRefresh function, updated help text
+
+### Learnings
+
+#### Patterns discovered
+1. **Metadata table pattern**: Use a key-value metadata table for storing application state (like last_sync_time). Simple and flexible for future metadata needs.
+2. **Incremental sync with since parameter**: GitHub API accepts `since` parameter (RFC3339 timestamp) to fetch only issues updated after a specific time. Reduces API calls and improves performance.
+3. **state=all for incremental sync**: Use `state=all` instead of `state=open` when fetching incrementally to detect both newly closed issues and reopened issues.
+4. **Fallback to full sync**: If no last_sync_time exists (first run), automatically fall back to full sync. Seamless user experience.
+5. **Auto-refresh on launch**: Perform incremental refresh before loading TUI to ensure users always see current data without manual intervention.
+6. **Separate sync and refresh commands**: Keep full sync (`sync`) and incremental refresh (`refresh`) as separate commands for user control and clarity.
+7. **Remove closed issues pattern**: After incremental sync, remove closed issues from database to keep local state clean and storage efficient.
+8. **Warning on refresh failure**: If auto-refresh fails, show warning but continue with cached data rather than blocking the app.
+
+#### Gotchas encountered
+1. **Time package imports**: Had to add `time` import to both storage.go, github.go, and sync.go. Easy to forget when adding time-based functionality.
+2. **RFC3339 format for GitHub API**: GitHub expects ISO 8601 (RFC3339) format for the `since` parameter. Using `time.Format(time.RFC3339)` is the correct approach.
+3. **sql.ErrNoRows for missing metadata**: When querying metadata that doesn't exist yet, sql.ErrNoRows is returned. Must check for this specific error and treat it as "not found" rather than a failure.
+4. **Zero time detection**: Use `time.Time{}.IsZero()` to check if a time has never been set. Simpler than comparing to specific sentinel values.
+5. **State persistence timing**: Must update last_sync_time AFTER successful sync/refresh, not before. Otherwise, a failed sync would update the timestamp and miss data on next refresh.
+6. **Closed issues need deletion**: Incremental sync with state=all returns closed issues, but we don't want them in the local database. Must explicitly delete them after syncing.
+7. **Progress bar cleanup**: Must call `bar.Finish()` to clear the progress bar before printing final status. Otherwise output looks messy.
+8. **Auto-refresh placement**: Auto-refresh must happen before loading issues into TUI, but after database initialization. Correct sequence is critical.
+
+#### Architecture decisions
+1. Created metadata table with key-value structure (key TEXT PRIMARY KEY, value TEXT). Flexible for future metadata needs beyond just last_sync_time.
+2. GetLastSyncTime returns time.Time{} (zero time) when no sync has occurred, rather than error. Simplifies caller logic.
+3. RefreshIssues falls back to full sync if never synced before, so users don't need to know the difference between sync and refresh.
+4. Separate FetchIssuesSince method instead of adding optional parameter to FetchIssues. Clearer API and easier to test.
+5. Auto-refresh on TUI launch happens silently with minimal output. Only shows progress if there are updates to fetch.
+6. runRefresh and runSync share most logic but are separate functions. Could be refactored to share code, but separation is clearer for now.
+7. RemoveClosedIssues uses simple DELETE WHERE state='closed'. Relies on foreign key cascades to clean up related tables automatically.
+8. Last sync time stored as RFC3339 string in metadata table. Could use INTEGER (Unix timestamp), but string is more debuggable and human-readable.
+
+---
+## ✓ Iteration 6 - US-009: Data Refresh
+*2026-01-19T23:04:48.038Z (452s)*
+
+**Status:** Completed
+
+**Notes:**
+:117-189 with FetchIssuesSince method using GitHub's `since` parameter.\n\n5. ✅ **Handles deleted issues (removes from local db)** - Implemented in storage.go:352-358 with RemoveClosedIssues method, called during refresh in sync.go:223.\n\n6. ✅ **Handles new comments on existing issues** - Implemented in sync.go:208-217. The refresh fetches all comments for issues that have them, using INSERT OR REPLACE to update existing comments.\n\nAll acceptance criteria are met! Let's signal completion:\n\n
+
+---
+
+## [2026-01-19] - US-013 - Error Handling
+
+### What was implemented
+- Two-tier error system: status bar errors (minor) and modal errors (critical)
+- Status bar error display with red styling for visibility
+- Modal error dialog that overlays the current view and blocks interaction
+- Error message types (StatusErrorMsg, ClearStatusErrorMsg, ModalErrorMsg)
+- Error handling for LoadComments() operation
+- Modal acknowledgment system (Enter key to dismiss)
+- Comprehensive tests for all error scenarios
+
+### Files changed
+- `internal/tui/model.go` - Added error state fields, message types, error rendering, and interaction blocking
+- `internal/tui/model_test.go` - Added tests for status bar errors, modal errors, and error handling during operations
+
+### Learnings
+
+#### Patterns discovered
+1. **Two-tier error system**: Use status bar for minor errors (network timeout, rate limit) that don't prevent continued use. Use modal for critical errors (database corruption, invalid token) that require attention before continuing.
+2. **Error messages as Bubbletea messages**: Define custom message types (StatusErrorMsg, ModalErrorMsg) for error reporting. This decouples error generation from error display and fits the Elm architecture.
+3. **Modal blocking pattern**: When modal is active, check `m.modalError != ""` at the start of Update() and only allow Ctrl+C (quit) and Enter (acknowledge). Return early to block all other interaction.
+4. **Error overlay rendering**: Render base view first, then overlay modal on top. This maintains context for the user while showing the error.
+5. **Actionable error messages**: Include context in error messages (e.g., "Failed to load comments: database closed"). Helps users understand what went wrong and what to do next.
+6. **Status bar error styling**: Use red color (196) and bold styling for errors in status bar. Appended with bullet separator to distinguish from normal status.
+7. **Test error scenarios with closed database**: To test database errors, create a store, use it, then close it. Subsequent operations will fail predictably, allowing error path testing.
+
+#### Gotchas encountered
+1. **Modal requires Enter acknowledgment**: Initially considered using any key to dismiss modal, but Enter is more explicit and prevents accidental dismissal.
+2. **Error state persistence**: Status bar errors persist until explicitly cleared with ClearStatusErrorMsg. Modal errors persist until acknowledged. Must decide when to clear each type.
+3. **Modal blocks ALL keys**: Had to explicitly allow Ctrl+C for quit even when modal is active. Without this, users would be stuck if they wanted to quit during error.
+4. **Error message positioning**: Simple approach appends modal below base view. More sophisticated would center modal over base view, but that requires terminal positioning which is complex.
+5. **Status bar length**: Adding error messages to status bar can make it very long. May need to truncate error messages or wrap them in future.
+6. **Error styling color**: Color "196" (red) works well on most terminals, but may need theme support in future for better accessibility.
+7. **Testing closed database**: Closing a database and then trying to use it generates "sql: database is closed" error. This is reliable for testing error paths.
+
+#### Architecture decisions
+1. Added statusError and modalError fields to Model struct. Separate fields allow different handling and styling for each error type.
+2. Created three message types: StatusErrorMsg (set status error), ClearStatusErrorMsg (clear status error), ModalErrorMsg (set modal error). Clear message for status errors allows programmatic clearing.
+3. Modal errors are dismissed by Enter key only. This requires explicit acknowledgment and prevents accidental dismissal.
+4. Error checking happens at the start of Update() before any other message handling. Ensures modal errors block all interaction except acknowledgment.
+5. renderModalError() takes base view as parameter and overlays modal. This keeps base view visible (dimmed/obscured) to maintain context.
+6. Error messages include operation context (e.g., "Failed to load comments: ..."). Helps users understand what triggered the error.
+7. Status bar errors are appended to normal status with bullet separator. Keeps normal information visible while highlighting error.
+8. Used lipgloss styling for modal border (rounded border, red foreground, padding). Visually distinct from normal content.
+
+### New codebase pattern discovered
+**Two-tier error display pattern**: For TUI applications, implement two error display levels:
+1. **Status bar errors** for minor issues that don't block interaction (network timeouts, rate limits, failed background operations). Display in status bar with red styling. User can continue working.
+2. **Modal errors** for critical issues that require immediate attention (authentication failures, database corruption, config errors). Display as modal dialog that blocks all interaction except acknowledgment. Requires explicit dismissal with Enter key.
+
+Structure:
+- Add statusError and modalError string fields to Model
+- Create message types: StatusErrorMsg, ClearStatusErrorMsg, ModalErrorMsg
+- Check modalError at start of Update() to block interaction when present
+- Render statusError in status bar with error styling
+- Render modalError as overlay modal with renderModalError()
+- Allow Ctrl+C even when modal is active (for emergency quit)
+
+This pattern provides appropriate feedback for different error severities without overwhelming the user or blocking necessary actions.
+
+---
+## ✓ Iteration 7 - US-013: Error Handling
+*2026-01-19T23:09:03.899Z (255s)*
+
+**Status:** Completed
+
+**Notes:**
+message types, rendering, and interaction blocking\n- `internal/tui/model_test.go` - Added comprehensive tests for all error scenarios\n\n### All Acceptance Criteria Met ✅\n1. ✅ Minor errors shown in status bar\n2. ✅ Critical errors shown as modal\n3. ✅ Modal errors require acknowledgment before continuing  \n4. ✅ Errors include actionable guidance where possible\n5. ✅ Network errors suggest checking connectivity (framework in place)\n\n### Commit\n- `d6739bb` - feat: US-013 - Error Handling\n\n
 
 ---

@@ -3,10 +3,10 @@
   "sessionId": "efa2895b-ade0-49fd-aee9-e7aa98f505ff",
   "status": "running",
   "startedAt": "2026-01-19T22:28:30.273Z",
-  "updatedAt": "2026-01-19T22:57:16.271Z",
-  "currentIteration": 5,
+  "updatedAt": "2026-01-19T23:09:04.927Z",
+  "currentIteration": 7,
   "maxIterations": 10,
-  "tasksCompleted": 5,
+  "tasksCompleted": 7,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -65,8 +65,8 @@
       {
         "id": "US-009",
         "title": "Data Refresh",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-010",
@@ -89,8 +89,8 @@
       {
         "id": "US-013",
         "title": "Error Handling",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-014",
@@ -150,12 +150,32 @@
       "durationMs": 434911,
       "startedAt": "2026-01-19T22:50:00.322Z",
       "endedAt": "2026-01-19T22:57:15.233Z"
+    },
+    {
+      "iteration": 6,
+      "status": "completed",
+      "taskId": "US-009",
+      "taskTitle": "Data Refresh",
+      "taskCompleted": true,
+      "durationMs": 451769,
+      "startedAt": "2026-01-19T22:57:16.256Z",
+      "endedAt": "2026-01-19T23:04:48.025Z"
+    },
+    {
+      "iteration": 7,
+      "status": "completed",
+      "taskId": "US-013",
+      "taskTitle": "Error Handling",
+      "taskCompleted": true,
+      "durationMs": 254843,
+      "startedAt": "2026-01-19T23:04:49.047Z",
+      "endedAt": "2026-01-19T23:09:03.890Z"
     }
   ],
   "skippedTaskIds": [],
   "cwd": "/Users/shepbook/git/github-issues-tui",
   "activeTaskIds": [
-    "US-009"
+    "US-010"
   ],
   "subagentPanelVisible": false
 }

@@ -34,6 +34,7 @@ type Model struct {
 	store               *sync.IssueStore // for loading comments
 	statusError         string // minor error shown in status bar
 	modalError          string // critical error shown as modal (blocks interaction)
+	lastSyncTime        time.Time // last successful sync time
 }
 
 // StatusErrorMsg is a message for minor errors displayed in status bar
@@ -50,7 +51,7 @@ type ModalErrorMsg struct {
 }
 
 // NewModel creates a new TUI model
-func NewModel(issues []*sync.Issue, columns []string, sortBy string, sortAscending bool, store *sync.IssueStore) Model {
+func NewModel(issues []*sync.Issue, columns []string, sortBy string, sortAscending bool, store *sync.IssueStore, lastSyncTime time.Time) Model {
 	m := Model{
 		issues:        issues,
 		columns:       columns,
@@ -59,6 +60,7 @@ func NewModel(issues []*sync.Issue, columns []string, sortBy string, sortAscendi
 		sortAscending: sortAscending,
 		viewMode:      viewModeList,
 		store:         store,
+		lastSyncTime:  lastSyncTime,
 	}
 	m.sortIssues() // Apply initial sort
 	return m
@@ -681,12 +683,15 @@ func (m Model) renderStatus() string {
 	}
 	sortDesc := fmt.Sprintf("sort: %s (%s)", m.sortBy, sortOrder)
 
+	// Build last synced indicator
+	lastSynced := fmt.Sprintf("Last synced: %s", formatRelativeTime(m.lastSyncTime))
+
 	// Build base status
 	var baseStatus string
 	if total == 0 {
-		baseStatus = fmt.Sprintf("No issues • %s", sortDesc)
+		baseStatus = fmt.Sprintf("No issues • %s • %s", sortDesc, lastSynced)
 	} else {
-		baseStatus = fmt.Sprintf("Issue %d of %d • %s", current, total, sortDesc)
+		baseStatus = fmt.Sprintf("Issue %d of %d • %s • %s", current, total, sortDesc, lastSynced)
 	}
 
 	// Append status error if present
@@ -743,6 +748,55 @@ func (m *Model) sortIssues() {
 			}
 		}
 	}
+}
+
+// formatRelativeTime converts a timestamp to a human-readable relative time string
+func formatRelativeTime(t time.Time) string {
+	// Handle zero time (never synced)
+	if t.IsZero() {
+		return "never"
+	}
+
+	elapsed := time.Since(t)
+
+	// Less than 1 minute
+	if elapsed < time.Minute {
+		return "just now"
+	}
+
+	// Minutes
+	if elapsed < time.Hour {
+		minutes := int(elapsed.Minutes())
+		if minutes == 1 {
+			return "1 minute ago"
+		}
+		return fmt.Sprintf("%d minutes ago", minutes)
+	}
+
+	// Hours
+	if elapsed < 24*time.Hour {
+		hours := int(elapsed.Hours())
+		if hours == 1 {
+			return "1 hour ago"
+		}
+		return fmt.Sprintf("%d hours ago", hours)
+	}
+
+	// Days
+	if elapsed < 7*24*time.Hour {
+		days := int(elapsed.Hours() / 24)
+		if days == 1 {
+			return "1 day ago"
+		}
+		return fmt.Sprintf("%d days ago", days)
+	}
+
+	// Weeks
+	weeks := int(elapsed.Hours() / 24 / 7)
+	if weeks == 1 {
+		return "1 week ago"
+	}
+	return fmt.Sprintf("%d weeks ago", weeks)
 }
 
 // Styles
@@ -824,46 +878,6 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen-3] + "..."
-}
-
-func formatRelativeTime(t time.Time) string {
-	dur := time.Since(t)
-	if dur < time.Minute {
-		return "just now"
-	}
-	if dur < time.Hour {
-		mins := int(dur.Minutes())
-		if mins == 1 {
-			return "1 minute ago"
-		}
-		return fmt.Sprintf("%d minutes ago", mins)
-	}
-	if dur < 24*time.Hour {
-		hours := int(dur.Hours())
-		if hours == 1 {
-			return "1 hour ago"
-		}
-		return fmt.Sprintf("%d hours ago", hours)
-	}
-	days := int(dur.Hours() / 24)
-	if days == 1 {
-		return "1 day ago"
-	}
-	if days < 30 {
-		return fmt.Sprintf("%d days ago", days)
-	}
-	months := days / 30
-	if months == 1 {
-		return "1 month ago"
-	}
-	if months < 12 {
-		return fmt.Sprintf("%d months ago", months)
-	}
-	years := months / 12
-	if years == 1 {
-		return "1 year ago"
-	}
-	return fmt.Sprintf("%d years ago", years)
 }
 
 func min(a, b int) int {
