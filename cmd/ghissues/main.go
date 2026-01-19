@@ -6,6 +6,7 @@ import (
 
 	"github.com/shepbook/github-issues-tui/internal/auth"
 	"github.com/shepbook/github-issues-tui/internal/config"
+	"github.com/shepbook/github-issues-tui/internal/database"
 	"github.com/shepbook/github-issues-tui/internal/prompt"
 )
 
@@ -23,9 +24,28 @@ func run() error {
 		return fmt.Errorf("failed to determine config path")
 	}
 
-	// Check command line arguments
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
+	// Parse command line arguments
+	var dbPath string
+	args := os.Args[1:]
+
+	// Parse flags
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		// Handle --db flag
+		if arg == "--db" {
+			if i+1 >= len(args) {
+				return fmt.Errorf("--db flag requires a path argument")
+			}
+			dbPath = args[i+1]
+			// Remove --db and its value from args
+			args = append(args[:i], args[i+2:]...)
+			i-- // Adjust index after removal
+			continue
+		}
+
+		// Handle other flags and commands
+		switch arg {
 		case "config":
 			// Force re-run setup
 			return runSetup(configPath, true)
@@ -36,7 +56,7 @@ func run() error {
 			fmt.Println("ghissues v0.1.0")
 			return nil
 		default:
-			return fmt.Errorf("unknown command: %s\n\nRun 'ghissues --help' for usage", os.Args[1])
+			return fmt.Errorf("unknown command: %s\n\nRun 'ghissues --help' for usage", arg)
 		}
 	}
 
@@ -73,11 +93,23 @@ func run() error {
 		return fmt.Errorf("token validation failed: %w", err)
 	}
 
+	// Get database path (flag takes precedence over config)
+	resolvedDBPath, err := database.GetDatabasePath(cfg, dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve database path: %w", err)
+	}
+
+	// Initialize database
+	if err := database.InitDatabase(resolvedDBPath); err != nil {
+		return fmt.Errorf("failed to initialize database: %w", err)
+	}
+
 	// TODO: Launch TUI (to be implemented in later user stories)
 	fmt.Printf("Configuration loaded successfully!\n")
 	fmt.Printf("Repository: %s\n", cfg.GitHub.Repository)
 	fmt.Printf("Auth method: %s\n", cfg.GitHub.AuthMethod)
 	fmt.Println("Authentication: ✓")
+	fmt.Printf("Database: %s\n", resolvedDBPath)
 	fmt.Println("\nTUI not yet implemented. Stay tuned!")
 
 	return nil
@@ -115,13 +147,19 @@ func printHelp() {
 	fmt.Println("ghissues - GitHub Issues TUI")
 	fmt.Println()
 	fmt.Println("USAGE:")
-	fmt.Println("  ghissues           Start the TUI (runs setup if needed)")
-	fmt.Println("  ghissues config    Run/re-run interactive configuration")
-	fmt.Println("  ghissues --help    Show this help message")
-	fmt.Println("  ghissues --version Show version information")
+	fmt.Println("  ghissues                Start the TUI (runs setup if needed)")
+	fmt.Println("  ghissues --db PATH      Specify database file location")
+	fmt.Println("  ghissues config         Run/re-run interactive configuration")
+	fmt.Println("  ghissues --help         Show this help message")
+	fmt.Println("  ghissues --version      Show version information")
 	fmt.Println()
 	fmt.Println("CONFIGURATION:")
 	fmt.Printf("  Config file: ~/.config/ghissues/config.toml\n")
+	fmt.Println()
+	fmt.Println("DATABASE:")
+	fmt.Println("  Default location: .ghissues.db (in current directory)")
+	fmt.Println("  Override via: --db flag or database.path in config file")
+	fmt.Println("  Flag takes precedence over config file")
 	fmt.Println()
 	fmt.Println("AUTHENTICATION METHODS:")
 	fmt.Println("  env    - Use GITHUB_TOKEN environment variable")
