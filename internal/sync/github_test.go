@@ -2,7 +2,6 @@ package sync
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -267,14 +266,4 @@ func TestContextCancellation(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error from cancelled context, got nil")
 	}
-}
-
-// Helper to compare times ignoring nanoseconds
-func timesEqual(t1, t2 time.Time) bool {
-	return t1.Unix() == t2.Unix()
-}
-
-// Helper to parse JSON for testing
-func parseJSON(data string, v interface{}) error {
-	return json.Unmarshal([]byte(data), v)
 }
