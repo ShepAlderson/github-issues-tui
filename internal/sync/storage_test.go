@@ -474,3 +474,147 @@ func TestLoadIssues_Empty(t *testing.T) {
 		t.Errorf("LoadIssues() returned %d issues, want 0", len(issues))
 	}
 }
+
+func TestLoadComments(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	store, err := NewIssueStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewIssueStore() error = %v", err)
+	}
+	defer store.Close()
+
+	// Store test issue
+	issue := &Issue{
+		Number:    42,
+		Title:     "Test Issue",
+		State:     "open",
+		Author:    "user1",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	if err := store.StoreIssue(issue); err != nil {
+		t.Fatalf("StoreIssue() error = %v", err)
+	}
+
+	// Store test comments with different timestamps
+	now := time.Now()
+	comments := []*Comment{
+		{
+			ID:          1,
+			IssueNumber: 42,
+			Body:        "First comment",
+			Author:      "user1",
+			CreatedAt:   now.Add(-2 * time.Hour),
+			UpdatedAt:   now.Add(-2 * time.Hour),
+		},
+		{
+			ID:          2,
+			IssueNumber: 42,
+			Body:        "Second comment",
+			Author:      "user2",
+			CreatedAt:   now.Add(-1 * time.Hour),
+			UpdatedAt:   now.Add(-1 * time.Hour),
+		},
+		{
+			ID:          3,
+			IssueNumber: 42,
+			Body:        "Third comment",
+			Author:      "user1",
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		},
+	}
+
+	for _, comment := range comments {
+		if err := store.StoreComment(comment); err != nil {
+			t.Fatalf("StoreComment() error = %v", err)
+		}
+	}
+
+	// Load comments for the issue
+	loaded, err := store.LoadComments(42)
+	if err != nil {
+		t.Fatalf("LoadComments() error = %v", err)
+	}
+
+	if len(loaded) != 3 {
+		t.Errorf("LoadComments() returned %d comments, want 3", len(loaded))
+	}
+
+	// Verify comments are sorted by created_at ASC (chronological order)
+	if loaded[0].ID != 1 {
+		t.Errorf("First comment ID = %d, want 1 (oldest)", loaded[0].ID)
+	}
+	if loaded[1].ID != 2 {
+		t.Errorf("Second comment ID = %d, want 2", loaded[1].ID)
+	}
+	if loaded[2].ID != 3 {
+		t.Errorf("Third comment ID = %d, want 3 (newest)", loaded[2].ID)
+	}
+
+	// Verify comment data
+	if loaded[0].Body != "First comment" {
+		t.Errorf("First comment body = %s, want 'First comment'", loaded[0].Body)
+	}
+	if loaded[1].Author != "user2" {
+		t.Errorf("Second comment author = %s, want 'user2'", loaded[1].Author)
+	}
+}
+
+func TestLoadComments_NoComments(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	store, err := NewIssueStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewIssueStore() error = %v", err)
+	}
+	defer store.Close()
+
+	// Store issue without comments
+	issue := &Issue{
+		Number:    1,
+		Title:     "Test",
+		State:     "open",
+		Author:    "user1",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	if err := store.StoreIssue(issue); err != nil {
+		t.Fatalf("StoreIssue() error = %v", err)
+	}
+
+	// Load comments for issue with no comments
+	comments, err := store.LoadComments(1)
+	if err != nil {
+		t.Fatalf("LoadComments() error = %v", err)
+	}
+
+	if len(comments) != 0 {
+		t.Errorf("LoadComments() returned %d comments, want 0", len(comments))
+	}
+}
+
+func TestLoadComments_NonexistentIssue(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	store, err := NewIssueStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewIssueStore() error = %v", err)
+	}
+	defer store.Close()
+
+	// Load comments for issue that doesn't exist
+	comments, err := store.LoadComments(999)
+	if err != nil {
+		t.Fatalf("LoadComments() error = %v", err)
+	}
+
+	// Should return empty slice, not error
+	if len(comments) != 0 {
+		t.Errorf("LoadComments() returned %d comments, want 0", len(comments))
+	}
+}

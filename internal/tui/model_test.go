@@ -16,7 +16,7 @@ func TestModel_Navigation(t *testing.T) {
 		{Number: 3, Title: "Third", State: "open", Author: "user3", CreatedAt: time.Now(), UpdatedAt: time.Now()},
 	}
 
-	model := NewModel(issues, []string{"number", "title", "author"}, "updated", false)
+	model := NewModel(issues, []string{"number", "title", "author"}, "updated", false, nil)
 
 	// Test initial state
 	if model.cursor != 0 {
@@ -72,7 +72,7 @@ func TestModel_ArrowKeyNavigation(t *testing.T) {
 		{Number: 2, Title: "Second", State: "open", Author: "user2", CreatedAt: time.Now(), UpdatedAt: time.Now()},
 	}
 
-	model := NewModel(issues, []string{"number", "title"}, "updated", false)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
 
 	// Test down arrow
 	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyDown})
@@ -94,7 +94,7 @@ func TestModel_Quit(t *testing.T) {
 		{Number: 1, Title: "Test", State: "open", Author: "user1", CreatedAt: time.Now(), UpdatedAt: time.Now()},
 	}
 
-	model := NewModel(issues, []string{"number", "title"}, "updated", false)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
 
 	// Test 'q' quits
 	_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -111,7 +111,7 @@ func TestModel_Quit(t *testing.T) {
 
 func TestModel_EmptyIssues(t *testing.T) {
 	// Test with no issues
-	model := NewModel([]*sync.Issue{}, []string{"number", "title"}, "updated", false)
+	model := NewModel([]*sync.Issue{}, []string{"number", "title"}, "updated", false, nil)
 
 	if model.cursor != 0 {
 		t.Errorf("Empty model cursor = %d, want 0", model.cursor)
@@ -132,7 +132,7 @@ func TestModel_SelectedIssue(t *testing.T) {
 		{Number: 2, Title: "Second", State: "open", Author: "user2", CreatedAt: now.Add(-1 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
 	}
 
-	model := NewModel(issues, []string{"number", "title"}, "updated", false)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
 
 	// Get initially selected issue (should be #2 since it's most recently updated)
 	selected := model.SelectedIssue()
@@ -156,7 +156,7 @@ func TestModel_SelectedIssue(t *testing.T) {
 }
 
 func TestModel_SelectedIssue_Empty(t *testing.T) {
-	model := NewModel([]*sync.Issue{}, []string{"number", "title"}, "updated", false)
+	model := NewModel([]*sync.Issue{}, []string{"number", "title"}, "updated", false, nil)
 
 	selected := model.SelectedIssue()
 	if selected != nil {
@@ -169,7 +169,7 @@ func TestModel_SortKeyCycling(t *testing.T) {
 		{Number: 1, Title: "First", State: "open", Author: "user1", CreatedAt: time.Now(), UpdatedAt: time.Now()},
 	}
 
-	model := NewModel(issues, []string{"number", "title"}, "updated", false)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
 
 	// Initial sort should be "updated"
 	if model.sortBy != "updated" {
@@ -213,7 +213,7 @@ func TestModel_SortOrderReversal(t *testing.T) {
 		{Number: 1, Title: "First", State: "open", Author: "user1", CreatedAt: time.Now(), UpdatedAt: time.Now()},
 	}
 
-	model := NewModel(issues, []string{"number", "title"}, "updated", false)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
 
 	// Initial should be descending (false)
 	if model.sortAscending {
@@ -302,7 +302,7 @@ func TestModel_IssueSorting(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create model and set sort parameters
-			model := NewModel(issues, []string{"number", "title"}, "updated", false)
+			model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
 			model.sortBy = tt.sortBy
 			model.sortAscending = tt.sortAscending
 
@@ -337,7 +337,7 @@ func TestModel_DetailPanelWithDimensions(t *testing.T) {
 		},
 	}
 
-	model := NewModel(issues, []string{"number", "title"}, "updated", false)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
 
 	// Set window size
 	updatedModel, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
@@ -371,7 +371,7 @@ func TestModel_MarkdownToggle(t *testing.T) {
 		},
 	}
 
-	model := NewModel(issues, []string{"number", "title"}, "updated", false)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
 
 	// Initial state should be rendered markdown (showRawMarkdown = false)
 	if model.showRawMarkdown {
@@ -412,7 +412,7 @@ func TestModel_DetailPanelScrolling(t *testing.T) {
 		},
 	}
 
-	model := NewModel(issues, []string{"number", "title"}, "updated", false)
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
 	model.width = 120
 	model.height = 30
 
@@ -444,5 +444,205 @@ func TestModel_DetailPanelScrolling(t *testing.T) {
 	}
 	if m.detailScrollOffset < 0 {
 		t.Errorf("After multiple PageUp, detailScrollOffset = %d, want >= 0", m.detailScrollOffset)
+	}
+}
+
+func TestModel_CommentsViewNavigation(t *testing.T) {
+	// Create temporary database with test data
+	tmpDir := t.TempDir()
+	dbPath := tmpDir + "/test.db"
+
+	store, err := sync.NewIssueStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewIssueStore() error = %v", err)
+	}
+	defer store.Close()
+
+	// Store test issue
+	issue := &sync.Issue{
+		Number:    1,
+		Title:     "Test Issue",
+		State:     "open",
+		Author:    "user1",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	if err := store.StoreIssue(issue); err != nil {
+		t.Fatalf("StoreIssue() error = %v", err)
+	}
+
+	// Store test comments
+	comments := []*sync.Comment{
+		{ID: 1, IssueNumber: 1, Body: "First comment", Author: "user1", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+		{ID: 2, IssueNumber: 1, Body: "Second comment", Author: "user2", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+	}
+	for _, comment := range comments {
+		if err := store.StoreComment(comment); err != nil {
+			t.Fatalf("StoreComment() error = %v", err)
+		}
+	}
+
+	// Create model with store
+	issues := []*sync.Issue{issue}
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, store)
+
+	// Initial view mode should be list
+	if model.viewMode != viewModeList {
+		t.Errorf("Initial viewMode = %d, want %d (viewModeList)", model.viewMode, viewModeList)
+	}
+
+	// Press Enter to switch to comments view
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := updatedModel.(Model)
+	if m.viewMode != viewModeComments {
+		t.Errorf("After Enter, viewMode = %d, want %d (viewModeComments)", m.viewMode, viewModeComments)
+	}
+	if m.commentsScrollOffset != 0 {
+		t.Errorf("After entering comments view, commentsScrollOffset = %d, want 0", m.commentsScrollOffset)
+	}
+	if len(m.currentComments) != 2 {
+		t.Errorf("After entering comments view, len(currentComments) = %d, want 2", len(m.currentComments))
+	}
+
+	// Press Esc to return to list view
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updatedModel.(Model)
+	if m.viewMode != viewModeList {
+		t.Errorf("After Esc, viewMode = %d, want %d (viewModeList)", m.viewMode, viewModeList)
+	}
+
+	// Enter comments view again
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updatedModel.(Model)
+
+	// Press 'q' to return to list view
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	m = updatedModel.(Model)
+	if m.viewMode != viewModeList {
+		t.Errorf("After 'q' in comments view, viewMode = %d, want %d (viewModeList)", m.viewMode, viewModeList)
+	}
+}
+
+func TestModel_CommentsViewScrolling(t *testing.T) {
+	// Create temporary database with test data
+	tmpDir := t.TempDir()
+	dbPath := tmpDir + "/test.db"
+
+	store, err := sync.NewIssueStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewIssueStore() error = %v", err)
+	}
+	defer store.Close()
+
+	// Store test issue
+	issue := &sync.Issue{
+		Number:    1,
+		Title:     "Test Issue",
+		State:     "open",
+		Author:    "user1",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	if err := store.StoreIssue(issue); err != nil {
+		t.Fatalf("StoreIssue() error = %v", err)
+	}
+
+	// Store test comment
+	comment := &sync.Comment{
+		ID:          1,
+		IssueNumber: 1,
+		Body:        "Test comment",
+		Author:      "user1",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	if err := store.StoreComment(comment); err != nil {
+		t.Fatalf("StoreComment() error = %v", err)
+	}
+
+	// Create model with store
+	issues := []*sync.Issue{issue}
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, store)
+	model.width = 120
+	model.height = 30
+
+	// Enter comments view
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := updatedModel.(Model)
+
+	// Initial scroll offset should be 0
+	if m.commentsScrollOffset != 0 {
+		t.Errorf("Initial commentsScrollOffset = %d, want 0", m.commentsScrollOffset)
+	}
+
+	// Press PageDown to scroll down
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	m = updatedModel.(Model)
+	if m.commentsScrollOffset <= 0 {
+		t.Errorf("After PageDown, commentsScrollOffset = %d, want > 0", m.commentsScrollOffset)
+	}
+
+	scrollAfterPageDown := m.commentsScrollOffset
+
+	// Press PageUp to scroll back up
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	m = updatedModel.(Model)
+	if m.commentsScrollOffset >= scrollAfterPageDown {
+		t.Errorf("After PageUp, commentsScrollOffset = %d, want < %d", m.commentsScrollOffset, scrollAfterPageDown)
+	}
+
+	// Scroll offset should not go below 0
+	for i := 0; i < 10; i++ {
+		updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+		m = updatedModel.(Model)
+	}
+	if m.commentsScrollOffset < 0 {
+		t.Errorf("After multiple PageUp, commentsScrollOffset = %d, want >= 0", m.commentsScrollOffset)
+	}
+}
+
+func TestModel_CommentsViewMarkdownToggle(t *testing.T) {
+	// Test markdown toggle in comments view
+	issues := []*sync.Issue{
+		{Number: 1, Title: "Test", State: "open", Author: "user1", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+	}
+
+	model := NewModel(issues, []string{"number", "title"}, "updated", false, nil)
+
+	// Enter comments view
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := updatedModel.(Model)
+
+	// Initial state should be rendered markdown
+	if m.showRawMarkdown {
+		t.Errorf("Initial showRawMarkdown = %v, want false", m.showRawMarkdown)
+	}
+
+	// Press 'm' to toggle to raw
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	m = updatedModel.(Model)
+	if !m.showRawMarkdown {
+		t.Errorf("After 'm' in comments view, showRawMarkdown = %v, want true", m.showRawMarkdown)
+	}
+
+	// Press 'm' again to toggle back
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	m = updatedModel.(Model)
+	if m.showRawMarkdown {
+		t.Errorf("After second 'm' in comments view, showRawMarkdown = %v, want false", m.showRawMarkdown)
+	}
+}
+
+func TestModel_CommentsViewWithEmptyIssueList(t *testing.T) {
+	// Test that Enter doesn't crash with empty issue list
+	model := NewModel([]*sync.Issue{}, []string{"number", "title"}, "updated", false, nil)
+
+	// Try to enter comments view
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := updatedModel.(Model)
+
+	// Should remain in list view
+	if m.viewMode != viewModeList {
+		t.Errorf("After Enter with empty issues, viewMode = %d, want %d (viewModeList)", m.viewMode, viewModeList)
 	}
 }

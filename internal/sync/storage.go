@@ -262,3 +262,43 @@ func (s *IssueStore) LoadIssues() ([]*Issue, error) {
 
 	return issues, nil
 }
+
+// LoadComments loads all comments for a specific issue, sorted by created_at ASC (chronological order)
+func (s *IssueStore) LoadComments(issueNumber int) ([]*Comment, error) {
+	query := `
+		SELECT id, issue_number, body, author, created_at, updated_at
+		FROM comments
+		WHERE issue_number = ?
+		ORDER BY created_at ASC
+	`
+
+	rows, err := s.db.Query(query, issueNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query comments: %w", err)
+	}
+	defer rows.Close()
+
+	var comments []*Comment
+	for rows.Next() {
+		comment := &Comment{}
+		err := rows.Scan(
+			&comment.ID,
+			&comment.IssueNumber,
+			&comment.Body,
+			&comment.Author,
+			&comment.CreatedAt,
+			&comment.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan comment: %w", err)
+		}
+
+		comments = append(comments, comment)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating comments: %w", err)
+	}
+
+	return comments, nil
+}

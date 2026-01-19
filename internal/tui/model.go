@@ -11,27 +11,39 @@ import (
 	"github.com/shepbook/github-issues-tui/internal/sync"
 )
 
+// View mode constants
+const (
+	viewModeList = iota
+	viewModeComments
+)
+
 // Model represents the TUI state
 type Model struct {
-	issues            []*sync.Issue
-	columns           []string
-	cursor            int
-	width             int
-	height            int
-	sortBy            string // "updated", "created", "number", "comments"
-	sortAscending     bool   // true for ascending, false for descending
-	showRawMarkdown   bool   // true to show raw markdown, false for rendered
-	detailScrollOffset int    // scroll offset for detail panel
+	issues              []*sync.Issue
+	columns             []string
+	cursor              int
+	width               int
+	height              int
+	sortBy              string // "updated", "created", "number", "comments"
+	sortAscending       bool   // true for ascending, false for descending
+	showRawMarkdown     bool   // true to show raw markdown, false for rendered
+	detailScrollOffset  int    // scroll offset for detail panel
+	viewMode            int    // viewModeList or viewModeComments
+	commentsScrollOffset int    // scroll offset for comments view
+	currentComments     []*sync.Comment // cached comments for current issue
+	store               *sync.IssueStore // for loading comments
 }
 
 // NewModel creates a new TUI model
-func NewModel(issues []*sync.Issue, columns []string, sortBy string, sortAscending bool) Model {
+func NewModel(issues []*sync.Issue, columns []string, sortBy string, sortAscending bool, store *sync.IssueStore) Model {
 	m := Model{
 		issues:        issues,
 		columns:       columns,
 		cursor:        0,
 		sortBy:        sortBy,
 		sortAscending: sortAscending,
+		viewMode:      viewModeList,
+		store:         store,
 	}
 	m.sortIssues() // Apply initial sort
 	return m
@@ -51,9 +63,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		// Handle view-specific keys
+		if m.viewMode == viewModeComments {
+			return m.handleCommentsViewKeys(msg)
+		}
+
+		// List view keys
 		switch msg.Type {
 		case tea.KeyCtrlC:
 			return m, tea.Quit
+
+		case tea.KeyEnter:
+			// Enter comments view for selected issue
+			if len(m.issues) > 0 && m.store != nil {
+				selected := m.SelectedIssue()
+				if selected != nil {
+					// Load comments for the selected issue
+					comments, err := m.store.LoadComments(selected.Number)
+					if err == nil {
+						m.currentComments = comments
+						m.viewMode = viewModeComments
+						m.commentsScrollOffset = 0
+					}
+				}
+			}
+			return m, nil
 
 		case tea.KeyRunes:
 			switch string(msg.Runes) {
@@ -122,8 +156,52 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleCommentsViewKeys handles key presses in comments view
+func (m Model) handleCommentsViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyCtrlC:
+		return m, tea.Quit
+
+	case tea.KeyEsc:
+		// Return to list view
+		m.viewMode = viewModeList
+		m.currentComments = nil
+		return m, nil
+
+	case tea.KeyRunes:
+		switch string(msg.Runes) {
+		case "q":
+			// Return to list view (not quit in comments view)
+			m.viewMode = viewModeList
+			m.currentComments = nil
+		case "m":
+			// Toggle markdown rendering
+			m.showRawMarkdown = !m.showRawMarkdown
+		}
+
+	case tea.KeyPgDown:
+		// Scroll down
+		m.commentsScrollOffset += 10
+
+	case tea.KeyPgUp:
+		// Scroll up
+		m.commentsScrollOffset -= 10
+		if m.commentsScrollOffset < 0 {
+			m.commentsScrollOffset = 0
+		}
+	}
+
+	return m, nil
+}
+
 // View renders the TUI
 func (m Model) View() string {
+	// Handle comments view
+	if m.viewMode == viewModeComments {
+		return m.renderCommentsView()
+	}
+
+	// List view
 	if len(m.issues) == 0 {
 		return noIssuesStyle.Render("No issues found. Run 'ghissues sync' to fetch issues.")
 	}
@@ -222,7 +300,107 @@ func (m Model) renderSplitPane() string {
 
 	// Footer
 	b.WriteString("\n")
-	b.WriteString(footerStyle.Render("j/k, ↑/↓: navigate • PgUp/PgDn: scroll • m: toggle markdown • s: sort • S: reverse • q: quit"))
+	b.WriteString(footerStyle.Render("j/k, ↑/↓: navigate • Enter: comments • PgUp/PgDn: scroll • m: markdown • s: sort • S: reverse • q: quit"))
+
+	return b.String()
+}
+
+// renderCommentsView renders the full-screen comments view
+func (m Model) renderCommentsView() string {
+	selected := m.SelectedIssue()
+	if selected == nil {
+		return noIssuesStyle.Render("No issue selected")
+	}
+
+	var b strings.Builder
+
+	// Header with issue info
+	b.WriteString(commentsHeaderStyle.Render(fmt.Sprintf("#%d - %s", selected.Number, selected.Title)))
+	b.WriteString("\n")
+	b.WriteString(commentsMetaStyle.Render(fmt.Sprintf("State: %s | Author: %s | Comments: %d", selected.State, selected.Author, len(m.currentComments))))
+	b.WriteString("\n\n")
+
+	// Render comments
+	if len(m.currentComments) == 0 {
+		b.WriteString(commentsMetaStyle.Render("No comments on this issue"))
+		b.WriteString("\n\n")
+	} else {
+		// Build full content first
+		var contentBuilder strings.Builder
+		for i, comment := range m.currentComments {
+			// Comment header
+			contentBuilder.WriteString(commentAuthorStyle.Render(fmt.Sprintf("@%s", comment.Author)))
+			contentBuilder.WriteString(" • ")
+			contentBuilder.WriteString(commentsMetaStyle.Render(formatRelativeTime(comment.CreatedAt)))
+			contentBuilder.WriteString("\n")
+
+			// Comment body
+			body := comment.Body
+			if body == "" {
+				body = "(No comment body)"
+			}
+
+			// Render markdown or show raw
+			if m.showRawMarkdown {
+				contentBuilder.WriteString(body)
+			} else {
+				// Use glamour to render markdown
+				rendered, err := renderMarkdown(body, m.width-4) // -4 for padding
+				if err != nil {
+					// Fall back to raw if rendering fails
+					contentBuilder.WriteString(body)
+				} else {
+					contentBuilder.WriteString(rendered)
+				}
+			}
+
+			// Separator between comments (except last one)
+			if i < len(m.currentComments)-1 {
+				contentBuilder.WriteString("\n")
+				contentBuilder.WriteString(commentSeparatorStyle.Render(strings.Repeat("─", min(m.width, 80))))
+				contentBuilder.WriteString("\n\n")
+			}
+		}
+
+		// Apply scrolling
+		content := contentBuilder.String()
+		lines := strings.Split(content, "\n")
+
+		// Calculate visible range
+		contentHeight := m.height - 6 // Leave room for header, status, footer
+		if contentHeight < 1 {
+			contentHeight = 1
+		}
+
+		startLine := m.commentsScrollOffset
+		if startLine >= len(lines) {
+			startLine = len(lines) - 1
+		}
+		if startLine < 0 {
+			startLine = 0
+		}
+
+		endLine := startLine + contentHeight
+		if endLine > len(lines) {
+			endLine = len(lines)
+		}
+
+		visibleLines := lines[startLine:endLine]
+		b.WriteString(strings.Join(visibleLines, "\n"))
+		b.WriteString("\n")
+	}
+
+	// Status bar
+	b.WriteString("\n")
+	statusText := fmt.Sprintf("Comments View | Scroll: %d", m.commentsScrollOffset)
+	if len(m.currentComments) > 0 {
+		statusText += fmt.Sprintf(" | Total: %d", len(m.currentComments))
+	}
+	b.WriteString(statusStyle.Render(statusText))
+
+	// Footer
+	b.WriteString("\n")
+	b.WriteString(footerStyle.Render("PgUp/PgDn: scroll • m: toggle markdown • Esc/q: back to list"))
 
 	return b.String()
 }
@@ -508,6 +686,20 @@ var (
 
 	detailMetaStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241"))
+
+	commentsHeaderStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("170"))
+
+	commentsMetaStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("241"))
+
+	commentAuthorStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("39"))
+
+	commentSeparatorStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("241"))
 )
 
 // Helper functions
@@ -564,4 +756,11 @@ func formatRelativeTime(t time.Time) string {
 		return "1 year ago"
 	}
 	return fmt.Sprintf("%d years ago", years)
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

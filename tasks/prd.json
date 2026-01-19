@@ -148,14 +148,15 @@
         "Enter on issue list opens dedicated comments view"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-005"
       ],
       "labels": [
         "tui",
         "detail"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-008",
@@ -306,6 +307,6 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-01-19T22:45:06.568Z"
+    "updatedAt": "2026-01-19T22:50:00.323Z"
   }
 }

@@ -131,7 +131,7 @@ func run() error {
 	sortAscending := config.GetSortAscending(cfg)
 
 	// Launch TUI
-	model := tui.NewModel(issues, columns, sortBy, sortAscending)
+	model := tui.NewModel(issues, columns, sortBy, sortAscending, store)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("TUI error: %w", err)

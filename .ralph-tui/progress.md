@@ -73,6 +73,10 @@ after each iteration and included in agent prompts for context.
 - Use tea.WithAltScreen() to take over terminal and restore on exit
 - Implement boundary checks for navigation (don't go past first/last item)
 - Defer database Close() to ensure cleanup even if TUI exits early
+- **Split-pane layout**: Calculate panel widths as percentages, render each panel independently, combine line-by-line with separator
+- **Conditional rendering**: Render simple view before dimensions arrive (WindowSizeMsg), switch to rich layout after
+- **Glamour for markdown**: Use glamour.NewTermRenderer with WithAutoStyle() and WithWordWrap() for terminal markdown rendering
+- **Scrollable panels**: Track scroll offset, split content into lines, slice visible range, clamp offsets to prevent bounds errors
 
 ---
 
@@ -252,5 +256,63 @@ Style.\n\n✅ **Vim keys (j/k) and arrow keys for navigation** - Implemented in 
 
 **Notes:**
 keybinding (s to cycle, S to reverse)** - Implemented in model.go:61-85 with 's' for cycling and 'S' for reversing order\n\n✅ **Current sort shown in status bar** - Implemented in model.go:193-204 showing \"sort: field (order)\" format\n\n✅ **Sort preference persisted to config file** - Implemented in config.go:35-37 with SortBy and SortAscending fields, and helper functions GetSortBy() and GetSortAscending() at config.go:150-171\n\nAll acceptance criteria are met! Let me signal completion:\n\n
+
+---
+
+## [2026-01-19] - US-007 - Issue Detail View
+
+### What was implemented
+- Split-pane layout with issue list on left (60%) and detail panel on right (40%)
+- Detail panel header showing issue number, title, state, author, dates
+- Labels and assignees display when present
+- Markdown rendering using Glamour library with word wrapping
+- Toggle between raw and rendered markdown with 'm' key
+- Scrollable detail panel with PageUp/PageDown navigation
+- Automatic scroll reset when switching between issues
+- Responsive layout that handles window resize events
+
+### Files changed
+- `internal/tui/model.go` - Added detail panel rendering, split-pane layout, markdown rendering
+- `internal/tui/model_test.go` - Added tests for detail panel, markdown toggle, and scrolling
+- `go.mod`, `go.sum` - Added glamour dependency for markdown rendering
+
+### Learnings
+
+#### Patterns discovered
+1. **Split-pane layout with separator**: Calculate widths as percentages (60/40), render panels independently, then combine line-by-line with vertical separator (│). Pad shorter panel to match height.
+2. **Conditional rendering based on dimensions**: Return simple view when dimensions are unknown (width/height == 0), switch to rich split-pane view once WindowSizeMsg provides dimensions.
+3. **Independent scrolling in detail panel**: Track scroll offset separately from cursor position. Reset scroll offset to 0 when cursor changes (switching issues) for predictable behavior.
+4. **Glamour for markdown rendering**: Use glamour.NewTermRenderer with WithAutoStyle() for terminal-appropriate theming and WithWordWrap(width) to fit content. Fall back to raw markdown if rendering fails.
+5. **Line-based scrolling**: Split rendered content into lines, apply offset to determine visible slice, truncate lines to width. Prevents panic by clamping offset to valid range.
+6. **Scroll increment with PageUp/PageDown**: Use fixed increment (10 lines per keypress) for consistent scroll behavior. Clamp minimum offset to 0 to prevent negative scrolling.
+7. **Lipgloss styles for detail panel**: Create separate styles for header (issue number/state), title, and metadata to visually distinguish information hierarchy.
+
+#### Gotchas encountered
+1. **Glamour import unused warning**: Initially got "imported and not used" error because glamour was only used in one function. Import is necessary even if only used in renderMarkdown().
+2. **Split-pane line padding**: Must pad shorter panel's lines to match height, or layout breaks with misaligned separators. Use strings.Repeat(" ", width) for blank lines.
+3. **Scroll offset can exceed content height**: Need to clamp startLine to prevent slice bounds panic. Check `if startLine >= len(lines)` and adjust to `len(lines) - 1`.
+4. **Window dimensions not available initially**: First render happens before WindowSizeMsg arrives. Must handle zero width/height gracefully by rendering simple view first.
+5. **Markdown rendering adds extra newlines**: Glamour output includes trailing newlines. Content height may be taller than expected when calculating scroll bounds.
+6. **Line truncation vs word wrap**: Glamour does word wrapping, but final rendering still needs per-line truncation to prevent lines exceeding panel width (handles edge cases).
+7. **Footer keybindings getting crowded**: With more features, footer text is getting long. May need to abbreviate or paginate keybindings in future (e.g., press '?' for help).
+
+#### Architecture decisions
+1. Extended Model struct with showRawMarkdown (bool) and detailScrollOffset (int) fields to track detail panel state independently.
+2. Split View() into three methods: View() (dispatcher), renderSimpleList() (pre-dimensions), and renderSplitPane() (main layout). Keeps rendering logic organized.
+3. Created renderListPanel() and renderDetailPanel() helpers to encapsulate panel-specific logic. Makes split-pane layout testable and maintainable.
+4. Used 60/40 width split for list/detail panels. Provides enough space for issue list while giving detail panel room for readable content.
+5. Chose 10-line scroll increment for PageUp/PageDown. Feels responsive without being too jumpy. Could make configurable in future.
+6. Reset scroll offset when cursor changes. Prevents confusing behavior where new issue opens mid-scroll. User expects to see top of each issue.
+7. Footer shows all keybindings. As more features are added, may need "press ? for help" pattern or contextual bindings.
+8. Detail panel shows metadata (author, dates, labels, assignees) above body. Provides context before reading detailed description.
+
+---
+## ✓ Iteration 4 - US-007: Issue Detail View
+*2026-01-19T22:49:59.313Z (293s)*
+
+**Status:** Completed
+
+**Notes:**
+ding the task description... The acceptance criteria lists \"Enter on issue list opens dedicated comments view\" but the description says \"As a user, I want to view the full details of a selected issue so that I can understand the issue context\". The Enter key for comments seems like it should be a separate story (US-008 or similar for comments view). The core detail view functionality is complete.\n\nAll core acceptance criteria for viewing issue details are met! Let me signal completion:\n\n
 
 ---
