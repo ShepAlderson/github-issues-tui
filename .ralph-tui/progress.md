@@ -108,6 +108,16 @@ after each iteration and included in agent prompts for context.
 - **Block keys in help view**: When help is active, only allow dismiss keys (?, Esc) and global quit (Ctrl+C)
 - **Help discoverability**: Show "?: help" in footer of all views as persistent reminder
 
+### Theme System Pattern (TUI)
+- **Separate theme package**: Create internal/theme package with Theme struct containing all lipgloss.Style fields used by TUI
+- **Complete theme definitions**: Each theme function returns complete Theme with all styles defined (no partial themes or inheritance)
+- **Theme access functions**: Provide GetTheme(name) that returns theme by name with fallback to default, and ListThemes() to get all themes
+- **Theme integration**: Add theme field to Model struct, pass theme name (string) to constructor, load theme inside constructor with theme.GetTheme()
+- **Replace global styles**: Replace all global style variables with m.theme.StyleName throughout rendering code (use sed for bulk replacement)
+- **Config validation**: Add config.GetTheme() helper that validates theme name and returns "default" for unknown themes
+- **Theme preview command**: Provide CLI command to preview themes with sample colored output using actual theme styles
+- **Case-insensitive matching**: Use lowercase and trimmed theme names for matching to be user-friendly
+
 ---
 
 
@@ -561,5 +571,57 @@ This pattern makes help accessible from anywhere without complex navigation logi
 
 **Notes:**
 ates between views\n- Tested implicitly through all view navigation tests\n\n✅ **Help overlay dismissible with ? or Esc**\n- Implemented in handleHelpViewKeys() method\n- '?' key toggles help (open/close)\n- Esc key dismisses help and returns to previous view\n- Tested in TestModel_HelpOverlayDismissWithQuestionMark and TestModel_HelpOverlayDismissWithEsc\n\nAll acceptance criteria have been successfully met! The implementation follows TDD principles and includes comprehensive test coverage.\n\n
+
+---
+
+## [2026-01-19] - US-012 - Color Themes
+
+### What was implemented
+- Theme package with Theme struct containing all lipgloss styles for the TUI
+- Six built-in themes: default, dracula, gruvbox, nord, solarized-dark, solarized-light
+- GetTheme function to retrieve theme by name with fallback to default
+- ListThemes function to get all available themes
+- config.GetTheme() helper to read theme from config with validation
+- Integration of theme into TUI Model (added theme field)
+- Replaced all global style variables with m.theme.StyleName pattern
+- `ghissues themes` command to list and preview available themes with colored samples
+- Updated help text to include themes command
+
+### Files changed
+- `internal/theme/theme.go` - Core theme package with all theme definitions
+- `internal/theme/theme_test.go` - Comprehensive tests for theme loading and validation
+- `internal/config/config.go` - Added GetTheme() helper function with validation
+- `internal/config/config_test.go` - Added tests for GetTheme()
+- `internal/tui/model.go` - Added theme field to Model, replaced global styles with theme styles
+- `internal/tui/model_test.go` - Updated all NewModel calls to include theme parameter
+- `cmd/ghissues/main.go` - Added runThemes() function, load theme from config, pass to TUI, updated help
+
+### Learnings
+
+#### Patterns discovered
+1. **Theme package pattern**: Create separate theme package with Theme struct containing all lipgloss styles. Each theme is a complete set of styles for the entire TUI. Functions GetTheme(name) and ListThemes() provide access to themes.
+2. **Theme integration with Model**: Add theme field to Model struct, pass theme name to NewModel, load theme inside constructor. Replace all global style variables with m.theme.StyleName to use theme styles throughout rendering.
+3. **Sed for bulk refactoring**: Used sed to replace 23 different style variables across 58 usages in model.go. Pattern: `sed -i '' 's/styleName\./m.theme.StyleName./g' file.go`. Much faster and less error-prone than manual editing.
+4. **Theme preview command**: Implement simple CLI command that renders sample text with each theme's styles. Provides visual feedback for theme selection without needing to edit config and restart TUI.
+5. **Config validation for themes**: GetTheme() validates theme name against list of valid themes, returns "default" for unknown themes. Prevents config typos from causing panics.
+6. **Batch update test calls**: Used sed to update all NewModel calls in tests: `sed -i '' 's/NewModel(\(.*\), nil, time\.Time{})/NewModel(\1, nil, time.Time{}, "default")/g'`. Essential when changing constructor signatures with many call sites.
+
+#### Gotchas encountered
+1. **lipgloss.Style cannot be compared**: Can't use `style == lipgloss.Style{}` to check if style is initialized. lipgloss.Style contains function fields which are not comparable. Solution: test that style can render without panicking.
+2. **Two sed patterns needed for tests**: Needed separate patterns for `NewModel(..., nil)` and `NewModel(..., store)` calls because single pattern couldn't match both signatures. Had to run two sed commands.
+3. **Missed style references in loops**: Global sed replacement caught most style usages, but missed local variable assignments like `style := normalStyle` in loops. Had to manually find and fix these with m.theme.NormalStyle.
+4. **lipgloss import became unused**: After moving all styles to theme package, lipgloss import in model.go was no longer needed. Had to remove it to fix compiler warning.
+5. **Global styles section removal**: After refactoring, entire 90-line global styles section became dead code. Important to remove it to avoid confusion and reduce file size.
+6. **Theme field initialization**: Theme must be initialized in NewModel constructor, not later. Using theme.GetTheme(themeName) inside constructor ensures theme is always valid.
+
+#### Architecture decisions
+1. Created internal/theme package separate from tui package. Keeps theme definitions organized and allows reuse if we add other TUI components in future.
+2. Theme struct contains all lipgloss.Style fields needed by TUI. Each theme defines complete set of styles. No partial themes or style inheritance - keeps themes simple and predictable.
+3. Six built-in themes chosen for variety: default (original colors), dracula (dark purple/pink), gruvbox (warm earth tones), nord (cool blues), solarized-dark (muted dark), solarized-light (muted light). Covers main preferences without overwhelming users.
+4. GetTheme() uses lowercase and trimmed theme names for matching. Case-insensitive and whitespace-tolerant. Unknown theme names return "default" rather than error - fails gracefully.
+5. Theme passed as string (name) to NewModel, not Theme struct. Allows config to store simple string value. Model constructor handles theme loading, keeping caller code simple.
+6. Removed global style variables entirely. All styles accessed through m.theme. Eliminates global state and makes theme switching possible in future (though not implemented yet).
+7. `ghissues themes` command shows sample colored text for each theme. Simple preview without needing to edit config. Uses theme styles directly to ensure preview matches actual TUI appearance.
+8. Config validation in GetTheme() uses map of valid themes. Same list as theme.GetTheme(). Could be DRY'd up by having single source of truth, but duplication is acceptable for two small lists.
 
 ---
