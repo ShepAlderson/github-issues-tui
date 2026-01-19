@@ -31,8 +31,10 @@ type DatabaseConfig struct {
 
 // DisplayConfig contains display-related settings
 type DisplayConfig struct {
-	Theme   string   `toml:"theme,omitempty"`
-	Columns []string `toml:"columns,omitempty"`
+	Theme         string   `toml:"theme,omitempty"`
+	Columns       []string `toml:"columns,omitempty"`
+	SortBy        string   `toml:"sort_by,omitempty"`
+	SortAscending bool     `toml:"sort_ascending,omitempty"`
 }
 
 // ConfigPath returns the default configuration file path
@@ -136,4 +138,32 @@ func GetDisplayColumns(cfg *Config) []string {
 	}
 
 	return cfg.Display.Columns
+}
+
+// GetSortBy returns the sort field to use
+// Returns "updated" (default) if not configured or invalid
+func GetSortBy(cfg *Config) string {
+	if cfg.Display.SortBy == "" {
+		return "updated"
+	}
+
+	// Validate sort field
+	validSortFields := map[string]bool{
+		"updated":  true,
+		"created":  true,
+		"number":   true,
+		"comments": true,
+	}
+
+	if !validSortFields[cfg.Display.SortBy] {
+		return "updated"
+	}
+
+	return cfg.Display.SortBy
+}
+
+// GetSortAscending returns whether to sort in ascending order
+// Returns false (descending) by default if not configured
+func GetSortAscending(cfg *Config) bool {
+	return cfg.Display.SortAscending
 }

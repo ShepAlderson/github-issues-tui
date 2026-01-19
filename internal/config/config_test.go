@@ -306,3 +306,177 @@ columns = ["number", "title", "author"]
 		t.Errorf("Expected third column 'author', got '%s'", cfg.Display.Columns[2])
 	}
 }
+
+func TestGetSortBy(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfg      *Config
+		expected string
+	}{
+		{
+			name: "default sort when not configured",
+			cfg: &Config{
+				GitHub: GitHubConfig{
+					Repository: "owner/repo",
+					AuthMethod: "token",
+					Token:      "test",
+				},
+			},
+			expected: "updated",
+		},
+		{
+			name: "custom sort from config",
+			cfg: &Config{
+				GitHub: GitHubConfig{
+					Repository: "owner/repo",
+					AuthMethod: "token",
+					Token:      "test",
+				},
+				Display: DisplayConfig{
+					SortBy: "number",
+				},
+			},
+			expected: "number",
+		},
+		{
+			name: "invalid sort returns default",
+			cfg: &Config{
+				GitHub: GitHubConfig{
+					Repository: "owner/repo",
+					AuthMethod: "token",
+					Token:      "test",
+				},
+				Display: DisplayConfig{
+					SortBy: "invalid",
+				},
+			},
+			expected: "updated",
+		},
+		{
+			name: "valid sort by created",
+			cfg: &Config{
+				GitHub: GitHubConfig{
+					Repository: "owner/repo",
+					AuthMethod: "token",
+					Token:      "test",
+				},
+				Display: DisplayConfig{
+					SortBy: "created",
+				},
+			},
+			expected: "created",
+		},
+		{
+			name: "valid sort by comments",
+			cfg: &Config{
+				GitHub: GitHubConfig{
+					Repository: "owner/repo",
+					AuthMethod: "token",
+					Token:      "test",
+				},
+				Display: DisplayConfig{
+					SortBy: "comments",
+				},
+			},
+			expected: "comments",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sortBy := GetSortBy(tt.cfg)
+			if sortBy != tt.expected {
+				t.Errorf("Expected sortBy %s, got %s", tt.expected, sortBy)
+			}
+		})
+	}
+}
+
+func TestGetSortAscending(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfg      *Config
+		expected bool
+	}{
+		{
+			name: "default sort ascending is false",
+			cfg: &Config{
+				GitHub: GitHubConfig{
+					Repository: "owner/repo",
+					AuthMethod: "token",
+					Token:      "test",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "sort ascending true from config",
+			cfg: &Config{
+				GitHub: GitHubConfig{
+					Repository: "owner/repo",
+					AuthMethod: "token",
+					Token:      "test",
+				},
+				Display: DisplayConfig{
+					SortAscending: true,
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "sort ascending false from config",
+			cfg: &Config{
+				GitHub: GitHubConfig{
+					Repository: "owner/repo",
+					AuthMethod: "token",
+					Token:      "test",
+				},
+				Display: DisplayConfig{
+					SortAscending: false,
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sortAscending := GetSortAscending(tt.cfg)
+			if sortAscending != tt.expected {
+				t.Errorf("Expected sortAscending %v, got %v", tt.expected, sortAscending)
+			}
+		})
+	}
+}
+
+func TestLoadConfigWithSortPreferences(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.toml")
+
+	// Test config with sort preferences
+	configContent := `
+[github]
+repository = "owner/repo"
+auth_method = "token"
+token = "ghp_test123"
+
+[display]
+sort_by = "number"
+sort_ascending = true
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to create test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	if cfg.Display.SortBy != "number" {
+		t.Errorf("Expected SortBy 'number', got '%s'", cfg.Display.SortBy)
+	}
+	if !cfg.Display.SortAscending {
+		t.Errorf("Expected SortAscending true, got false")
+	}
+}

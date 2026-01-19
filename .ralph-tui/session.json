@@ -3,10 +3,10 @@
   "sessionId": "efa2895b-ade0-49fd-aee9-e7aa98f505ff",
   "status": "running",
   "startedAt": "2026-01-19T22:28:30.273Z",
-  "updatedAt": "2026-01-19T22:28:49.052Z",
-  "currentIteration": 0,
+  "updatedAt": "2026-01-19T22:39:33.894Z",
+  "currentIteration": 2,
   "maxIterations": 10,
-  "tasksCompleted": 0,
+  "tasksCompleted": 2,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -29,8 +29,8 @@
       {
         "id": "US-003",
         "title": "Initial Issue Sync",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-004",
@@ -41,8 +41,8 @@
       {
         "id": "US-005",
         "title": "Issue List View",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-006",
@@ -100,11 +100,32 @@
       }
     ]
   },
-  "iterations": [],
+  "iterations": [
+    {
+      "iteration": 1,
+      "status": "completed",
+      "taskId": "US-003",
+      "taskTitle": "Initial Issue Sync",
+      "taskCompleted": true,
+      "durationMs": 287447,
+      "startedAt": "2026-01-19T22:28:49.036Z",
+      "endedAt": "2026-01-19T22:33:36.483Z"
+    },
+    {
+      "iteration": 2,
+      "status": "completed",
+      "taskId": "US-005",
+      "taskTitle": "Issue List View",
+      "taskCompleted": true,
+      "durationMs": 355350,
+      "startedAt": "2026-01-19T22:33:37.515Z",
+      "endedAt": "2026-01-19T22:39:32.865Z"
+    }
+  ],
   "skippedTaskIds": [],
   "cwd": "/Users/shepbook/git/github-issues-tui",
   "activeTaskIds": [
-    "US-003"
+    "US-006"
   ],
   "subagentPanelVisible": false
 }

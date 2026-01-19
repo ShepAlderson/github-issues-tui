@@ -12,20 +12,26 @@ import (
 
 // Model represents the TUI state
 type Model struct {
-	issues  []*sync.Issue
-	columns []string
-	cursor  int
-	width   int
-	height  int
+	issues        []*sync.Issue
+	columns       []string
+	cursor        int
+	width         int
+	height        int
+	sortBy        string // "updated", "created", "number", "comments"
+	sortAscending bool   // true for ascending, false for descending
 }
 
 // NewModel creates a new TUI model
-func NewModel(issues []*sync.Issue, columns []string) Model {
-	return Model{
-		issues:  issues,
-		columns: columns,
-		cursor:  0,
+func NewModel(issues []*sync.Issue, columns []string, sortBy string, sortAscending bool) Model {
+	m := Model{
+		issues:        issues,
+		columns:       columns,
+		cursor:        0,
+		sortBy:        sortBy,
+		sortAscending: sortAscending,
 	}
+	m.sortIssues() // Apply initial sort
+	return m
 }
 
 // Init initializes the model
@@ -58,6 +64,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.cursor > 0 {
 					m.cursor--
 				}
+			case "s":
+				// Cycle through sort options: updated -> created -> number -> comments -> updated
+				switch m.sortBy {
+				case "updated":
+					m.sortBy = "created"
+				case "created":
+					m.sortBy = "number"
+				case "number":
+					m.sortBy = "comments"
+				case "comments":
+					m.sortBy = "updated"
+				}
+				m.sortIssues()
+				m.cursor = 0 // Reset cursor to top after sorting
+			case "S":
+				// Toggle sort order
+				m.sortAscending = !m.sortAscending
+				m.sortIssues()
+				m.cursor = 0 // Reset cursor to top after sorting
 			}
 
 		case tea.KeyDown:
@@ -107,7 +132,7 @@ func (m Model) View() string {
 
 	// Footer
 	b.WriteString("\n")
-	b.WriteString(footerStyle.Render("j/k, ↑/↓: navigate • q: quit"))
+	b.WriteString(footerStyle.Render("j/k, ↑/↓: navigate • s: cycle sort • S: reverse order • q: quit"))
 
 	return b.String()
 }
@@ -156,10 +181,18 @@ func (m Model) renderIssue(issue *sync.Issue) string {
 func (m Model) renderStatus() string {
 	total := len(m.issues)
 	current := m.cursor + 1
-	if total == 0 {
-		return "No issues"
+
+	// Build sort description
+	sortOrder := "desc"
+	if m.sortAscending {
+		sortOrder = "asc"
 	}
-	return fmt.Sprintf("Issue %d of %d", current, total)
+	sortDesc := fmt.Sprintf("sort: %s (%s)", m.sortBy, sortOrder)
+
+	if total == 0 {
+		return fmt.Sprintf("No issues • %s", sortDesc)
+	}
+	return fmt.Sprintf("Issue %d of %d • %s", current, total, sortDesc)
 }
 
 // SelectedIssue returns the currently selected issue
@@ -168,6 +201,46 @@ func (m Model) SelectedIssue() *sync.Issue {
 		return nil
 	}
 	return m.issues[m.cursor]
+}
+
+// sortIssues sorts the issues slice based on sortBy and sortAscending fields
+func (m *Model) sortIssues() {
+	if len(m.issues) == 0 {
+		return
+	}
+
+	// Use a stable sort to maintain order for equal elements
+	sortFunc := func(i, j int) bool {
+		var less bool
+		switch m.sortBy {
+		case "updated":
+			less = m.issues[i].UpdatedAt.Before(m.issues[j].UpdatedAt)
+		case "created":
+			less = m.issues[i].CreatedAt.Before(m.issues[j].CreatedAt)
+		case "number":
+			less = m.issues[i].Number < m.issues[j].Number
+		case "comments":
+			less = m.issues[i].CommentCount < m.issues[j].CommentCount
+		default:
+			// Default to updated
+			less = m.issues[i].UpdatedAt.Before(m.issues[j].UpdatedAt)
+		}
+
+		// If ascending, use the comparison as-is; if descending, invert it
+		if m.sortAscending {
+			return less
+		}
+		return !less
+	}
+
+	// Sort issues in place
+	for i := 0; i < len(m.issues)-1; i++ {
+		for j := i + 1; j < len(m.issues); j++ {
+			if sortFunc(j, i) {
+				m.issues[i], m.issues[j] = m.issues[j], m.issues[i]
+			}
+		}
+	}
 }
 
 // Styles

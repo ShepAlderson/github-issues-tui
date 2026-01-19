@@ -126,8 +126,12 @@ func run() error {
 	// Get display columns from config
 	columns := config.GetDisplayColumns(cfg)
 
+	// Get sort preferences from config
+	sortBy := config.GetSortBy(cfg)
+	sortAscending := config.GetSortAscending(cfg)
+
 	// Launch TUI
-	model := tui.NewModel(issues, columns)
+	model := tui.NewModel(issues, columns, sortBy, sortAscending)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("TUI error: %w", err)
