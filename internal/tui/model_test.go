@@ -318,3 +318,131 @@ func TestModel_IssueSorting(t *testing.T) {
 		})
 	}
 }
+
+func TestModel_DetailPanelWithDimensions(t *testing.T) {
+	// Test that detail panel is rendered when window size is set
+	now := time.Now()
+	issues := []*sync.Issue{
+		{
+			Number:       123,
+			Title:        "Test Issue",
+			Body:         "This is a test issue body",
+			State:        "open",
+			Author:       "testuser",
+			CreatedAt:    now.Add(-24 * time.Hour),
+			UpdatedAt:    now.Add(-1 * time.Hour),
+			CommentCount: 5,
+			Labels:       []string{"bug", "enhancement"},
+			Assignees:    []string{"user1", "user2"},
+		},
+	}
+
+	model := NewModel(issues, []string{"number", "title"}, "updated", false)
+
+	// Set window size
+	updatedModel, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m := updatedModel.(Model)
+
+	if m.width != 120 {
+		t.Errorf("Width = %d, want 120", m.width)
+	}
+	if m.height != 30 {
+		t.Errorf("Height = %d, want 30", m.height)
+	}
+
+	// Verify View() returns non-empty string (actual split-pane rendering tested visually)
+	view := m.View()
+	if view == "" {
+		t.Error("View() returned empty string after setting dimensions")
+	}
+}
+
+func TestModel_MarkdownToggle(t *testing.T) {
+	// Test toggling between raw and rendered markdown with 'm' key
+	issues := []*sync.Issue{
+		{
+			Number:    1,
+			Title:     "Test",
+			Body:      "# Heading\n\n**Bold text**",
+			State:     "open",
+			Author:    "user",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		},
+	}
+
+	model := NewModel(issues, []string{"number", "title"}, "updated", false)
+
+	// Initial state should be rendered markdown (showRawMarkdown = false)
+	if model.showRawMarkdown {
+		t.Errorf("Initial showRawMarkdown = %v, want false", model.showRawMarkdown)
+	}
+
+	// Press 'm' to toggle to raw
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	m := updatedModel.(Model)
+	if !m.showRawMarkdown {
+		t.Errorf("After 'm', showRawMarkdown = %v, want true", m.showRawMarkdown)
+	}
+
+	// Press 'm' again to toggle back to rendered
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	m = updatedModel.(Model)
+	if m.showRawMarkdown {
+		t.Errorf("After second 'm', showRawMarkdown = %v, want false", m.showRawMarkdown)
+	}
+}
+
+func TestModel_DetailPanelScrolling(t *testing.T) {
+	// Test scrolling in detail panel with PageDown/PageUp
+	longBody := ""
+	for i := 0; i < 100; i++ {
+		longBody += "Line " + string(rune(i)) + "\n"
+	}
+
+	issues := []*sync.Issue{
+		{
+			Number:    1,
+			Title:     "Test",
+			Body:      longBody,
+			State:     "open",
+			Author:    "user",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		},
+	}
+
+	model := NewModel(issues, []string{"number", "title"}, "updated", false)
+	model.width = 120
+	model.height = 30
+
+	// Initial scroll offset should be 0
+	if model.detailScrollOffset != 0 {
+		t.Errorf("Initial detailScrollOffset = %d, want 0", model.detailScrollOffset)
+	}
+
+	// Press PageDown to scroll down
+	updatedModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	m := updatedModel.(Model)
+	if m.detailScrollOffset <= 0 {
+		t.Errorf("After PageDown, detailScrollOffset = %d, want > 0", m.detailScrollOffset)
+	}
+
+	scrollAfterPageDown := m.detailScrollOffset
+
+	// Press PageUp to scroll back up
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	m = updatedModel.(Model)
+	if m.detailScrollOffset >= scrollAfterPageDown {
+		t.Errorf("After PageUp, detailScrollOffset = %d, want < %d", m.detailScrollOffset, scrollAfterPageDown)
+	}
+
+	// Scroll offset should not go below 0
+	for i := 0; i < 10; i++ {
+		updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+		m = updatedModel.(Model)
+	}
+	if m.detailScrollOffset < 0 {
+		t.Errorf("After multiple PageUp, detailScrollOffset = %d, want >= 0", m.detailScrollOffset)
+	}
+}
