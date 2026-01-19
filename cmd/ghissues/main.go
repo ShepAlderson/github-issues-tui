@@ -8,6 +8,7 @@ import (
 	"github.com/shepbook/github-issues-tui/internal/config"
 	"github.com/shepbook/github-issues-tui/internal/database"
 	"github.com/shepbook/github-issues-tui/internal/prompt"
+	"github.com/shepbook/github-issues-tui/internal/sync"
 )
 
 func main() {
@@ -46,6 +47,10 @@ func run() error {
 
 		// Handle other flags and commands
 		switch arg {
+		case "sync":
+			// Remove sync command from args
+			args = append(args[:i], args[i+1:]...)
+			return runSync(configPath, dbPath)
 		case "config":
 			// Force re-run setup
 			return runSetup(configPath, true)
@@ -143,11 +148,65 @@ func runSetup(configPath string, force bool) error {
 	return nil
 }
 
+func runSync(configPath string, dbPath string) error {
+	// Load config
+	cfg, err := config.LoadConfig(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w\n\nRun 'ghissues config' to configure", err)
+	}
+
+	// Validate config
+	if err := config.ValidateConfig(cfg); err != nil {
+		return fmt.Errorf("invalid config: %w\n\nRun 'ghissues config' to reconfigure", err)
+	}
+
+	// Get authentication token
+	token, err := auth.GetToken(cfg)
+	if err != nil {
+		return fmt.Errorf("authentication failed: %w", err)
+	}
+
+	// Validate token with GitHub API
+	fmt.Println("Validating GitHub token...")
+	if err := auth.ValidateToken(token); err != nil {
+		return fmt.Errorf("token validation failed: %w", err)
+	}
+	fmt.Println("Authentication: ✓")
+	fmt.Println()
+
+	// Get database path
+	resolvedDBPath, err := database.GetDatabasePath(cfg, dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve database path: %w", err)
+	}
+
+	// Initialize database
+	if err := database.InitDatabase(resolvedDBPath); err != nil {
+		return fmt.Errorf("failed to initialize database: %w", err)
+	}
+
+	// Create syncer
+	syncer, err := sync.NewSyncer(token, resolvedDBPath)
+	if err != nil {
+		return fmt.Errorf("failed to create syncer: %w", err)
+	}
+	defer syncer.Close()
+
+	// Run sync
+	fmt.Printf("Syncing issues from %s...\n\n", cfg.GitHub.Repository)
+	if err := syncer.SyncIssues(cfg.GitHub.Repository); err != nil {
+		return fmt.Errorf("sync failed: %w", err)
+	}
+
+	return nil
+}
+
 func printHelp() {
 	fmt.Println("ghissues - GitHub Issues TUI")
 	fmt.Println()
 	fmt.Println("USAGE:")
 	fmt.Println("  ghissues                Start the TUI (runs setup if needed)")
+	fmt.Println("  ghissues sync           Fetch and sync all open issues from GitHub")
 	fmt.Println("  ghissues --db PATH      Specify database file location")
 	fmt.Println("  ghissues config         Run/re-run interactive configuration")
 	fmt.Println("  ghissues --help         Show this help message")
