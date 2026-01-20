@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/shepbook/ghissues/internal/auth"
 	"github.com/shepbook/ghissues/internal/config"
 	"github.com/shepbook/ghissues/internal/database"
@@ -13,6 +14,7 @@ import (
 	"github.com/shepbook/ghissues/internal/setup"
 	"github.com/shepbook/ghissues/internal/storage"
 	"github.com/shepbook/ghissues/internal/sync"
+	"github.com/shepbook/ghissues/internal/tui"
 )
 
 const version = "0.1.0"
@@ -105,7 +107,7 @@ func main() {
 	}
 
 	// Get authentication token
-	token, source, err := auth.GetToken(configPath, "")
+	token, _, err := auth.GetToken(configPath, "")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to get authentication: %v\n", err)
 		os.Exit(1)
@@ -158,14 +160,26 @@ func main() {
 	if len(issues) == 0 {
 		fmt.Println("No issues found. Running initial sync...")
 		handleSyncCommand(syncer)
+
+		// Reload issues after sync
+		issues, err = storage.GetIssues(db)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to reload issues: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
-	// TODO: Implement main TUI application
-	fmt.Printf("\nConfiguration loaded for repository: %s\n", repo)
-	fmt.Printf("Database path: %s\n", dbPath)
-	fmt.Printf("Authentication: %s\n", source)
-	fmt.Printf("Issues in database: %d\n", len(issues))
-	fmt.Println("\nTUI application not yet implemented.")
+	// Get column configuration
+	columns := tui.GetDefaultColumns(cfg)
+
+	// Create and start TUI
+	model := tui.NewModel(issues, columns)
+	program := tea.NewProgram(model, tea.WithAltScreen())
+
+	if _, err := program.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error running TUI: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func handleSyncCommand(syncer *sync.Syncer) {
