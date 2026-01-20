@@ -528,3 +528,59 @@ func TestGetFooterDisplay(t *testing.T) {
 		})
 	}
 }
+
+func TestGetThemeColor(t *testing.T) {
+	tests := []struct {
+		name        string
+		hexColor    string
+		shouldError bool
+	}{
+		{
+			name:        "valid hex color",
+			hexColor:    "#ff0000",
+			shouldError: false,
+		},
+		{
+			name:        "valid hex color without hash",
+			hexColor:    "00ff00",
+			shouldError: false,
+		},
+		{
+			name:        "empty string",
+			hexColor:    "",
+			shouldError: true,
+		},
+		{
+			name:        "too short",
+			hexColor:    "#ff00",
+			shouldError: true,
+		},
+		{
+			name:        "too long",
+			hexColor:    "#ff0000ff",
+			shouldError: true,
+		},
+		{
+			name:        "invalid hex",
+			hexColor:    "#gg00zz",
+			shouldError: true,
+		},
+		{
+			name:        "dracula purple",
+			hexColor:    "#bd93f9",
+			shouldError: false,
+		},
+		{
+			name:        "nord blue",
+			hexColor:    "#81a1c1",
+			shouldError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Just verify the function doesn't panic
+			_ = getThemeColor(tt.hexColor)
+		})
+	}
+}

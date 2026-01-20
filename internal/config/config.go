@@ -79,6 +79,11 @@ func DefaultSortOrder() SortOrder {
 	return SortOrderDesc
 }
 
+// DefaultTheme returns the default theme name
+func DefaultTheme() string {
+	return "default"
+}
+
 // AllSortOptions returns all available sort options
 func AllSortOptions() []SortOption {
 	return []SortOption{SortUpdated, SortCreated, SortNumber, SortComments}
@@ -89,6 +94,7 @@ type Display struct {
 	Columns    []string   `toml:"columns"`
 	Sort       SortOption `toml:"sort"`
 	SortOrder  SortOrder  `toml:"sort_order"`
+	Theme      string     `toml:"theme"`
 }
 
 // DefaultColumns returns the default columns to display in the issue list
@@ -118,6 +124,9 @@ func Load() (*Config, error) {
 	}
 	if cfg.Display.SortOrder == "" {
 		cfg.Display.SortOrder = DefaultSortOrder()
+	}
+	if cfg.Display.Theme == "" {
+		cfg.Display.Theme = DefaultTheme()
 	}
 
 	return &cfg, nil

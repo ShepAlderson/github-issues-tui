@@ -12,6 +12,7 @@ import (
 	"github.com/shepbook/ghissues/internal/config"
 	"github.com/shepbook/ghissues/internal/db"
 	"github.com/shepbook/ghissues/internal/errors"
+	"github.com/shepbook/ghissues/internal/themes"
 )
 
 // runTUIWithRefresh starts the TUI with automatic refresh on launch
@@ -57,18 +58,26 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 	// Last synced timestamp - must be declared before updateStatusBar
 	lastSynced := ""
 
+	// Get the current theme
+	themeName := cfg.Display.Theme
+	if themeName == "" {
+		themeName = config.DefaultTheme()
+	}
+	currentTheme := themes.Get(themeName)
+
 	// Create the tview application
 	app := tview.NewApplication()
 
 	// Create the issue list view - explicit type to avoid type inference issues
 	var issueList *tview.List
 	issueList = tview.NewList()
-	issueList.SetMainTextColor(tview.Styles.PrimaryTextColor)
-	issueList.SetSecondaryTextColor(tview.Styles.SecondaryTextColor)
-	issueList.SetSelectedTextColor(tview.Styles.ContrastBackgroundColor)
-	issueList.SetSelectedBackgroundColor(tview.Styles.PrimaryTextColor)
+	issueList.SetMainTextColor(getThemeColor(currentTheme.PrimaryTextColor))
+	issueList.SetSecondaryTextColor(getThemeColor(currentTheme.SecondaryTextColor))
+	issueList.SetSelectedTextColor(getThemeColor(currentTheme.PrimaryTextColor))
+	issueList.SetSelectedBackgroundColor(getThemeColor(currentTheme.ContrastBackgroundColor))
 	issueList.SetTitle(" Issues ")
 	issueList.SetBorder(true)
+	issueList.SetBorderColor(getThemeColor(currentTheme.BorderColor))
 
 	// Create scrollable detail view
 	var detailView *tview.TextView
@@ -77,6 +86,7 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 	detailView.SetTextAlign(tview.AlignLeft)
 	detailView.SetTitle(" Details ")
 	detailView.SetBorder(true)
+	detailView.SetBorderColor(getThemeColor(currentTheme.BorderColor))
 	detailView.SetScrollable(true)
 
 	// Create status bar
@@ -937,4 +947,28 @@ func showCriticalErrorModal(app *tview.Application, pages *tview.Pages, err *err
 
 	pages.AddPage("error", modal, true, true)
 	pages.SwitchToPage("error")
+}
+
+// getThemeColor converts a hex color string to tcell.Color
+// Returns tcell.ColorDefault if the color cannot be parsed
+func getThemeColor(hexColor string) tcell.Color {
+	if hexColor == "" {
+		return tcell.ColorDefault
+	}
+
+	// Remove # prefix if present
+	colorStr := strings.TrimPrefix(hexColor, "#")
+	if len(colorStr) != 6 {
+		return tcell.ColorDefault
+	}
+
+	// Parse RGB values
+	r, err1 := strconv.ParseUint(colorStr[0:2], 16, 8)
+	g, err2 := strconv.ParseUint(colorStr[2:4], 16, 8)
+	b, err3 := strconv.ParseUint(colorStr[4:6], 16, 8)
+	if err1 != nil || err2 != nil || err3 != nil {
+		return tcell.ColorDefault
+	}
+
+	return tcell.NewRGBColor(int32(r), int32(g), int32(b))
 }

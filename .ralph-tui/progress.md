@@ -121,6 +121,14 @@ after each iteration and included in agent prompts for context.
 - Call `pages.SwitchToPage("main")` and `app.SetFocus(app.GetFocus())` to dismiss
 - Return `nil` from the input capture to prevent event propagation
 
+**Color Theme Pattern**: Support multiple color themes using tcell for terminal UI:
+- Create `internal/themes` package with Theme struct containing color hex strings
+- Define themes as package-level variables (Default, Dracula, Gruvbox, Nord, SolarizedDark, SolarizedLight)
+- Use `tcell.NewRGBColor(int32(r), int32(g), int32(b))` to convert hex to tcell.Color
+- Theme selected via `display.theme` config field
+- `ghissues themes` command allows previewing and changing themes
+- Default theme applied when config doesn't specify one
+
 ---
 
 ## 2026-01-20 - US-013
@@ -566,5 +574,48 @@ e>\" | Sort: ... | [Markdown] | ...\n\n4. **Added tests** (`cmd/ghissues/tui_tes
     - Modal.SetInputCapture may not capture all keys - need proper focus management
     - Footer TextView needs SetDynamicColors(true) to render [yellow] color tags
     - Must call updateFooter() when switching views (returnToIssueList, showComments)
+
+---
+## ✓ Iteration 12 - US-011: Keybinding Help
+*2026-01-20T09:40:03.299Z (186s)*
+
+**Status:** Completed
+
+**Notes:**
+help modal to handle keyboard dismissal\n\n**Files Changed:**\n- `cmd/ghissues/tui.go` - Added footer TextView, `GetFooterDisplay()` function, keyboard dismissal for help modal\n- `cmd/ghissues/tui_test.go` - Added `TestGetFooterDisplay` with 3 test cases\n\n**New Patterns Documented:**\n- **Footer Pattern** - Use separate TextView with `SetDynamicColors(true)` for context-sensitive keybindings\n- **Keyboard Dismissal Pattern** - Use `SetInputCapture` on modal to handle ? and Esc for dismissal\n
+
+---
+
+## 2026-01-20 - US-012
+- What was implemented:
+  - Created `internal/themes/themes.go` with 6 built-in themes: default, dracula, gruvbox, nord, solarized-dark, solarized-light
+  - Added `Theme` struct with hex color strings for all UI elements (primary/secondary text, backgrounds, borders, highlights)
+  - Added `Get()`, `All()`, `IsValid()`, `List()` functions for theme management
+  - Updated `internal/config/config.go` to add `Theme` field to Display struct with default "default"
+  - Added `ghissues themes` subcommand in `cmd/ghissues/themes.go` for previewing and changing themes
+  - Updated `cmd/ghissues/main.go` to handle "themes" subcommand
+  - Updated `cmd/ghissues/tui.go` to apply theme colors to issue list and detail views
+  - Added `getThemeColor()` helper function to convert hex colors to `tcell.Color` using `tcell.NewRGBColor`
+
+- Files changed:
+  - `internal/themes/themes.go` (new file with theme definitions)
+  - `internal/themes/themes_test.go` (new file with 8 tests)
+  - `internal/config/config.go` (added Theme field to Display struct, DefaultTheme function)
+  - `internal/config/config_display_test.go` (added 3 new tests for theme support)
+  - `cmd/ghissues/themes.go` (new file with runThemes function)
+  - `cmd/ghissues/main.go` (added themes subcommand handler)
+  - `cmd/ghissues/tui.go` (added themes import, currentTheme, color application)
+  - `cmd/ghissues/tui_test.go` (added TestGetThemeColor)
+
+- **Learnings:**
+  - Patterns discovered:
+    - Color Theme Pattern: Define themes with hex colors, convert using tcell.NewRGBColor
+    - Theme Package Pattern: Centralize theme definitions in dedicated internal package
+    - Helper Function Pattern: Extract color conversion to helper function for testability
+  - Gotchas encountered:
+    - tcell.Color is an int type, cannot directly cast from string - need to parse hex RGB values
+    - tcell.NewRGBColor expects int32 parameters, not int - needed explicit int32 cast
+    - Default fallback needed for invalid hex colors using tcell.ColorDefault
+    - lipgloss.Color and tcell.Color are incompatible types - use string type in theme struct
 
 ---

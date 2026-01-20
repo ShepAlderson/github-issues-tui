@@ -286,3 +286,95 @@ func TestSaveAndLoadSortOptions(t *testing.T) {
 		t.Errorf("Expected sort order %q, got %q", SortOrderAsc, loadedCfg.Display.SortOrder)
 	}
 }
+
+func TestDefaultTheme(t *testing.T) {
+	theme := DefaultTheme()
+	if theme != "default" {
+		t.Errorf("Expected default theme to be %q, got %q", "default", theme)
+	}
+}
+
+func TestLoadWithTheme(t *testing.T) {
+	// Create a temp config file with theme
+	tempDir := t.TempDir()
+	home := filepath.Join(tempDir, "home")
+	configDir := filepath.Join(home, ".config", "ghissues")
+	configFile := filepath.Join(configDir, "config.toml")
+
+	// Set HOME environment variable
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", home)
+	defer os.Setenv("HOME", oldHome)
+
+	// Create config directory
+	os.MkdirAll(configDir, 0755)
+
+	// Write config with theme
+	configContent := `
+repository = "test/repo"
+auth_method = "env"
+token = "test-token"
+
+[database]
+path = "test.db"
+
+[display]
+theme = "dracula"
+`
+	err := os.WriteFile(configFile, []byte(configContent), 0600)
+	if err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	// Load config
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Check theme
+	if cfg.Display.Theme != "dracula" {
+		t.Errorf("Expected theme to be %q, got %q", "dracula", cfg.Display.Theme)
+	}
+}
+
+func TestLoadWithDefaultTheme(t *testing.T) {
+	// Create a temp config file without theme
+	tempDir := t.TempDir()
+	home := filepath.Join(tempDir, "home")
+	configDir := filepath.Join(home, ".config", "ghissues")
+	configFile := filepath.Join(configDir, "config.toml")
+
+	// Set HOME environment variable
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", home)
+	defer os.Setenv("HOME", oldHome)
+
+	// Create config directory
+	os.MkdirAll(configDir, 0755)
+
+	// Write config without theme
+	configContent := `
+repository = "test/repo"
+auth_method = "env"
+token = "test-token"
+
+[database]
+path = "test.db"
+`
+	err := os.WriteFile(configFile, []byte(configContent), 0600)
+	if err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	// Load config
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Check that default theme is applied
+	if cfg.Display.Theme != DefaultTheme() {
+		t.Errorf("Expected default theme %q, got %q", DefaultTheme(), cfg.Display.Theme)
+	}
+}

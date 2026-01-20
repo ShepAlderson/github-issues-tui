@@ -39,6 +39,15 @@ func main() {
 		return
 	}
 
+	// Check for 'themes' subcommand
+	if len(os.Args) > 1 && os.Args[1] == "themes" {
+		if err := runThemes(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	// Check for 'tui' subcommand
 	if len(os.Args) > 1 && os.Args[1] == "tui" {
 		if err := runTUI(); err != nil {
