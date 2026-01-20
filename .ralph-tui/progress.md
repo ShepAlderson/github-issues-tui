@@ -670,3 +670,13 @@ help modal to handle keyboard dismissal\n\n**Files Changed:**\n- `cmd/ghissues/t
 handler\n- `cmd/ghissues/tui.go` - Applied theme colors to issue list and detail views\n- `cmd/ghissues/tui_test.go` - Added `TestGetThemeColor`\n\n**Acceptance Criteria Met:**\n- ✅ 6 built-in themes: default, dracula, gruvbox, nord, solarized-dark, solarized-light\n- ✅ Theme selected via config file `display.theme`\n- ✅ Theme preview/change with `ghissues themes` command\n- ✅ Uses tcell for terminal UI styling via `tcell.NewRGBColor()`\n\nAll tests pass and `go vet` / `go build` are clean.\n\n
 
 ---
+## ✓ Iteration 14 - US-014: Multi-Repository Configuration
+*2026-01-20T09:50:51.571Z (274s)*
+
+**Status:** Completed
+
+**Notes:**
+ion:\n"}],"model":"hf:MiniMaxAI/MiniMax-M2.1","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":87232,"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"context_management":null},"parent_tool_use_id":null,"session_id":"0613b8e4-1d9c-4dcf-a08d-f0d17bfd1e2c","uuid":"20ccfe06-7648-44ad-b692-57a40e799a53"}
+{"type":"assistant","message":{"id":"msg_c7925ae3-dd9b-4c33-b839-1fd777025646","type":"message","role":"assistant","content":[{"type":"text","text":"\n\n
+
+---

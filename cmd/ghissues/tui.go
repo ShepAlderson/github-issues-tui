@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -224,13 +225,14 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 	}
 
 	// Function to fetch and display issues
-	issues := []db.IssueList{}
+	var issues []db.IssueList
 	displayIssues := func() {
 		// Fetch issues from database with current sort settings
-		issues, err = db.ListIssuesSorted(database, owner, repo, currentSort, currentSortOrder)
-		if err != nil {
-			// Just log the error, don't fail
-			_ = fmt.Errorf("failed to list issues: %w", err)
+		var fetchErr error
+		issues, fetchErr = db.ListIssuesSorted(database, owner, repo, currentSort, currentSortOrder)
+		if fetchErr != nil {
+			// Log the error to stderr
+			fmt.Fprintf(os.Stderr, "Error loading issues: %v\n", fetchErr)
 			issues = []db.IssueList{}
 		}
 
@@ -359,9 +361,58 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 		app.SetFocus(commentsView)
 	}
 
-	// Set up navigation handlers using tcell events
+	// Set up input capture to handle navigation and update detail view
 	issueList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// Handle navigation keys that change selection
 		switch event.Key() {
+		case tcell.KeyUp:
+			if currentIndex > 0 {
+				currentIndex--
+				if currentIndex < len(issues) {
+					issueNum := issues[currentIndex].Number
+					detail, err := db.GetIssueDetail(database, owner, repo, issueNum)
+					if err == nil && detail != nil {
+						detailView.SetText(formatIssueDetailFull(detail))
+						app.Draw()
+					}
+				}
+			}
+			return event
+		case tcell.KeyDown:
+			if currentIndex < len(issues)-1 {
+				currentIndex++
+				if currentIndex < len(issues) {
+					issueNum := issues[currentIndex].Number
+					detail, err := db.GetIssueDetail(database, owner, repo, issueNum)
+					if err == nil && detail != nil {
+						detailView.SetText(formatIssueDetailFull(detail))
+						app.Draw()
+					}
+				}
+			}
+			return event
+		case tcell.KeyHome:
+			if len(issues) > 0 {
+				currentIndex = 0
+				issueNum := issues[0].Number
+				detail, err := db.GetIssueDetail(database, owner, repo, issueNum)
+				if err == nil && detail != nil {
+					detailView.SetText(formatIssueDetailFull(detail))
+					app.Draw()
+				}
+			}
+			return event
+		case tcell.KeyEnd:
+			if len(issues) > 0 {
+				currentIndex = len(issues) - 1
+				issueNum := issues[currentIndex].Number
+				detail, err := db.GetIssueDetail(database, owner, repo, issueNum)
+				if err == nil && detail != nil {
+					detailView.SetText(formatIssueDetailFull(detail))
+					app.Draw()
+				}
+			}
+			return event
 		case tcell.KeyRune:
 			switch event.Rune() {
 			case 'q', 'Q':
@@ -408,68 +459,58 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 					isRefreshing = true
 					minorError = "" // Clear previous minor error
 					updateStatusBar()
-
-					// Run refresh in a goroutine
-					go func() {
-						progress := func(current, total int, status string) {
-							refreshStatus = status
-							app.QueueUpdateDraw(func() {
-								updateStatusBar()
-							})
+				}
+				return nil
+			case 'j':
+				// Move down (vi-style)
+				if currentIndex < len(issues)-1 {
+					currentIndex++
+					if currentIndex < len(issues) {
+						issueNum := issues[currentIndex].Number
+						detail, err := db.GetIssueDetail(database, owner, repo, issueNum)
+						if err == nil && detail != nil {
+							detailView.SetText(formatIssueDetailFull(detail))
+							app.Draw()
 						}
-
-						err := RefreshSync(dbPath, cfg, repoFlag, progress)
-
-						app.QueueUpdateDraw(func() {
-							isRefreshing = false
-							refreshStatus = ""
-							if err != nil {
-								uiErr := errors.NewUIError(err)
-								if uiErr.Category == errors.CategoryCritical {
-									// Show critical error as modal
-									showCriticalErrorModal(app, pages, uiErr)
-								} else {
-									// Show minor error in status bar
-									minorError = uiErr.Hint.Message
-								}
-							}
-							updateStatusBar()
-							// Refresh the issue list
-							displayIssues()
-						})
-					}()
-				} else if minorError != "" {
-					// If there's a minor error, pressing 'r' clears it and retries
-					minorError = ""
-					// Trigger refresh
-					isRefreshing = true
-					updateStatusBar()
-
-					go func() {
-						progress := func(current, total int, status string) {
-							refreshStatus = status
-							app.QueueUpdateDraw(func() {
-								updateStatusBar()
-							})
+					}
+				}
+				return nil
+			case 'k':
+				// Move up (vi-style)
+				if currentIndex > 0 {
+					currentIndex--
+					if currentIndex < len(issues) {
+						issueNum := issues[currentIndex].Number
+						detail, err := db.GetIssueDetail(database, owner, repo, issueNum)
+						if err == nil && detail != nil {
+							detailView.SetText(formatIssueDetailFull(detail))
+							app.Draw()
 						}
-
-						err := RefreshSync(dbPath, cfg, repoFlag, progress)
-
-						app.QueueUpdateDraw(func() {
-							isRefreshing = false
-							refreshStatus = ""
-							if err != nil {
-								uiErr := errors.NewUIError(err)
-								if uiErr.Category == errors.CategoryCritical {
-									showCriticalErrorModal(app, pages, uiErr)
-								} else {
-									minorError = uiErr.Hint.Message
-								}
-							}
-							updateStatusBar()
-							displayIssues()
-						})
-					}()
+					}
+				}
+				return nil
+			case 'g':
+				// Go to first (vi-style Home)
+				if len(issues) > 0 {
+					currentIndex = 0
+					issueNum := issues[0].Number
+					detail, err := db.GetIssueDetail(database, owner, repo, issueNum)
+					if err == nil && detail != nil {
+						detailView.SetText(formatIssueDetailFull(detail))
+						app.Draw()
+					}
+				}
+				return nil
+			case 'G':
+				// Go to last (vi-style End)
+				if len(issues) > 0 {
+					currentIndex = len(issues) - 1
+					issueNum := issues[currentIndex].Number
+					detail, err := db.GetIssueDetail(database, owner, repo, issueNum)
+					if err == nil && detail != nil {
+						detailView.SetText(formatIssueDetailFull(detail))
+						app.Draw()
+					}
 				}
 				return nil
 			}
@@ -763,6 +804,7 @@ func showHelp(app *tview.Application, pages *tview.Pages) {
 
 	pages.AddPage("help", helpView, true, true)
 	pages.SwitchToPage("help")
+	app.SetFocus(helpView)
 }
 
 // ParseColumns parses a comma-separated list of column names
@@ -956,6 +998,7 @@ func showCriticalErrorModal(app *tview.Application, pages *tview.Pages, err *err
 
 	pages.AddPage("error", modal, true, true)
 	pages.SwitchToPage("error")
+	app.SetFocus(modal)
 }
 
 // getThemeColor converts a hex color string to tcell.Color
