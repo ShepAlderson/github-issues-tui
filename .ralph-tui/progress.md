@@ -16,6 +16,18 @@ after each iteration and included in agent prompts for context.
 - This outputs to stderr which can be captured separately from the TUI display
 - Remember to import both "fmt" and "os" packages
 
+### Terminal Capability Check Pattern
+- **Always** check if stdin is a terminal before launching a TUI application using `term.IsTerminal(int(os.Stdin.Fd()))`
+- Provide clear error messages when the check fails, explaining both the problem and the solution
+- Check pattern: `if !term.IsTerminal(int(os.Stdin.Fd())) { return error with clear message }`
+- This prevents confusing errors when input is redirected or piped
+
+### Environment-Based TUI Debugging Pattern
+- Use the `GHISSUES_TUI_OPTIONS` environment variable to allow users to customize TUI initialization for debugging
+- Support comma-separated flags: `nomouse`, `noaltscreen`
+- Example: `GHISSUES_TUI_OPTIONS=noaltscreen ghissues` keeps output in terminal history
+- This provides a user-friendly debugging interface without requiring code changes or recompilation
+
 ---
 
 ## 2026-01-19 - US-1: Diagnose Input Capture Failure
@@ -99,5 +111,26 @@ ty, etc.\n- ✅ **No performance impact** - Single option addition with zero ove
 
 **Notes:**
 n)`) was the critical change that enabled all these keybindings to work properly. The comprehensive test suite that was already in place validates that all keyboard interactions function as expected.\n\n### Files Modified\n\n- `.ralph-tui/progress.md` - Added US-3 completion notes\n- `tasks/prd.json` - Marked US-3 as complete\n\n### Commit\n\nCreated commit `65bc591` with message:\n```\nfeat: US-3 - Verify All Keybindings Work\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\n```\n\n
+
+---
+
+## 2026-01-19 - US-4: Alternative Diagnostics (If Primary Fix Fails)
+- **What was implemented:** Added defensive terminal capability checks and environment variable support for TUI debugging
+- **Files changed:**
+  - `cmd/ghissues/main.go`: Added `checkTerminalCapabilities()` and `getTUIOptions()` functions, updated TUI launch to use them
+  - `cmd/test-tui/main.go`: Added same functions to test harness for consistency
+  - `cmd/ghissues/main_test.go`: Added tests for terminal checks and TUI options (documentation tests)
+  - `docs/TROUBLESHOOTING.md`: Created comprehensive troubleshooting guide with edge cases and debugging options
+  - `.ralph-tui/progress.md`: Added US-4 completion notes and new pattern
+- **Learnings:**
+  - **Terminal detection:** Using `golang.org/x/term.IsTerminal(int(os.Stdin.Fd()))` is the standard way to check if stdin is a terminal
+  - **Clear error messages:** When a TUI application fails to launch, the error message should explain both the problem and the solution
+  - **Environment-based debugging:** Adding `GHISSUES_TUI_OPTIONS` environment variable allows users to test different bubbletea initialization flags without recompiling
+  - **Documentation is critical:** Edge cases and troubleshooting scenarios should be documented proactively, not after issues are reported
+  - **Test-driven development:** Writing tests first (even documentation tests) helps clarify requirements and ensures the implementation is testable
+  - **Consistency across binaries:** Both `ghissues` and `test-tui` should have the same terminal checks and option handling
+  - **Pattern discovered:** Environment variable parsing with comma-separated flags (`nomouse,noaltscreen`) provides a clean debugging interface
+  - **Gotcha:** Cannot easily write automated tests for terminal detection without mocking file descriptors, so documentation tests serve as reminders
+  - **Key insight:** The primary fix (US-2) works, but defensive checks catch edge cases like piped input or non-terminal environments early with helpful messages
 
 ---
