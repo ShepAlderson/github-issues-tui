@@ -488,3 +488,43 @@ func TestGetLastSyncedDisplay(t *testing.T) {
 		t.Errorf("GetLastSyncedDisplay('') should contain 'never', got %q", result)
 	}
 }
+
+func TestGetFooterDisplay(t *testing.T) {
+	tests := []struct {
+		name                    string
+		inCommentsView          bool
+		commentsMarkdownRendered bool
+		expectedContains        []string
+	}{
+		{
+			name:                    "issue list view",
+			inCommentsView:          false,
+			commentsMarkdownRendered: false,
+			expectedContains:        []string{"[yellow]?[-] help", "[yellow]Enter[-] comments", "[yellow]r[-] refresh"},
+		},
+		{
+			name:                    "comments view with markdown rendered",
+			inCommentsView:          true,
+			commentsMarkdownRendered: true,
+			expectedContains:        []string{"[yellow]q/Esc[-] back", "[yellow]m[-] markdown"},
+		},
+		{
+			name:                    "comments view with raw markdown",
+			inCommentsView:          true,
+			commentsMarkdownRendered: false,
+			expectedContains:        []string{"[yellow]q/Esc[-] back", "[yellow]m[-] raw"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetFooterDisplay(tt.inCommentsView, tt.commentsMarkdownRendered)
+			for _, expected := range tt.expectedContains {
+				if !contains(result, expected) {
+					t.Errorf("GetFooterDisplay(%v, %v) should contain %q, got %q",
+						tt.inCommentsView, tt.commentsMarkdownRendered, expected, result)
+				}
+			}
+		})
+	}
+}

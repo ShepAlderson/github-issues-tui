@@ -107,6 +107,20 @@ after each iteration and included in agent prompts for context.
 - Modal dialogs require user acknowledgment via OK button
 - Press 'r' on minor error to clear and retry
 
+**Footer Pattern for Context-Sensitive Keybindings**: Display context-sensitive common keys in a persistent footer:
+- Add a dedicated footer TextView below the status bar
+- Create `GetFooterDisplay(viewState, markdownState)` function that returns context-appropriate text
+- Use `SetDynamicColors(true)` on footer TextView for colored key indicators
+- Update footer in `updateFooter()` closure when switching views
+- Include the footer in the main Flex layout (FlexRow) below the status bar
+- Call `updateFooter()` whenever view state changes (displayIssues, returnToIssueList, showComments)
+
+**Keyboard Dismissal Pattern for Modals**: Handle keyboard input for dismissing help/dialog modals:
+- Add `SetInputCapture()` on modal views to intercept key events
+- Handle `tcell.KeyEscape` and `tcell.KeyRune`('?') for dismissal
+- Call `pages.SwitchToPage("main")` and `app.SetFocus(app.GetFocus())` to dismiss
+- Return `nil` from the input capture to prevent event propagation
+
 ---
 
 ## 2026-01-20 - US-013
@@ -519,4 +533,38 @@ tance Criteria Met\n1. **Minor errors shown in status bar** - Network timeouts, 
   - Gotchas encountered:
     - Future timestamps need to be handled (show as "just now")
     - Test timestamps using Add() need correct sign (negative for past, positive for future)
+---
+## ✓ Iteration 11 - US-010: Last Synced Indicator
+*2026-01-20T09:36:56.579Z (159s)*
+
+**Status:** Completed
+
+**Notes:**
+e>\" | Sort: ... | [Markdown] | ...\n\n4. **Added tests** (`cmd/ghissues/tui_test.go`):\n   - `TestFormatRelativeTime` - 9 test cases covering various time ranges\n   - `TestGetLastSyncedDisplay` - 2 test cases for the display function\n\n**Acceptance Criteria Met:**\n- ✅ Status bar shows \"Last synced: <relative time>\" (e.g., \"5 minutes ago\")\n- ✅ Timestamp already stored in database via `synced_at` column\n- ✅ Updates after each successful sync (via `displayIssues()` call after refresh)\n\n
+
+---
+
+## 2026-01-20 - US-011
+- What was implemented:
+  - Added persistent footer TextView below status bar for context-sensitive keybindings
+  - Created `GetFooterDisplay(inCommentsView, commentsMarkdownRendered)` function for testable footer text
+  - Footer shows "help | comments | refresh" in issue list view
+  - Footer shows "back | markdown/raw" in comments view
+  - Added `SetInputCapture()` on help modal to dismiss with ? or Esc keys
+  - Updated help modal text to indicate ? dismisses help
+
+- Files changed:
+  - `cmd/ghissues/tui.go` (added footer creation, GetFooterDisplay function, showHelp keyboard dismissal)
+  - `cmd/ghissues/tui_test.go` (added TestGetFooterDisplay with 3 test cases)
+
+- **Learnings:**
+  - Patterns discovered:
+    - Footer Pattern: Use separate TextView with SetDynamicColors(true) for context-sensitive keybindings
+    - Testable Function Pattern: Extract footer text generation to standalone GetFooterDisplay function
+    - Keyboard Dismissal Pattern: Use SetInputCapture on modal to handle ? and Esc for dismissal
+  - Gotchas encountered:
+    - Modal.SetInputCapture may not capture all keys - need proper focus management
+    - Footer TextView needs SetDynamicColors(true) to render [yellow] color tags
+    - Must call updateFooter() when switching views (returnToIssueList, showComments)
+
 ---

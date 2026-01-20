@@ -83,6 +83,11 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 	statusBar := tview.NewTextView()
 	statusBar.SetTextAlign(tview.AlignLeft)
 
+	// Create footer for context-sensitive keybindings
+	footer := tview.NewTextView()
+	footer.SetTextAlign(tview.AlignCenter)
+	footer.SetDynamicColors(true)
+
 	// Comments view state - must be declared before updateStatusBar
 	commentsMarkdownRendered := true
 	inCommentsView := false
@@ -123,6 +128,11 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 			statusBar.SetText(fmt.Sprintf(" ghissues | %s/%s | %s | %s | %sj/k or arrows to navigate | q to quit | s to sort | S to reverse | ? for help | m for markdown toggle | r to refresh ",
 				owner, repo, lastSyncedText, sortText, markdownText))
 		}
+	}
+
+	// Function to update footer with context-sensitive keybindings
+	updateFooter := func() {
+		footer.SetText(GetFooterDisplay(inCommentsView, commentsMarkdownRendered))
 	}
 
 	// Function to format issue detail with full information
@@ -219,6 +229,8 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 
 		// Update status bar
 		updateStatusBar()
+		// Update footer
+		updateFooter()
 
 		// Update detail view for first selection
 		if len(issues) > 0 {
@@ -244,6 +256,7 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 		inCommentsView = false
 		commentsMarkdownRendered = true // Reset markdown state for next time
 		updateStatusBar()
+		updateFooter()
 		app.SetFocus(issueList)
 	}
 
@@ -300,6 +313,7 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 					// Toggle markdown rendering in comments
 					commentsMarkdownRendered = !commentsMarkdownRendered
 					updateStatusBar()
+					updateFooter()
 					// Refresh comments view
 					var refreshSb strings.Builder
 					refreshSb.WriteString(fmt.Sprintf(" #%d %s\n\n", issueNum, issueTitle))
@@ -321,6 +335,7 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 		pages.AddPage("comments", commentsView, true, true)
 		inCommentsView = true
 		updateStatusBar()
+		updateFooter()
 		pages.SwitchToPage("comments")
 		app.SetFocus(commentsView)
 	}
@@ -506,6 +521,7 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 	mainFlex.AddItem(header, 1, 0, false)
 	mainFlex.AddItem(pages, 0, 1, true)
 	mainFlex.AddItem(statusBar, 1, 0, false)
+	mainFlex.AddItem(footer, 1, 0, false)
 
 	app.SetRoot(mainFlex, true)
 	app.SetFocus(issueList)
@@ -649,6 +665,22 @@ func GetLastSyncedDisplay(timestamp string) string {
 	return fmt.Sprintf("Last synced: %s", FormatRelativeTime(timestamp))
 }
 
+// GetFooterDisplay returns the footer text based on the current view context
+func GetFooterDisplay(inCommentsView, commentsMarkdownRendered bool) string {
+	if inCommentsView {
+		// Comments view footer
+		markdownText := ""
+		if commentsMarkdownRendered {
+			markdownText = "[yellow]m[-] markdown"
+		} else {
+			markdownText = "[yellow]m[-] raw"
+		}
+		return fmt.Sprintf(" [yellow]q/Esc[-] back  %s ", markdownText)
+	}
+	// Issue list view footer
+	return " [yellow]?[-] help  [yellow]Enter[-] comments  [yellow]r[-] refresh "
+}
+
 // showHelp shows a help modal
 func showHelp(app *tview.Application, pages *tview.Pages) {
 	helpText := `
@@ -676,7 +708,7 @@ func showHelp(app *tview.Application, pages *tview.Pages) {
    S              - Reverse sort order
 
  Other:
-   ?              - Show this help
+   ?              - Show this help / Dismiss help
    q / Esc        - Quit help / Quit application
    Ctrl+C         - Force quit
 
@@ -687,6 +719,27 @@ func showHelp(app *tview.Application, pages *tview.Pages) {
 	helpView.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 		pages.SwitchToPage("main")
 		app.SetFocus(app.GetFocus())
+	})
+
+	// Add input capture to dismiss help with ? or Esc
+	helpView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyEscape:
+			pages.SwitchToPage("main")
+			app.SetFocus(app.GetFocus())
+			return nil
+		case tcell.KeyRune:
+			switch event.Rune() {
+			case '?':
+				pages.SwitchToPage("main")
+				app.SetFocus(app.GetFocus())
+				return nil
+			}
+		case tcell.KeyCtrlC:
+			app.Stop()
+			return nil
+		}
+		return event
 	})
 
 	pages.AddPage("help", helpView, true, true)
