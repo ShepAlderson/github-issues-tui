@@ -278,13 +278,41 @@ func (db *DB) GetAllOpenIssues() ([]*Issue, error) {
 }
 
 // GetIssuesForDisplay retrieves issues with minimal fields for display
+// defaulting to created_at ascending
 func (db *DB) GetIssuesForDisplay() ([]*Issue, error) {
-	rows, err := db.conn.Query(`
+	return db.GetIssuesForDisplaySorted("created_at", false)
+}
+
+// GetIssuesForDisplaySorted retrieves issues with minimal fields for display
+func (db *DB) GetIssuesForDisplaySorted(sortField string, descending bool) ([]*Issue, error) {
+	// Validate sort field to prevent SQL injection
+	validFields := map[string]bool{
+		"updated_at":    true,
+		"created_at":    true,
+		"number":        true,
+		"comment_count": true,
+	}
+
+	if !validFields[sortField] {
+		// Default to updated_at descending if invalid field
+		sortField = "updated_at"
+		descending = true
+	}
+
+	// Build query with validated sort field
+	orderDirection := "ASC"
+	if descending {
+		orderDirection = "DESC"
+	}
+
+	query := fmt.Sprintf(`
 		SELECT number, title, author, created_at, comment_count
 		FROM issues
 		WHERE state = 'open'
-		ORDER BY created_at ASC
-	`)
+		ORDER BY %s %s
+	`, sortField, orderDirection)
+
+	rows, err := db.conn.Query(query)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get issues for display: %w", err)

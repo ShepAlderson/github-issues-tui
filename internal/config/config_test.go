@@ -144,3 +144,83 @@ func TestConfigExists(t *testing.T) {
 		t.Error("ConfigExists should return true for existing file")
 	}
 }
+
+func TestConfigSortPreferences(t *testing.T) {
+	// Create a temporary config directory
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, "config")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+
+	configPath := filepath.Join(configDir, "config.toml")
+
+	// Create a config with sort preferences
+	configContent := `
+repository = "testuser/testrepo"
+token = "test-token"
+
+[display]
+columns = ["number", "title", "author", "created_at", "comment_count"]
+
+[display.sort]
+field = "updated_at"
+descending = true
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	// Load the config
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("LoadConfig should return config for existing file")
+	}
+
+	// Verify sort preferences were loaded
+	if cfg.Display.Sort.Field != "updated_at" {
+		t.Errorf("Expected sort field 'updated_at', got %q", cfg.Display.Sort.Field)
+	}
+	if !cfg.Display.Sort.Descending {
+		t.Error("Expected descending sort order")
+	}
+
+	// Test default sort when not specified
+	if err := os.Remove(configPath); err != nil {
+		t.Fatalf("Failed to remove config: %v", err)
+	}
+
+	configContentNoSort := `
+repository = "testuser/testrepo"
+token = "test-token"
+
+[display]
+columns = ["number", "title", "author", "created_at", "comment_count"]
+`
+	if err := os.WriteFile(configPath, []byte(configContentNoSort), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	cfg, err = LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	// When no sort is specified, it should default to empty values
+	if cfg.Display.Sort.Field != "" {
+		t.Errorf("Expected empty sort field, got %q", cfg.Display.Sort.Field)
+	}
+}
+
+func TestGetDefaultSort(t *testing.T) {
+	sort := GetDefaultSort()
+	if sort.Field != "updated_at" {
+		t.Errorf("Expected default sort field 'updated_at', got %q", sort.Field)
+	}
+	if !sort.Descending {
+		t.Error("Expected default descending order")
+	}
+}

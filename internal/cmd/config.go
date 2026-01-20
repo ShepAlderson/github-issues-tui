@@ -26,6 +26,8 @@ func RunConfigCommand(configPath string, input io.Reader, output io.Writer) erro
 	}
 	// Set default display columns
 	cfg.Display.Columns = config.GetDefaultDisplayColumns()
+	// Set default sort preferences
+	cfg.Display.Sort = config.GetDefaultSort()
 
 	// Save configuration
 	if err := config.SaveConfig(configPath, cfg); err != nil {

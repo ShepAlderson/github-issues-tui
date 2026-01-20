@@ -16,7 +16,14 @@ type Config struct {
 	} `toml:"database"`
 	Display struct {
 		Columns []string `toml:"columns"`
+		Sort    Sort     `toml:"sort"`
 	} `toml:"display"`
+}
+
+// Sort represents sort preferences
+type Sort struct {
+	Field      string `toml:"field"`
+	Descending bool   `toml:"descending"`
 }
 
 // LoadConfig loads configuration from the specified path
@@ -77,4 +84,12 @@ func ConfigExists(configPath string) (bool, error) {
 // GetDefaultDisplayColumns returns the default display columns
 func GetDefaultDisplayColumns() []string {
 	return []string{"number", "title", "author", "created_at", "comment_count"}
+}
+
+// GetDefaultSort returns the default sort preferences
+func GetDefaultSort() Sort {
+	return Sort{
+		Field:      "updated_at",
+		Descending: true,
+	}
 }

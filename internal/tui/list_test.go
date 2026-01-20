@@ -349,3 +349,111 @@ func TestListModel_View(t *testing.T) {
 		t.Error("Expected issue count in status bar")
 	}
 }
+
+func TestListModel_Sort(t *testing.T) {
+	// Create a test database with issues having different dates
+	dbPath := "/tmp/ghissues_test_sort.db"
+	database, err := db.NewDB(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
+	defer func() {
+		database.Close()
+		os.Remove(dbPath)
+	}()
+
+	// Insert test issues with different dates and comment counts
+	testIssues := []*db.Issue{
+		{
+			Number:       1,
+			Title:        "Old Issue",
+			Author:       "user1",
+			CreatedAt:    "2024-01-01T10:00:00Z",
+			UpdatedAt:    "2024-01-01T10:00:00Z",
+			CommentCount: 5,
+			State:        "open",
+		},
+		{
+			Number:       2,
+			Title:        "Recent Issue",
+			Author:       "user2",
+			CreatedAt:    "2024-01-03T12:00:00Z",
+			UpdatedAt:    "2024-01-03T12:00:00Z",
+			CommentCount: 10,
+			State:        "open",
+		},
+		{
+			Number:       3,
+			Title:        "Middle Issue",
+			Author:       "user3",
+			CreatedAt:    "2024-01-02T11:00:00Z",
+			UpdatedAt:    "2024-01-02T11:00:00Z",
+			CommentCount: 2,
+			State:        "open",
+		},
+	}
+
+	for _, issue := range testIssues {
+		if err := database.StoreIssue(issue); err != nil {
+			t.Fatalf("Failed to store test issue: %v", err)
+		}
+	}
+
+	// Create config with default sort (updated_at descending)
+	cfg := &config.Config{}
+	cfg.Display.Columns = config.GetDefaultDisplayColumns()
+	cfg.Display.Sort = config.Sort{
+		Field:      "updated_at",
+		Descending: true,
+	}
+
+	model, err := NewListModel(dbPath, cfg)
+	if err != nil {
+		t.Fatalf("Failed to create list model: %v", err)
+	}
+	defer model.Close()
+
+	// Verify initial sort (updated_at descending)
+	if model.sortField != "updated_at" {
+		t.Errorf("Expected initial sort field 'updated_at', got %q", model.sortField)
+	}
+	if !model.sortDescending {
+		t.Error("Expected initial sort direction to be descending")
+	}
+
+	// Test cycle sort (should change to next option)
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	model = updated.(*ListModel)
+
+	if model.sortField != "created_at" {
+		t.Errorf("Expected sort field 'created_at' after cycling, got %q", model.sortField)
+	}
+
+	// Test cycle sort again
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	model = updated.(*ListModel)
+
+	if model.sortField != "number" {
+		t.Errorf("Expected sort field 'number' after second cycle, got %q", model.sortField)
+	}
+
+	// Test toggle direction (S)
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'S'}})
+	model = updated.(*ListModel)
+
+	if model.sortField != "number" {
+		t.Errorf("Expected sort field to remain 'number' after toggling direction, got %q", model.sortField)
+	}
+	if model.sortDescending {
+		t.Error("Expected sort direction to be ascending after toggle")
+	}
+
+	// Test status bar shows sort indicator
+	view := model.View()
+	if !bytes.Contains([]byte(view), []byte("number")) {
+		t.Error("Expected sort field in status bar")
+	}
+	if !bytes.Contains([]byte(view), []byte("↑")) {
+		t.Error("Expected ascending indicator in status bar")
+	}
+}

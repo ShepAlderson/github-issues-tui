@@ -245,3 +245,126 @@ func TestDB_ClearAllIssues(t *testing.T) {
 		t.Errorf("Expected 0 issues after clearing, got %d", len(openIssues))
 	}
 }
+
+func TestDB_GetIssuesForDisplaySorted(t *testing.T) {
+	db, err := NewDB(":memory:")
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+	defer db.Close()
+
+	// Store issues with different dates and comment counts
+	issues := []*Issue{
+		{
+			Number:       1,
+			Title:        "Issue 1",
+			Body:         "Body 1",
+			State:        "open",
+			Author:       "user1",
+			CreatedAt:    "2026-01-20T10:00:00Z",
+			UpdatedAt:    "2026-01-22T15:30:00Z",
+			CommentCount: 5,
+		},
+		{
+			Number:       2,
+			Title:        "Issue 2",
+			Body:         "Body 2",
+			State:        "open",
+			Author:       "user2",
+			CreatedAt:    "2026-01-19T09:00:00Z",
+			UpdatedAt:    "2026-01-23T12:00:00Z",
+			CommentCount: 10,
+		},
+		{
+			Number:       3,
+			Title:        "Issue 3",
+			Body:         "Body 3",
+			State:        "open",
+			Author:       "user3",
+			CreatedAt:    "2026-01-21T11:00:00Z",
+			UpdatedAt:    "2026-01-21T08:00:00Z",
+			CommentCount: 2,
+		},
+	}
+
+	for _, issue := range issues {
+		if err := db.StoreIssue(issue); err != nil {
+			t.Fatalf("Failed to store issue: %v", err)
+		}
+	}
+
+	tests := []struct {
+		name           string
+		sortField      string
+		descending     bool
+		expectedOrder  []int // Expected issue numbers in order
+	}{
+		{
+			name:          "Sort by updated_at descending (default)",
+			sortField:     "updated_at",
+			descending:    true,
+			expectedOrder: []int{2, 1, 3}, // Most recent: #2 (2026-01-23), then #1 (2026-01-22), then #3 (2026-01-21)
+		},
+		{
+			name:          "Sort by updated_at ascending",
+			sortField:     "updated_at",
+			descending:    false,
+			expectedOrder: []int{3, 1, 2}, // Oldest: #3 (2026-01-21), then #1 (2026-01-22), then #2 (2026-01-23)
+		},
+		{
+			name:          "Sort by created_at descending",
+			sortField:     "created_at",
+			descending:    true,
+			expectedOrder: []int{3, 1, 2}, // Most recent: #3 (2026-01-21), then #1 (2026-01-20), then #2 (2026-01-19)
+		},
+		{
+			name:          "Sort by created_at ascending",
+			sortField:     "created_at",
+			descending:    false,
+			expectedOrder: []int{2, 1, 3}, // Oldest: #2 (2026-01-19), then #1 (2026-01-20), then #3 (2026-01-21)
+		},
+		{
+			name:          "Sort by number descending",
+			sortField:     "number",
+			descending:    true,
+			expectedOrder: []int{3, 2, 1}, // #3, #2, #1
+		},
+		{
+			name:          "Sort by number ascending",
+			sortField:     "number",
+			descending:    false,
+			expectedOrder: []int{1, 2, 3}, // #1, #2, #3
+		},
+		{
+			name:          "Sort by comment_count descending",
+			sortField:     "comment_count",
+			descending:    true,
+			expectedOrder: []int{2, 1, 3}, // Most comments: #2 (10), then #1 (5), then #3 (2)
+		},
+		{
+			name:          "Sort by comment_count ascending",
+			sortField:     "comment_count",
+			descending:    false,
+			expectedOrder: []int{3, 1, 2}, // Fewest comments: #3 (2), then #1 (5), then #2 (10)
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			issues, err := db.GetIssuesForDisplaySorted(tt.sortField, tt.descending)
+			if err != nil {
+				t.Fatalf("Failed to get issues for display: %v", err)
+			}
+
+			if len(issues) != len(tt.expectedOrder) {
+				t.Fatalf("Expected %d issues, got %d", len(tt.expectedOrder), len(issues))
+			}
+
+			for i, issue := range issues {
+				if issue.Number != tt.expectedOrder[i] {
+					t.Errorf("Expected issue #%d at index %d, got issue #%d", tt.expectedOrder[i], i, issue.Number)
+				}
+			}
+		})
+	}
+}

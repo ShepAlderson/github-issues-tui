@@ -24,6 +24,12 @@ type ListModel struct {
 	height    int
 	quitting  bool
 	err       error
+
+	// Sort state
+	sortField      string
+	sortDescending bool
+	sortOptions    []string
+	sortIndex      int
 }
 
 // NewListModel creates a new issue list model
@@ -34,8 +40,14 @@ func NewListModel(dbPath string, cfg *config.Config) (*ListModel, error) {
 		return nil, fmt.Errorf("failed to initialize database: %w", err)
 	}
 
-	// Fetch issues for display
-	issues, err := database.GetIssuesForDisplay()
+	// Fetch issues for display using config sort preferences or defaults
+	sortField := cfg.Display.Sort.Field
+	if sortField == "" {
+		sortField = "updated_at" // Default field
+	}
+	sortDescending := cfg.Display.Sort.Descending
+
+	issues, err := database.GetIssuesForDisplaySorted(sortField, sortDescending)
 	if err != nil {
 		database.Close()
 		return nil, fmt.Errorf("failed to fetch issues: %w", err)
@@ -93,11 +105,15 @@ func NewListModel(dbPath string, cfg *config.Config) (*ListModel, error) {
 	t.SetStyles(s)
 
 	return &ListModel{
-		db:       database,
-		config:   cfg,
-		issues:   issues,
-		table:    t,
-		selected: 0,
+		db:             database,
+		config:         cfg,
+		issues:         issues,
+		table:          t,
+		selected:       0,
+		sortField:      sortField,
+		sortDescending: sortDescending,
+		sortOptions:    []string{"updated_at", "created_at", "number", "comment_count"},
+		sortIndex:      0,
 	}, nil
 }
 
@@ -136,6 +152,24 @@ func (m *ListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// TODO: In future stories, show issue detail view
 			if m.selected < len(m.issues) && m.selected >= 0 {
 				m.err = fmt.Errorf("issue detail view not yet implemented (selected issue #%d)", m.issues[m.selected].Number)
+			}
+
+		case "s":
+			// Cycle to next sort option
+			m.cycleSort(false)
+
+			// Refresh the issues with new sort
+			if err := m.refreshIssues(); err != nil {
+				m.err = fmt.Errorf("failed to refresh issues: %w", err)
+			}
+
+		case "S":
+			// Toggle sort direction
+			m.cycleSort(true)
+
+			// Refresh the issues with new sort
+			if err := m.refreshIssues(); err != nil {
+				m.err = fmt.Errorf("failed to refresh issues: %w", err)
 			}
 		}
 	}
@@ -185,7 +219,15 @@ func (m ListModel) renderStatusBar() string {
 		return ""
 	}
 
-	status := fmt.Sprintf(" %d/%d issues ", m.selected+1, len(m.issues))
+	// Build sort indicator
+	sortIndicator := m.sortField
+	if m.sortDescending {
+		sortIndicator = sortIndicator + " ↓"
+	} else {
+		sortIndicator = sortIndicator + " ↑"
+	}
+
+	status := fmt.Sprintf(" %d/%d issues | Sort: %s ", m.selected+1, len(m.issues), sortIndicator)
 
 	// Style the status bar
 	statusStyle := lipgloss.NewStyle().
@@ -260,6 +302,69 @@ func formatIssueField(issue *db.Issue, field string) string {
 	default:
 		return ""
 	}
+}
+
+// cycleSort cycles to the next sort option or toggles direction
+func (m *ListModel) cycleSort(toggleDirectionOnly bool) {
+	if toggleDirectionOnly {
+		// Toggle sort direction
+		m.sortDescending = !m.sortDescending
+	} else {
+		// Find current sort field index
+		for i, option := range m.sortOptions {
+			if option == m.sortField {
+				m.sortIndex = i
+				break
+			}
+		}
+
+		// Move to next sort option
+		m.sortIndex = (m.sortIndex + 1) % len(m.sortOptions)
+		m.sortField = m.sortOptions[m.sortIndex]
+	}
+}
+
+// refreshIssues refreshes the issues with current sort settings
+func (m *ListModel) refreshIssues() error {
+	// Fetch issues with current sort
+	issues, err := m.db.GetIssuesForDisplaySorted(m.sortField, m.sortDescending)
+	if err != nil {
+		return err
+	}
+
+	// Update issues and rebuild table rows
+	m.issues = issues
+
+	// Get current columns configuration
+	columns := m.config.Display.Columns
+	if len(columns) == 0 {
+		columns = config.GetDefaultDisplayColumns()
+	}
+
+	// Rebuild table rows
+	rows := make([]table.Row, 0, len(issues))
+	for _, issue := range issues {
+		row := make(table.Row, 0, len(columns))
+		for _, col := range columns {
+			row = append(row, formatIssueField(issue, col))
+		}
+		rows = append(rows, row)
+	}
+
+	// Update table
+	m.table.SetRows(rows)
+
+	// Ensure cursor is valid
+	if len(rows) > 0 {
+		if m.selected >= len(rows) {
+			m.selected = len(rows) - 1
+			m.table.SetCursor(m.selected)
+		}
+	} else {
+		m.table.SetCursor(0)
+	}
+
+	return nil
 }
 
 // RunListView runs the issue list TUI
