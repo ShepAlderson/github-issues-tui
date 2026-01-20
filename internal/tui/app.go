@@ -12,6 +12,7 @@ import (
 // Model represents the main application state
 type Model struct {
 	IssueList   *IssueList
+	DetailPanel *DetailPanel
 	Quitting    bool
 	Width       int
 	Height      int
@@ -20,19 +21,31 @@ type Model struct {
 // NewModel creates a new TUI model
 func NewModel(issues []storage.Issue, columns []Column) Model {
 	issueList := NewIssueList(issues, columns)
-	return Model{
-		IssueList: issueList,
-		Quitting:  false,
+	model := Model{
+		IssueList:   issueList,
+		DetailPanel: nil,
+		Quitting:    false,
 	}
+	// Initialize detail panel with first issue if available
+	if len(issues) > 0 {
+		model.DetailPanel = NewDetailPanel(issues[0])
+	}
+	return model
 }
 
 // NewModelWithSort creates a new TUI model with specific sort settings
 func NewModelWithSort(issues []storage.Issue, columns []Column, sortField string, sortDescending bool) Model {
 	issueList := NewIssueListWithSort(issues, columns, sortField, sortDescending)
-	return Model{
-		IssueList: issueList,
-		Quitting:  false,
+	model := Model{
+		IssueList:   issueList,
+		DetailPanel: nil,
+		Quitting:    false,
 	}
+	// Initialize detail panel with first issue if available
+	if len(issueList.Issues) > 0 {
+		model.DetailPanel = NewDetailPanel(issueList.Issues[0])
+	}
+	return model
 }
 
 // Init initializes the model
@@ -51,14 +64,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "j", "down":
 			m.IssueList.MoveCursor(1)
+			m.updateDetailPanel()
 			return m, nil
 
 		case "k", "up":
 			m.IssueList.MoveCursor(-1)
+			m.updateDetailPanel()
 			return m, nil
 
 		case "enter", " ":
 			m.IssueList.SelectCurrent()
+			m.updateDetailPanel()
 			return m, nil
 
 		case "s":
@@ -70,13 +86,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Toggle sort order (shift+s)
 			m.IssueList.ToggleSortOrder()
 			return m, nil
+
+		case "m":
+			// Toggle markdown rendering in detail panel
+			if m.DetailPanel != nil {
+				m.DetailPanel.ToggleMarkdown()
+			}
+			return m, nil
 		}
 
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
 		m.Height = msg.Height
 		// Reserve space for header and status (3 lines)
-		m.IssueList.SetViewport(msg.Height - 3)
+		// Split remaining space between list and detail (60/40)
+		listHeight := (msg.Height - 3) * 6 / 10
+		detailHeight := (msg.Height - 3) * 4 / 10
+		m.IssueList.SetViewport(listHeight)
+		if m.DetailPanel != nil {
+			m.DetailPanel.SetViewport(detailHeight)
+		}
 		return m, nil
 	}
 
@@ -96,14 +125,14 @@ func (m Model) View() string {
 	// Build header
 	header := m.renderHeader()
 
-	// Build issue list
-	issuesView := m.renderIssueList()
+	// Build main content (split layout)
+	content := m.renderSplitLayout()
 
 	// Build status bar
 	status := m.renderStatusBar()
 
 	// Combine all parts
-	return header + "\n" + issuesView + "\n" + status
+	return header + "\n" + content + "\n" + status
 }
 
 // renderHeader renders the column headers
@@ -206,11 +235,20 @@ func (m Model) renderStatusBar() string {
 		Foreground(lipgloss.Color("yellow")).
 		Render(" | Sort: " + sort.GetSortFieldLabel(m.IssueList.SortField) + sortOrder)
 
+	markdownHint := ""
+	if m.DetailPanel != nil {
+		mode := "raw"
+		if m.DetailPanel.RenderMarkdown {
+			mode = "rendered"
+		}
+		markdownHint = " | m: toggle markdown (" + mode + ")"
+	}
+
 	status := lipgloss.NewStyle().
 		Faint(true).
 		Render("Issues: " + formatNumber(issueCount) +
 			" | ↑↓/jk: navigate | s: sort field | S: sort order | Enter: select | q: quit" +
-			selectedInfo + sortInfo)
+			markdownHint + selectedInfo + sortInfo)
 
 	return status
 }
@@ -229,3 +267,46 @@ func sumFixedWidths(columns []Column) int {
 	}
 	return total
 }
+
+// updateDetailPanel updates the detail panel with the currently selected issue
+func (m *Model) updateDetailPanel() {
+	if len(m.IssueList.Issues) == 0 {
+		m.DetailPanel = nil
+		return
+	}
+
+	if m.IssueList.Cursor >= 0 && m.IssueList.Cursor < len(m.IssueList.Issues) {
+		issue := m.IssueList.Issues[m.IssueList.Cursor]
+		m.DetailPanel = NewDetailPanel(issue)
+	}
+}
+
+// renderSplitLayout renders the split layout with list and detail panels
+func (m Model) renderSplitLayout() string {
+	if len(m.IssueList.Issues) == 0 {
+		return "No issues found. Run 'ghissues sync' to fetch issues."
+	}
+
+	// Split width: 60% for list, 40% for detail
+	listWidth := m.Width * 6 / 10
+	detailWidth := m.Width - listWidth - 1 // -1 for separator
+
+	// Render issue list
+	listView := m.renderIssueList()
+
+	// Render detail panel
+	detailView := ""
+	if m.DetailPanel != nil {
+		detailView = m.DetailPanel.View()
+	} else {
+		detailView = "No issue selected"
+	}
+
+	// Combine with vertical separator
+	leftPanel := lipgloss.NewStyle().Width(listWidth).Height(m.Height - 3).Render(listView)
+	rightPanel := lipgloss.NewStyle().Width(detailWidth).Height(m.Height - 3).Render(detailView)
+	separator := lipgloss.NewStyle().Faint(true).Render("│")
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, separator, rightPanel)
+}
+
