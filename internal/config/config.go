@@ -17,6 +17,7 @@ type Config struct {
 	Display struct {
 		Columns []string `toml:"columns"`
 		Sort    Sort     `toml:"sort"`
+		Theme   string   `toml:"theme"`
 	} `toml:"display"`
 }
 
@@ -92,4 +93,9 @@ func GetDefaultSort() Sort {
 		Field:      "updated_at",
 		Descending: true,
 	}
+}
+
+// GetDefaultTheme returns the default theme name
+func GetDefaultTheme() string {
+	return "default"
 }

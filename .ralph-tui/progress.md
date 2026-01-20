@@ -621,3 +621,13 @@ on."}],"model":"hf:moonshotai/Kimi-K2-Thinking","stop_reason":null,"stop_sequenc
 - Clean architecture with proper separation of concerns
 - Modal overlay takes precedence over all other UI elements when active
 ---
+## ✓ Iteration 12 - US-011: Keybinding Help
+*2026-01-20T22:31:58.757Z (393s)*
+
+**Status:** Completed
+
+**Notes:**
+ete."}],"model":"hf:moonshotai/Kimi-K2-Thinking","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":80685,"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"context_management":null},"parent_tool_use_id":null,"session_id":"98ef9e6d-e25c-4022-b253-63fa0df768ba","uuid":"78fe8176-84c1-49bd-94f1-659313946cb3"}
+{"type":"assistant","message":{"id":"msg_db0ca53b-c668-48a3-b691-755429c0413e","type":"message","role":"assistant","content":[{"type":"text","text":"
+
+---

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/shepbook/git/github-issues-tui/internal/config"
 )
 
 func TestNewHelpModel(t *testing.T) {
@@ -32,7 +33,7 @@ func TestNewHelpModel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			helpModel := NewHelpModel(tt.viewType, 80, 24)
+			helpModel := NewHelpModel(tt.viewType, 80, 24, config.DefaultTheme())
 
 			// Verify fields
 			if helpModel.viewType != tt.viewType {
@@ -60,7 +61,7 @@ func TestNewHelpModel(t *testing.T) {
 }
 
 func TestHelpModel_View(t *testing.T) {
-	helpModel := NewHelpModel(ListView, 80, 24)
+	helpModel := NewHelpModel(ListView, 80, 24, config.DefaultTheme())
 
 	view := helpModel.View()
 
@@ -96,7 +97,7 @@ func TestHelpModel_View(t *testing.T) {
 }
 
 func TestHelpModel_Update(t *testing.T) {
-	helpModel := NewHelpModel(ListView, 80, 24)
+	helpModel := NewHelpModel(ListView, 80, 24, config.DefaultTheme())
 
 	tests := []struct {
 		name       string
@@ -163,7 +164,7 @@ func TestHelpModel_Update(t *testing.T) {
 }
 
 func TestHelpModel_IsActive(t *testing.T) {
-	helpModel := NewHelpModel(ListView, 80, 24)
+	helpModel := NewHelpModel(ListView, 80, 24, config.DefaultTheme())
 
 	if !helpModel.IsActive() {
 		t.Error("Expected new help model to be active")

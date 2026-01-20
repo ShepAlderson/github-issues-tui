@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/shepbook/git/github-issues-tui/internal/config"
 )
 
 // keybinding represents a single keybinding
@@ -21,17 +22,19 @@ type HelpModel struct {
 	width        int
 	height       int
 	active       bool
+	theme        config.Theme
 	keybindings  map[string][]keybinding
 }
 
 // NewHelpModel creates a new help model for the specified view type
 // It loads keybindings appropriate for the current context
-func NewHelpModel(viewType ViewType, width, height int) *HelpModel {
+func NewHelpModel(viewType ViewType, width, height int, theme config.Theme) *HelpModel {
 	return &HelpModel{
 		viewType:    viewType,
 		width:       width,
 		height:      height,
 		active:      true,
+		theme:       theme,
 		keybindings: getContextSensitiveKeybindings(viewType),
 	}
 }
@@ -76,7 +79,7 @@ func (m HelpModel) renderHelpContent() string {
 	// Title
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("86")).
+		Foreground(m.theme.Accent).
 		Align(lipgloss.Center).
 		Width(50)
 
@@ -89,7 +92,7 @@ func (m HelpModel) renderHelpContent() string {
 		sectionStyle := lipgloss.NewStyle().
 			Bold(true).
 			Underline(true).
-			Foreground(lipgloss.Color("212")).
+			Foreground(m.theme.AccentLight).
 			Width(50)
 
 		builder.WriteString(sectionStyle.Render(section))
@@ -99,7 +102,7 @@ func (m HelpModel) renderHelpContent() string {
 		for _, kb := range bindings {
 			// Key
 			keyStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("226")). // Yellow
+				Foreground(m.theme.Warning). // Yellow/orange for key
 				Width(12).
 				Align(lipgloss.Left)
 
@@ -107,7 +110,7 @@ func (m HelpModel) renderHelpContent() string {
 
 			// Description
 			descStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("255")). // White
+				Foreground(m.theme.Text). // White
 				Width(38)
 
 			builder.WriteString(descStyle.Render(kb.description))
@@ -119,7 +122,7 @@ func (m HelpModel) renderHelpContent() string {
 
 	// Footer instruction
 	footerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+		Foreground(m.theme.TextMuted).
 		Italic(true).
 		Align(lipgloss.Center).
 		Width(50)
@@ -134,8 +137,8 @@ func (m HelpModel) renderModal(content string) string {
 	// Create modal window style
 	modalStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("86")).
-		Background(lipgloss.Color("0")).
+		BorderForeground(m.theme.Accent).
+		Background(m.theme.Background).
 		Padding(1, 2)
 
 	// Calculate size based on content

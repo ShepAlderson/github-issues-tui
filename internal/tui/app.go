@@ -125,7 +125,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Check if help should be shown
 		if m.listModel.ShouldShowHelp() {
-			m.helpModel = NewHelpModel(ListView, m.width, m.height)
+			m.helpModel = NewHelpModel(ListView, m.width, m.height, m.getTheme())
 			m.listModel.ClearHelpFlag()
 			return m, tea.Batch(viewCmd, m.helpModel.Init())
 		}
@@ -161,7 +161,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Check if help should be shown
 			if m.detailModel.ShouldShowHelp() {
-				m.helpModel = NewHelpModel(DetailView, m.width, m.height)
+				m.helpModel = NewHelpModel(DetailView, m.width, m.height, m.getTheme())
 				m.detailModel.ClearHelpFlag()
 				return m, tea.Batch(cmd, m.helpModel.Init())
 			}
@@ -216,7 +216,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Check if help should be shown
 			if m.commentsModel.ShouldShowHelp() {
-				m.helpModel = NewHelpModel(CommentsView, m.width, m.height)
+				m.helpModel = NewHelpModel(CommentsView, m.width, m.height, m.getTheme())
 				m.commentsModel.ClearHelpFlag()
 				return m, tea.Batch(cmd, m.helpModel.Init())
 			}
@@ -380,4 +380,13 @@ func RunAppView(dbPath string, cfg *config.Config, output io.Writer) error {
 	}
 
 	return nil
+}
+
+// getTheme returns the current theme from config
+func (m *AppModel) getTheme() config.Theme {
+	themeName := "default"
+	if m.config != nil && m.config.Display.Theme != "" {
+		themeName = m.config.Display.Theme
+	}
+	return config.GetTheme(themeName)
 }

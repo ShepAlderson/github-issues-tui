@@ -19,6 +19,7 @@ import (
 type ListModel struct {
 	db        *db.DB
 	config    *config.Config
+	theme     config.Theme
 	issues    []*db.Issue
 	table     table.Model
 	selected  int
@@ -114,22 +115,32 @@ func NewListModel(dbPath string, cfg *config.Config) (*ListModel, error) {
 		t.SetCursor(0)
 	}
 
+	// Load theme from config
+	themeName := "default"
+	if cfg != nil && cfg.Display.Theme != "" {
+		themeName = cfg.Display.Theme
+	}
+	theme := config.GetTheme(themeName)
+
 	// Style the table
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
+		BorderForeground(theme.Border).
 		BorderBottom(true).
-		Bold(true)
+		Bold(true).
+		Foreground(theme.HeaderText).
+		Background(theme.Header)
 	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
+		Foreground(theme.SelectedFG).
+		Background(theme.SelectedBG).
 		Bold(false)
 	t.SetStyles(s)
 
 	return &ListModel{
 		db:             database,
 		config:         cfg,
+		theme:          theme,
 		issues:         issues,
 		table:          t,
 		selected:       0,
@@ -278,8 +289,8 @@ func (m ListModel) renderStatusBar() string {
 
 	// Style the status bar
 	statusStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("57")).
-		Foreground(lipgloss.Color("229"))
+		Background(m.theme.Header).
+		Foreground(m.theme.HeaderText)
 
 	return statusStyle.Render(status)
 }
