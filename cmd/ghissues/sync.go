@@ -23,11 +23,21 @@ type ProgressCallback func(current, total int, status string)
 // - Removes issues that have been deleted from GitHub
 // - Updates comments for existing issues
 // - Calls the progress callback with current status
-func RefreshSync(dbPath string, cfg *config.Config, progress ProgressCallback) error {
+// The repo parameter takes precedence over cfg.Repository and cfg.GetDefaultRepository()
+func RefreshSync(dbPath string, cfg *config.Config, repo string, progress ProgressCallback) error {
+	// Determine which repo to use: repo flag > GetDefaultRepository() > legacy cfg.Repository
+	repoToUse := repo
+	if repoToUse == "" {
+		repoToUse = cfg.GetDefaultRepository()
+	}
+	if repoToUse == "" {
+		repoToUse = cfg.Repository
+	}
+
 	// Parse owner/repo
-	parts := strings.SplitN(cfg.Repository, "/", 2)
+	parts := strings.SplitN(repoToUse, "/", 2)
 	if len(parts) != 2 {
-		return fmt.Errorf("invalid repository format: %q (expected owner/repo)", cfg.Repository)
+		return fmt.Errorf("invalid repository format: %q (expected owner/repo)", repoToUse)
 	}
 	owner, repo := parts[0], parts[1]
 
@@ -186,11 +196,20 @@ func runSync() error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Validate repository format
-	if !strings.Contains(cfg.Repository, "/") {
-		return fmt.Errorf("invalid repository format: %q (expected owner/repo)", cfg.Repository)
+	// Determine which repo to use: repoFlag > GetDefaultRepository() > legacy cfg.Repository
+	repoToUse := repoFlag
+	if repoToUse == "" {
+		repoToUse = cfg.GetDefaultRepository()
 	}
-	parts := strings.SplitN(cfg.Repository, "/", 2)
+	if repoToUse == "" {
+		repoToUse = cfg.Repository
+	}
+
+	// Validate repository format
+	if !strings.Contains(repoToUse, "/") {
+		return fmt.Errorf("invalid repository format: %q (expected owner/repo)", repoToUse)
+	}
+	parts := strings.SplitN(repoToUse, "/", 2)
 	owner, repo := parts[0], parts[1]
 
 	// Get database path

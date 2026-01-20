@@ -19,7 +19,7 @@ import (
 func RunTUIWithRefresh(dbPath string, cfg *config.Config) error {
 	// Perform initial sync in background
 	go func() {
-		_ = RefreshSync(dbPath, cfg, nil)
+		_ = RefreshSync(dbPath, cfg, repoFlag, nil)
 	}()
 
 	return RunTUI(dbPath, cfg)
@@ -34,10 +34,19 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 	}
 	defer database.Close()
 
-	// Parse owner/repo from config
-	parts := strings.Split(cfg.Repository, "/")
+	// Determine which repo to use: repoFlag > GetDefaultRepository() > legacy cfg.Repository
+	repoToUse := repoFlag
+	if repoToUse == "" {
+		repoToUse = cfg.GetDefaultRepository()
+	}
+	if repoToUse == "" {
+		repoToUse = cfg.Repository
+	}
+
+	// Parse owner/repo
+	parts := strings.Split(repoToUse, "/")
 	if len(parts) != 2 {
-		return fmt.Errorf("invalid repository format: %s (expected owner/repo)", cfg.Repository)
+		return fmt.Errorf("invalid repository format: %s (expected owner/repo)", repoToUse)
 	}
 	owner, repo := parts[0], parts[1]
 
@@ -409,7 +418,7 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 							})
 						}
 
-						err := RefreshSync(dbPath, cfg, progress)
+						err := RefreshSync(dbPath, cfg, repoFlag, progress)
 
 						app.QueueUpdateDraw(func() {
 							isRefreshing = false
@@ -444,7 +453,7 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 							})
 						}
 
-						err := RefreshSync(dbPath, cfg, progress)
+						err := RefreshSync(dbPath, cfg, repoFlag, progress)
 
 						app.QueueUpdateDraw(func() {
 							isRefreshing = false

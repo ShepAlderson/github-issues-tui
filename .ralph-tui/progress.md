@@ -129,6 +129,48 @@ after each iteration and included in agent prompts for context.
 - `ghissues themes` command allows previewing and changing themes
 - Default theme applied when config doesn't specify one
 
+**Multi-Repository Configuration Pattern**: Support multiple repositories in config:
+- Add `Repositories []string` field and `DefaultRepository string` to Config struct
+- Keep legacy `Repository string` field for backward compatibility
+- Helper methods: `HasRepositories()`, `GetRepositories()`, `AddRepository()`, `RemoveRepository()`, `GetDefaultRepository()`, `SetDefaultRepository()`
+- Use priority: CLI flag > `DefaultRepository` > legacy `Repository` field
+- Each repo has its own database file (owner_repo.db pattern)
+- `ghissues repos` command lists configured repositories
+- `ghissues --repo owner/repo` selects which repo to view
+
+---
+
+## 2026-01-20 - US-014
+- What was implemented:
+  - Added `Repositories` slice field and `DefaultRepository` field to Config struct
+  - Added helper methods: `HasRepositories()`, `GetRepositories()`, `AddRepository()`, `RemoveRepository()`, `GetDefaultRepository()`, `SetDefaultRepository()`
+  - Added `isValidRepoFormat()` validation function for owner/repo format
+  - Added `--repo` flag to CLI for selecting which repo to view
+  - Added `repos` subcommand to list configured repositories
+  - Created helper functions: `runRepoAdd()`, `runRepoRemove()`, `runRepoSetDefault()`
+  - Updated `runSync()` to use repoFlag > GetDefaultRepository() > legacy Repository
+  - Updated `RefreshSync()` with repo parameter for repo selection priority
+  - Updated `RunTUI()` to use the same repo selection logic
+
+- Files changed:
+  - `internal/config/config.go` (added multi-repo fields and helper methods)
+  - `internal/config/config_test.go` (added 10 new tests for multi-repo functionality)
+  - `cmd/ghissues/main.go` (added repoFlag, repos subcommand handler)
+  - `cmd/ghissues/repos.go` (new file with repo management functions)
+  - `cmd/ghissues/repos_test.go` (new file with 9 tests)
+  - `cmd/ghissues/sync.go` (updated runSync and RefreshSync for repo parameter)
+  - `cmd/ghissues/tui.go` (updated repo parsing and RefreshSync calls)
+
+- **Learnings:**
+  - Patterns discovered:
+    - Multi-Repo Config Pattern: Use a slice for repos plus a default field for selection
+    - Repo Priority Pattern: CLI flag > config default > legacy single repo field (backward compat)
+    - Helper Method Pattern: Add methods on Config struct for repository management
+  - Gotchas encountered:
+    - Need to maintain backward compatibility with legacy `Repository` field
+    - Variable shadowing when renaming parameters (used `repoToUse` vs `repo`)
+    - RefreshSync needed new parameter to avoid modifying global repo state
+
 ---
 
 ## 2026-01-20 - US-013
@@ -617,5 +659,14 @@ help modal to handle keyboard dismissal\n\n**Files Changed:**\n- `cmd/ghissues/t
     - tcell.NewRGBColor expects int32 parameters, not int - needed explicit int32 cast
     - Default fallback needed for invalid hex colors using tcell.ColorDefault
     - lipgloss.Color and tcell.Color are incompatible types - use string type in theme struct
+
+---
+## ✓ Iteration 13 - US-012: Color Themes
+*2026-01-20T09:46:16.277Z (372s)*
+
+**Status:** Completed
+
+**Notes:**
+handler\n- `cmd/ghissues/tui.go` - Applied theme colors to issue list and detail views\n- `cmd/ghissues/tui_test.go` - Added `TestGetThemeColor`\n\n**Acceptance Criteria Met:**\n- ✅ 6 built-in themes: default, dracula, gruvbox, nord, solarized-dark, solarized-light\n- ✅ Theme selected via config file `display.theme`\n- ✅ Theme preview/change with `ghissues themes` command\n- ✅ Uses tcell for terminal UI styling via `tcell.NewRGBColor()`\n\nAll tests pass and `go vet` / `go build` are clean.\n\n
 
 ---

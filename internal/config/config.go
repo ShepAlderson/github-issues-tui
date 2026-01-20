@@ -2,8 +2,10 @@ package config
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -39,11 +41,106 @@ const (
 
 // Config represents the application configuration
 type Config struct {
-	Repository string     `toml:"repository"`
-	AuthMethod AuthMethod `toml:"auth_method"`
-	Token      string     `toml:"token,omitempty"`
-	Database   Database   `toml:"database"`
-	Display    Display    `toml:"display"`
+	Repository         string     `toml:"repository"`                     // Deprecated: Use Repositories instead
+	Repositories       []string   `toml:"repositories"`                   // List of configured repositories
+	DefaultRepository  string     `toml:"default_repository"`             // Default repository to use
+	AuthMethod         AuthMethod `toml:"auth_method"`
+	Token              string     `toml:"token,omitempty"`
+	Database           Database   `toml:"database"`
+	Display            Display    `toml:"display"`
+}
+
+// HasRepositories returns true if the config has repository entries
+func (c *Config) HasRepositories() bool {
+	return len(c.Repositories) > 0 || c.Repository != ""
+}
+
+// GetRepositories returns all configured repositories
+func (c *Config) GetRepositories() []string {
+	if len(c.Repositories) > 0 {
+		return c.Repositories
+	}
+	// Fallback to legacy single repository field
+	if c.Repository != "" {
+		return []string{c.Repository}
+	}
+	return nil
+}
+
+// AddRepository adds a repository to the configuration
+func (c *Config) AddRepository(repo string) error {
+	if !isValidRepoFormat(repo) {
+		return fmt.Errorf("invalid repository format: %s (expected owner/repo)", repo)
+	}
+	// Check if already exists
+	for _, r := range c.Repositories {
+		if r == repo {
+			return nil // Already exists
+		}
+	}
+	c.Repositories = append(c.Repositories, repo)
+	// Set as default if it's the first one
+	if c.DefaultRepository == "" {
+		c.DefaultRepository = repo
+	}
+	return nil
+}
+
+// RemoveRepository removes a repository from the configuration
+func (c *Config) RemoveRepository(repo string) bool {
+	for i, r := range c.Repositories {
+		if r == repo {
+			c.Repositories = append(c.Repositories[:i], c.Repositories[i+1:]...)
+			// Update default if we removed the default
+			if c.DefaultRepository == repo {
+				if len(c.Repositories) > 0 {
+					c.DefaultRepository = c.Repositories[0]
+				} else {
+					c.DefaultRepository = ""
+				}
+			}
+			return true
+		}
+	}
+	return false
+}
+
+// GetDefaultRepository returns the default repository
+func (c *Config) GetDefaultRepository() string {
+	if c.DefaultRepository != "" {
+		return c.DefaultRepository
+	}
+	// Fallback to legacy field or first in list
+	if c.Repository != "" {
+		return c.Repository
+	}
+	if len(c.Repositories) > 0 {
+		return c.Repositories[0]
+	}
+	return ""
+}
+
+// SetDefaultRepository sets the default repository
+func (c *Config) SetDefaultRepository(repo string) bool {
+	// Verify repo exists in configuration
+	for _, r := range c.Repositories {
+		if r == repo {
+			c.DefaultRepository = repo
+			return true
+		}
+	}
+	// Also check legacy field
+	if repo == c.Repository {
+		c.DefaultRepository = repo
+		return true
+	}
+	return false
+}
+
+// isValidRepoFormat validates that a string is in owner/repo format
+func isValidRepoFormat(repo string) bool {
+	parts := strings.SplitN(repo, "/", 2)
+	return len(parts) == 2 && parts[0] != "" && parts[1] != ""
 }
 
 // Database represents database configuration

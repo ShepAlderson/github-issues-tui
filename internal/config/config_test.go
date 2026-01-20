@@ -200,3 +200,320 @@ func TestSave_CreatesDirectory(t *testing.T) {
 		t.Errorf("Config directory not created: %v", err)
 	}
 }
+
+func TestHasRepositories(t *testing.T) {
+	tests := []struct {
+		name         string
+		repo         string
+		repos        []string
+		hasRepos     bool
+	}{
+		{
+			name:     "empty config has no repos",
+			repo:     "",
+			repos:    nil,
+			hasRepos: false,
+		},
+		{
+			name:     "legacy repo field counts",
+			repo:     "owner/repo",
+			repos:    nil,
+			hasRepos: true,
+		},
+		{
+			name:     "repositories slice counts",
+			repo:     "",
+			repos:    []string{"owner/repo"},
+			hasRepos: true,
+		},
+		{
+			name:     "both fields set",
+			repo:     "owner/repo",
+			repos:    []string{"owner/repo2"},
+			hasRepos: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				Repository:  tt.repo,
+				Repositories: tt.repos,
+			}
+			if got := cfg.HasRepositories(); got != tt.hasRepos {
+				t.Errorf("HasRepositories() = %v, want %v", got, tt.hasRepos)
+			}
+		})
+	}
+}
+
+func TestGetRepositories(t *testing.T) {
+	tests := []struct {
+		name         string
+		repo         string
+		repos        []string
+		expectedLen  int
+		expectedFirst string
+	}{
+		{
+			name:         "empty returns nil",
+			repo:         "",
+			repos:        nil,
+			expectedLen:  0,
+			expectedFirst: "",
+		},
+		{
+			name:         "legacy field used as fallback",
+			repo:         "owner/repo",
+			repos:        nil,
+			expectedLen:  1,
+			expectedFirst: "owner/repo",
+		},
+		{
+			name:         "repositories slice preferred",
+			repo:         "owner/repo",
+			repos:        []string{"owner/repo1", "owner/repo2"},
+			expectedLen:  2,
+			expectedFirst: "owner/repo1",
+		},
+		{
+			name:         "empty legacy field with repos slice",
+			repo:         "",
+			repos:        []string{"a/b", "c/d"},
+			expectedLen:  2,
+			expectedFirst: "a/b",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				Repository:  tt.repo,
+				Repositories: tt.repos,
+			}
+			repos := cfg.GetRepositories()
+			if len(repos) != tt.expectedLen {
+				t.Errorf("GetRepositories() length = %d, want %d", len(repos), tt.expectedLen)
+			}
+			if tt.expectedLen > 0 && repos[0] != tt.expectedFirst {
+				t.Errorf("GetRepositories()[0] = %q, want %q", repos[0], tt.expectedFirst)
+			}
+		})
+	}
+}
+
+func TestAddRepository(t *testing.T) {
+	cfg := &Config{}
+
+	// Add first repo - should become default
+	if err := cfg.AddRepository("owner/repo1"); err != nil {
+		t.Fatalf("AddRepository() failed: %v", err)
+	}
+	if len(cfg.Repositories) != 1 {
+		t.Errorf("Repositories length = %d, want 1", len(cfg.Repositories))
+	}
+	if cfg.DefaultRepository != "owner/repo1" {
+		t.Errorf("DefaultRepository = %q, want %q", cfg.DefaultRepository, "owner/repo1")
+	}
+
+	// Add second repo
+	if err := cfg.AddRepository("owner/repo2"); err != nil {
+		t.Fatalf("AddRepository() failed: %v", err)
+	}
+	if len(cfg.Repositories) != 2 {
+		t.Errorf("Repositories length = %d, want 2", len(cfg.Repositories))
+	}
+	if cfg.DefaultRepository != "owner/repo1" {
+		t.Errorf("DefaultRepository changed unexpectedly to %q", cfg.DefaultRepository)
+	}
+
+	// Add duplicate - should be no-op
+	if err := cfg.AddRepository("owner/repo1"); err != nil {
+		t.Fatalf("AddRepository() failed for duplicate: %v", err)
+	}
+	if len(cfg.Repositories) != 2 {
+		t.Errorf("Repositories length = %d, want 2 (duplicate ignored)", len(cfg.Repositories))
+	}
+}
+
+func TestAddRepository_InvalidFormat(t *testing.T) {
+	cfg := &Config{}
+
+	tests := []string{"invalid", "owner", "/repo", ""}
+	for _, invalid := range tests {
+		t.Run(invalid, func(t *testing.T) {
+			err := cfg.AddRepository(invalid)
+			if err == nil {
+				t.Error("AddRepository() should return error for invalid format")
+			}
+		})
+	}
+}
+
+func TestRemoveRepository(t *testing.T) {
+	cfg := &Config{
+		Repositories:      []string{"owner/repo1", "owner/repo2", "owner/repo3"},
+		DefaultRepository: "owner/repo2",
+	}
+
+	// Remove non-default repo
+	if !cfg.RemoveRepository("owner/repo1") {
+		t.Error("RemoveRepository() should return true for existing repo")
+	}
+	if len(cfg.Repositories) != 2 {
+		t.Errorf("Repositories length = %d, want 2", len(cfg.Repositories))
+	}
+	if cfg.DefaultRepository != "owner/repo2" {
+		t.Errorf("DefaultRepository changed unexpectedly to %q", cfg.DefaultRepository)
+	}
+
+	// Remove default repo
+	if !cfg.RemoveRepository("owner/repo2") {
+		t.Error("RemoveRepository() should return true for default repo")
+	}
+	if len(cfg.Repositories) != 1 {
+		t.Errorf("Repositories length = %d, want 1", len(cfg.Repositories))
+	}
+	if cfg.DefaultRepository != "owner/repo3" {
+		t.Errorf("DefaultRepository = %q, want %q", cfg.DefaultRepository, "owner/repo3")
+	}
+
+	// Remove non-existent repo
+	if cfg.RemoveRepository("owner/nonexistent") {
+		t.Error("RemoveRepository() should return false for non-existent repo")
+	}
+}
+
+func TestGetDefaultRepository(t *testing.T) {
+	tests := []struct {
+		name     string
+		repo     string
+		repos    []string
+		default_ string
+		expected string
+	}{
+		{
+			name:     "explicit default takes precedence",
+			repo:     "legacy/repo",
+			repos:    []string{"owner/repo1", "owner/repo2"},
+			default_: "owner/repo2",
+			expected: "owner/repo2",
+		},
+		{
+			name:     "falls back to legacy field",
+			repo:     "legacy/repo",
+			repos:    nil,
+			default_: "",
+			expected: "legacy/repo",
+		},
+		{
+			name:     "falls back to first in list",
+			repo:     "",
+			repos:    []string{"owner/repo1", "owner/repo2"},
+			default_: "",
+			expected: "owner/repo1",
+		},
+		{
+			name:     "empty returns empty",
+			repo:     "",
+			repos:    nil,
+			default_: "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				Repository:        tt.repo,
+				Repositories:      tt.repos,
+				DefaultRepository: tt.default_,
+			}
+			if got := cfg.GetDefaultRepository(); got != tt.expected {
+				t.Errorf("GetDefaultRepository() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSetDefaultRepository(t *testing.T) {
+	cfg := &Config{
+		Repositories: []string{"owner/repo1", "owner/repo2"},
+	}
+
+	// Set to existing repo
+	if !cfg.SetDefaultRepository("owner/repo2") {
+		t.Error("SetDefaultRepository() should return true for existing repo")
+	}
+	if cfg.DefaultRepository != "owner/repo2" {
+		t.Errorf("DefaultRepository = %q, want %q", cfg.DefaultRepository, "owner/repo2")
+	}
+
+	// Set to non-existing repo
+	if cfg.SetDefaultRepository("owner/nonexistent") {
+		t.Error("SetDefaultRepository() should return false for non-existing repo")
+	}
+}
+
+func TestSaveAndLoad_MultiRepo(t *testing.T) {
+	// Create a temporary config directory
+	tmpDir := t.TempDir()
+
+	// Override HOME to point to our temp directory
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", filepath.Dir(tmpDir))
+	defer os.Setenv("HOME", oldHome)
+
+	// Create config directory
+	configPath := filepath.Join(filepath.Dir(tmpDir), ".config", "ghissues")
+	if err := os.MkdirAll(configPath, 0755); err != nil {
+		t.Fatalf("Failed to create test config directory: %v", err)
+	}
+
+	// Create and save a config with multiple repos
+	cfg := &Config{
+		Repositories:      []string{"anthropics/claude-code", "golang/go"},
+		DefaultRepository: "golang/go",
+		AuthMethod:        AuthMethodGhCli,
+	}
+
+	if err := Save(cfg); err != nil {
+		t.Fatalf("Save() failed: %v", err)
+	}
+
+	// Load and verify
+	loaded, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if len(loaded.Repositories) != 2 {
+		t.Errorf("Loaded Repositories length = %d, want 2", len(loaded.Repositories))
+	}
+	if loaded.DefaultRepository != "golang/go" {
+		t.Errorf("Loaded DefaultRepository = %q, want %q", loaded.DefaultRepository, "golang/go")
+	}
+}
+
+func TestIsValidRepoFormat(t *testing.T) {
+	tests := []struct {
+		repo     string
+		expected bool
+	}{
+		{"owner/repo", true},
+		{"owner-name/repo-name", true},
+		{"owner123/repo456", true},
+		{"owner/repo/subpath", true}, // SplitN limits to 2 parts
+		{"owner", false},
+		{"/repo", false},
+		{"owner/", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.repo, func(t *testing.T) {
+			if got := isValidRepoFormat(tt.repo); got != tt.expected {
+				t.Errorf("isValidRepoFormat(%q) = %v, want %v", tt.repo, got, tt.expected)
+			}
+		})
+	}
+}

@@ -13,9 +13,11 @@ import (
 )
 
 var dbFlag string
+var repoFlag string
 
 func init() {
 	flag.StringVar(&dbFlag, "db", "", "Path to the database file (default: .ghissues.db in current directory)")
+	flag.StringVar(&repoFlag, "repo", "", "Repository to use (owner/repo format)")
 }
 
 func main() {
@@ -42,6 +44,15 @@ func main() {
 	// Check for 'themes' subcommand
 	if len(os.Args) > 1 && os.Args[1] == "themes" {
 		if err := runThemes(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Check for 'repos' subcommand
+	if len(os.Args) > 1 && os.Args[1] == "repos" {
+		if err := runRepos(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
