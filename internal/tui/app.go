@@ -18,6 +18,7 @@ type Model struct {
 	CommentsView  *CommentsView // Comments view for drill-down
 	AllComments   map[int][]storage.Comment // Cache comments by issue number
 	Refresh       RefreshModel // Refresh progress state
+	Error         ErrorModel   // Error state for modal and status bar
 	Quitting      bool
 	Width         int
 	Height        int
@@ -31,6 +32,7 @@ func NewModel(issues []storage.Issue, columns []Column) Model {
 		DetailPanel: nil,
 		AllComments: make(map[int][]storage.Comment),
 		Refresh:     NewRefreshModel(),
+		Error:       ErrorModel{},
 		Quitting:    false,
 	}
 	// Initialize detail panel with first issue if available
@@ -48,6 +50,7 @@ func NewModelWithSort(issues []storage.Issue, columns []Column, sortField string
 		DetailPanel: nil,
 		AllComments: make(map[int][]storage.Comment),
 		Refresh:     NewRefreshModel(),
+		Error:       ErrorModel{},
 		Quitting:    false,
 	}
 	// Initialize detail panel with first issue if available
@@ -66,6 +69,13 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// If error modal is active, handle it first
+		if m.Error.Active {
+			updated, _ := m.Error.Update(msg)
+			m.Error = updated
+			return m, nil
+		}
+
 		// If refresh is complete, any key dismisses it
 		if m.Refresh.Complete {
 			m.Refresh.Reset()
@@ -150,6 +160,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case RefreshCompleteMsg:
 		updated, _ := m.Refresh.Update(msg)
 		m.Refresh = updated
+
+		// If refresh failed, show error
+		if !msg.Success && msg.Error != nil {
+			severity, _ := ClassifyError(msg.Error)
+			m.Error.Show(msg.Error, severity)
+		}
+
 		return m, nil
 
 	case tea.WindowSizeMsg:
@@ -168,6 +185,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		updated, _ := m.Refresh.Update(msg)
 		m.Refresh = updated
+		updatedError, _ := m.Error.Update(msg)
+		m.Error = updatedError
 		return m, nil
 	}
 
@@ -240,6 +259,11 @@ func (m Model) View() string {
 
 	if m.Width == 0 || m.Height == 0 {
 		return "Loading..."
+	}
+
+	// If error modal is active, show error overlay
+	if m.Error.Active {
+		return m.renderErrorView()
 	}
 
 	// If refresh is active or just completed, show refresh overlay
@@ -374,11 +398,19 @@ func (m Model) renderStatusBar() string {
 		markdownHint = " | m: toggle markdown (" + mode + ")"
 	}
 
+	// Build error info for minor errors
+	errorInfo := ""
+	if m.Error.Active && m.Error.IsMinor() {
+		errorInfo = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("red")).
+			Render(" | Error: " + m.Error.Message)
+	}
+
 	status := lipgloss.NewStyle().
 		Faint(true).
 		Render("Issues: " + formatNumber(issueCount) +
 			" | ↑↓/jk: navigate | s: sort field | S: sort order | r: refresh | R: full refresh | Enter: comments | Space: select | q: quit" +
-			markdownHint + selectedInfo + sortInfo)
+			markdownHint + selectedInfo + sortInfo + errorInfo)
 
 	return status
 }
@@ -512,4 +544,9 @@ func (m Model) renderRefreshView() string {
 	}
 
 	return result
+}
+
+// renderErrorView renders the error modal
+func (m Model) renderErrorView() string {
+	return m.Error.View()
 }
