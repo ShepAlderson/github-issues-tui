@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -129,4 +130,113 @@ func ValidateRepository(repo string) error {
 	}
 
 	return nil
+}
+
+// GetRepository returns the repository configuration for a given owner/repo string
+func (c *Config) GetRepository(repo string) (*Repository, error) {
+	// Validate format
+	if err := ValidateRepository(repo); err != nil {
+		return nil, err
+	}
+
+	parts := strings.Split(repo, "/")
+	owner := parts[0]
+	name := parts[1]
+
+	// Search for matching repository
+	for i := range c.Repositories {
+		if c.Repositories[i].Owner == owner && c.Repositories[i].Name == name {
+			return &c.Repositories[i], nil
+		}
+	}
+
+	return nil, fmt.Errorf("repository %s not found in configuration", repo)
+}
+
+// ListRepositories returns a list of all configured repositories as owner/repo strings
+func (c *Config) ListRepositories() []string {
+	repos := make([]string, len(c.Repositories))
+	for i, repo := range c.Repositories {
+		repos[i] = fmt.Sprintf("%s/%s", repo.Owner, repo.Name)
+	}
+	return repos
+}
+
+// AddRepository adds a new repository to the configuration
+func (c *Config) AddRepository(repo, database string) error {
+	// Validate format
+	if err := ValidateRepository(repo); err != nil {
+		return err
+	}
+
+	parts := strings.Split(repo, "/")
+	owner := parts[0]
+	name := parts[1]
+
+	// Check if repository already exists
+	for i := range c.Repositories {
+		if c.Repositories[i].Owner == owner && c.Repositories[i].Name == name {
+			return fmt.Errorf("repository %s already exists", repo)
+		}
+	}
+
+	// Add new repository
+	c.Repositories = append(c.Repositories, Repository{
+		Owner:    owner,
+		Name:     name,
+		Database: database,
+	})
+
+	return nil
+}
+
+// RemoveRepository removes a repository from the configuration
+func (c *Config) RemoveRepository(repo string) error {
+	// Validate format
+	if err := ValidateRepository(repo); err != nil {
+		return err
+	}
+
+	parts := strings.Split(repo, "/")
+	owner := parts[0]
+	name := parts[1]
+
+	// Find and remove repository
+	for i, r := range c.Repositories {
+		if r.Owner == owner && r.Name == name {
+			// Remove by slicing
+			c.Repositories = append(c.Repositories[:i], c.Repositories[i+1:]...)
+			return nil
+		}
+	}
+
+	return fmt.Errorf("repository %s not found in configuration", repo)
+}
+
+// GetRepositoryDatabase returns the database path for a given repository
+// If the repository has a custom database, it returns that
+// Otherwise, it generates a default database name based on the repository
+func (c *Config) GetRepositoryDatabase(repo string) (string, error) {
+	// Validate format
+	if err := ValidateRepository(repo); err != nil {
+		return "", err
+	}
+
+	parts := strings.Split(repo, "/")
+	owner := parts[0]
+	name := parts[1]
+
+	// Check if repository has custom database
+	for i := range c.Repositories {
+		if c.Repositories[i].Owner == owner && c.Repositories[i].Name == name {
+			if c.Repositories[i].Database != "" {
+				return c.Repositories[i].Database, nil
+			}
+			// Generate default database name
+			return fmt.Sprintf(".ghissues-%s-%s.db", owner, name), nil
+		}
+	}
+
+	// Repository not in config, generate default database name
+	return fmt.Sprintf(".ghissues-%s-%s.db", owner, name), nil
 }

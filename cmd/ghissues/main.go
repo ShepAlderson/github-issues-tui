@@ -74,6 +74,12 @@ func main() {
 		return
 	}
 
+	// Handle repos command
+	if command == "repos" {
+		handleReposCommand(configPath)
+		return
+	}
+
 	// Check if config exists
 	if !config.ConfigExists(configPath) {
 		// Run first-time setup
@@ -94,8 +100,32 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Resolve database path
-	dbPath, err := database.ResolveDatabasePath(dbFlag, cfg.Database.Path)
+	// Determine which repository to use
+	repo := cfg.Default.Repository
+	if repoFlag != "" {
+		if err := github.ValidateRepo(repoFlag); err != nil {
+			fmt.Fprintf(os.Stderr, "Invalid repository: %v\n", err)
+			os.Exit(1)
+		}
+		repo = repoFlag
+	} else {
+		// Validate the configured repository
+		if err := github.ValidateRepo(repo); err != nil {
+			fmt.Fprintf(os.Stderr, "Invalid repository in config: %v\n", err)
+			fmt.Fprintln(os.Stderr, "Run 'ghissues config' to reconfigure.")
+			os.Exit(1)
+		}
+	}
+
+	// Get database path for the selected repository
+	repoDBPath, err := cfg.GetRepositoryDatabase(repo)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to get repository database: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Resolve database path (CLI flag takes precedence)
+	dbPath, err := database.ResolveDatabasePath(dbFlag, repoDBPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to resolve database path: %v\n", err)
 		os.Exit(1)
@@ -127,23 +157,6 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
-
-	// Determine which repository to use
-	repo := cfg.Default.Repository
-	if repoFlag != "" {
-		if err := github.ValidateRepo(repoFlag); err != nil {
-			fmt.Fprintf(os.Stderr, "Invalid repository: %v\n", err)
-			os.Exit(1)
-		}
-		repo = repoFlag
-	} else {
-		// Validate the configured repository
-		if err := github.ValidateRepo(repo); err != nil {
-			fmt.Fprintf(os.Stderr, "Invalid repository in config: %v\n", err)
-			fmt.Fprintln(os.Stderr, "Run 'ghissues config' to reconfigure.")
-			os.Exit(1)
-		}
-	}
 
 	// Create GitHub client
 	ghClient := github.NewClient(token, repo, "")
@@ -259,6 +272,36 @@ func handleConfigCommand(configPath string) {
 	}
 }
 
+func handleReposCommand(configPath string) {
+	// Load config
+	cfg, err := config.LoadConfig(configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+
+	repos := cfg.ListRepositories()
+	defaultRepo := cfg.Default.Repository
+
+	fmt.Println("Configured repositories:")
+	if len(repos) == 0 {
+		fmt.Println("  No repositories configured.")
+		fmt.Println("\nRun 'ghissues config' to add a repository.")
+		return
+	}
+
+	for i, repo := range repos {
+		prefix := "  "
+		if repo == defaultRepo {
+			prefix = "* "
+		}
+		fmt.Printf("%s%d. %s\n", prefix, i+1, repo)
+	}
+
+	fmt.Println("\n* default repository")
+	fmt.Printf("\nTo select a repository, run: ghissues --repo owner/repo\n")
+}
+
 func printHelp() {
 	fmt.Printf("ghissues - A terminal-based GitHub issues viewer\n\n")
 	fmt.Printf("Usage:\n")
@@ -272,5 +315,6 @@ func printHelp() {
 	fmt.Printf("Commands:\n")
 	fmt.Printf("  config            Run interactive configuration\n")
 	fmt.Printf("  themes            List available color themes and show current theme\n")
+	fmt.Printf("  repos             List configured repositories\n")
 	fmt.Printf("  sync              Sync issues from GitHub (also runs automatically on first use)\n")
 }

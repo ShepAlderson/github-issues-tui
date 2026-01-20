@@ -211,3 +211,179 @@ func TestValidateRepository(t *testing.T) {
 		})
 	}
 }
+
+func TestGetRepository(t *testing.T) {
+	cfg := &Config{
+		Default: DefaultConfig{
+			Repository: "default/repo",
+		},
+		Repositories: []Repository{
+			{Owner: "owner1", Name: "repo1", Database: "db1.db"},
+			{Owner: "owner2", Name: "repo2", Database: "db2.db"},
+		},
+	}
+
+	t.Run("returns repository when owner/name matches", func(t *testing.T) {
+		repo, err := cfg.GetRepository("owner1/repo1")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if repo.Owner != "owner1" || repo.Name != "repo1" {
+			t.Errorf("expected owner1/repo1, got %s/%s", repo.Owner, repo.Name)
+		}
+		if repo.Database != "db1.db" {
+			t.Errorf("expected database db1.db, got %s", repo.Database)
+		}
+	})
+
+	t.Run("returns error when repository not found", func(t *testing.T) {
+		_, err := cfg.GetRepository("unknown/repo")
+		if err == nil {
+			t.Error("expected error for unknown repository, got nil")
+		}
+	})
+
+	t.Run("returns error for invalid format", func(t *testing.T) {
+		_, err := cfg.GetRepository("invalid-format")
+		if err == nil {
+			t.Error("expected error for invalid format, got nil")
+		}
+	})
+}
+
+func TestListRepositories(t *testing.T) {
+	cfg := &Config{
+		Default: DefaultConfig{
+			Repository: "default/repo",
+		},
+		Repositories: []Repository{
+			{Owner: "owner1", Name: "repo1", Database: "db1.db"},
+			{Owner: "owner2", Name: "repo2", Database: "db2.db"},
+		},
+	}
+
+	repos := cfg.ListRepositories()
+
+	if len(repos) != 2 {
+		t.Errorf("expected 2 repositories, got %d", len(repos))
+	}
+
+	if repos[0] != "owner1/repo1" {
+		t.Errorf("expected first repo to be owner1/repo1, got %s", repos[0])
+	}
+
+	if repos[1] != "owner2/repo2" {
+		t.Errorf("expected second repo to be owner2/repo2, got %s", repos[1])
+	}
+}
+
+func TestAddRepository(t *testing.T) {
+	t.Run("adds new repository", func(t *testing.T) {
+		cfg := &Config{
+			Repositories: []Repository{
+				{Owner: "owner1", Name: "repo1", Database: "db1.db"},
+			},
+		}
+
+		err := cfg.AddRepository("owner2/repo2", "db2.db")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(cfg.Repositories) != 2 {
+			t.Errorf("expected 2 repositories, got %d", len(cfg.Repositories))
+		}
+
+		if cfg.Repositories[1].Owner != "owner2" || cfg.Repositories[1].Name != "repo2" {
+			t.Errorf("expected owner2/repo2, got %s/%s", cfg.Repositories[1].Owner, cfg.Repositories[1].Name)
+		}
+	})
+
+	t.Run("returns error for invalid repository format", func(t *testing.T) {
+		cfg := &Config{}
+
+		err := cfg.AddRepository("invalid-format", "db.db")
+		if err == nil {
+			t.Error("expected error for invalid format, got nil")
+		}
+	})
+
+	t.Run("returns error when repository already exists", func(t *testing.T) {
+		cfg := &Config{
+			Repositories: []Repository{
+				{Owner: "owner1", Name: "repo1", Database: "db1.db"},
+			},
+		}
+
+		err := cfg.AddRepository("owner1/repo1", "db2.db")
+		if err == nil {
+			t.Error("expected error for duplicate repository, got nil")
+		}
+	})
+}
+
+func TestRemoveRepository(t *testing.T) {
+	t.Run("removes existing repository", func(t *testing.T) {
+		cfg := &Config{
+			Repositories: []Repository{
+				{Owner: "owner1", Name: "repo1", Database: "db1.db"},
+				{Owner: "owner2", Name: "repo2", Database: "db2.db"},
+			},
+		}
+
+		err := cfg.RemoveRepository("owner1/repo1")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(cfg.Repositories) != 1 {
+			t.Errorf("expected 1 repository, got %d", len(cfg.Repositories))
+		}
+
+		if cfg.Repositories[0].Owner != "owner2" {
+			t.Errorf("expected owner2, got %s", cfg.Repositories[0].Owner)
+		}
+	})
+
+	t.Run("returns error when repository not found", func(t *testing.T) {
+		cfg := &Config{
+			Repositories: []Repository{
+				{Owner: "owner1", Name: "repo1", Database: "db1.db"},
+			},
+		}
+
+		err := cfg.RemoveRepository("unknown/repo")
+		if err == nil {
+			t.Error("expected error for unknown repository, got nil")
+		}
+	})
+}
+
+func TestGetRepositoryDatabase(t *testing.T) {
+	cfg := &Config{
+		Repositories: []Repository{
+			{Owner: "owner1", Name: "repo1", Database: "custom.db"},
+		},
+	}
+
+	t.Run("returns custom database when set", func(t *testing.T) {
+		db, err := cfg.GetRepositoryDatabase("owner1/repo1")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if db != "custom.db" {
+			t.Errorf("expected custom.db, got %s", db)
+		}
+	})
+
+	t.Run("returns default database when not set", func(t *testing.T) {
+		db, err := cfg.GetRepositoryDatabase("owner2/repo2")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		expected := ".ghissues-owner2-repo2.db"
+		if db != expected {
+			t.Errorf("expected %s, got %s", expected, db)
+		}
+	})
+}
