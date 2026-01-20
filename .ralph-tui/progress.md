@@ -60,6 +60,14 @@ after each iteration and included in agent prompts for context.
 - Chain methods on Flex, Pages, List, TextView for layout composition
 - Use SetInputCapture for custom key handling
 - Modal dialogs for help screens using Pages
+- Track current selection index manually (no GetCurrentIndex method)
+- Set Scrollable(true) on TextView for scrollable content
+
+**Markdown Rendering Pattern with glamour**: Use `github.com/charmbracelet/glamour` for terminal markdown rendering:
+- Create TermRenderer with `glamour.WithAutoStyle()` for auto-styling
+- Fall back to raw text if rendering fails
+- Toggle between rendered and raw markdown with state variable
+- Update display when markdown mode changes
 
 ---
 
@@ -291,3 +299,48 @@ GetIssue\n- `cmd/ghissues/tui.go` - New TUI implementation\n- `cmd/ghissues/tui_
     - tview.List doesn't have GetCurrentIndex - use SetChangedFunc to track selection
     - Variable scope issues when declaring pages before use in closures
     - fmt.Sprintf for dynamic SQL needs proper escaping/sanitization of column names
+## ✓ Iteration 6 - US-006: Issue Sorting
+*2026-01-20T09:06:37.674Z (312s)*
+
+**Status:** Completed
+
+**Notes:**
+ruct\n- `internal/config/config_display_test.go` - Added 7 tests for sort configuration\n- `internal/db/ops.go` - Added `ListIssuesSorted()` function with dynamic `ORDER BY` clause\n- `internal/db/ops_list_test.go` - Added 6 tests for sorting functionality\n- `cmd/ghissues/tui.go` - Added sort helper functions, keybindings, status bar display\n- `cmd/ghissues/tui_test.go` - Added 4 tests for sort helper functions\n\n**Tests:**\nAll tests pass with `go test ./...` and `go vet ./...` is clean.\n\n
+
+---
+
+---
+
+## 2026-01-20 - US-007
+- What was implemented:
+  - Added IssueDetail struct with Body, UpdatedAt, HTMLURL, Labels, and Assignees fields
+  - Created GetIssueDetail function in db/ops.go that fetches full issue details with labels and assignees
+  - Created GetLabels and GetAssignees helper functions to fetch issue metadata
+  - Created GetComments function to fetch comments for an issue
+  - Created Comment struct for representing comment data
+  - Updated TUI detail view to show full issue details: number, title, state badge, author, dates, labels, assignees, comment count, and body
+  - Added glamour markdown rendering for issue body with 'm' key toggle
+  - Added scrollable detail view using SetScrollable(true)
+  - Added comments view modal that opens on Enter key with all comments
+  - Added markdown/raw toggle indicator in status bar
+  - Added 'm' keybinding to toggle between rendered markdown and raw text
+  - Updated help modal with new keybindings for markdown toggle and comments view
+
+- Files changed:
+  - internal/db/ops.go (added IssueDetail struct, GetIssueDetail, GetLabels, GetAssignees, GetComments, Comment struct)
+  - internal/db/ops_list_test.go (added 8 new tests for issue detail, labels, assignees, and comments)
+  - cmd/ghissues/tui.go (updated detail view, added markdown rendering with glamour, comments modal, new keybindings)
+  - go.mod, go.sum (added github.com/charmbracelet/glamour dependency)
+
+- **Learnings:**
+  - Patterns discovered:
+    - Detail View Pattern: Create dedicated detail struct with all display fields
+    - Markdown Rendering Pattern: Use glamour with WithAutoStyle() for terminal-aware rendering
+    - Comments Modal Pattern: Use Pages with modal dialog for displaying comments
+    - Selection Tracking Pattern: Track currentIndex manually since tview.List lacks GetCurrentIndex
+    - State Toggle Pattern: Use boolean flag for markdown/raw mode with status bar indicator
+  - Gotchas encountered:
+    - glamour.WithWidth API changed in v0.10 - use WithAutoStyle() instead
+    - tview.List lacks GetCurrentIndex method - need to track selection index manually
+    - SQLite foreign key constraints require parent issue to exist before inserting labels/assignees/comments
+    - Config field is SortOrder not Order - match exact field names from config struct

@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/glamour"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/shepbook/ghissues/internal/config"
@@ -29,7 +30,13 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 
 	// Current sort settings (from config)
 	currentSort := cfg.Display.Sort
-	currentOrder := cfg.Display.SortOrder
+	currentSortOrder := cfg.Display.SortOrder
+
+	// Track current selection index
+	currentIndex := 0
+
+	// Markdown mode state
+	markdownRendered := true
 
 	// Create the tview application
 	app := tview.NewApplication()
@@ -44,13 +51,14 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 	issueList.SetTitle(" Issues ")
 	issueList.SetBorder(true)
 
-	// Create detail placeholder
+	// Create scrollable detail view
 	var detailView *tview.TextView
 	detailView = tview.NewTextView()
 	detailView.SetText("Select an issue to view details.\n\nPress 'r' to refresh issues from GitHub.")
-	detailView.SetTextAlign(tview.AlignCenter)
+	detailView.SetTextAlign(tview.AlignLeft)
 	detailView.SetTitle(" Details ")
 	detailView.SetBorder(true)
+	detailView.SetScrollable(true)
 
 	// Create status bar
 	statusBar := tview.NewTextView()
@@ -58,16 +66,132 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 
 	// Function to update status bar text
 	updateStatusBar := func() {
-		sortText := FormatSortDisplay(currentSort, currentOrder)
-		statusBar.SetText(fmt.Sprintf(" ghissues | %s/%s | %s | j/k or arrows to navigate | q to quit | s to sort | S to reverse | ? for help ",
-			owner, repo, sortText))
+		sortText := FormatSortDisplay(currentSort, currentSortOrder)
+		markdownText := ""
+		if markdownRendered {
+			markdownText = " [Markdown]"
+		} else {
+			markdownText = " [Raw]"
+		}
+		statusBar.SetText(fmt.Sprintf(" ghissues | %s/%s | %s | %sj/k or arrows to navigate | q to quit | s to sort | S to reverse | ? for help | m for markdown toggle ",
+			owner, repo, sortText, markdownText))
+	}
+
+	// Function to render markdown
+	renderMarkdown := func(body string) string {
+		if body == "" {
+			return "_No description provided._"
+		}
+		// Use glamour to render markdown with terminal styling
+		renderer, err := glamour.NewTermRenderer(
+			glamour.WithAutoStyle(),
+		)
+		if err != nil {
+			// Fall back to raw text if rendering fails
+			return body
+		}
+		rendered, err := renderer.Render(body)
+		if err != nil {
+			return body
+		}
+		return rendered
+	}
+
+	// Function to format issue detail with full information
+	formatIssueDetailFull := func(issue *db.IssueDetail) string {
+		if issue == nil {
+			return "Select an issue to view details.\n\nPress 'r' to refresh issues from GitHub."
+		}
+
+		var sb strings.Builder
+
+		// Header
+		sb.WriteString(fmt.Sprintf(" #%d %s\n\n", issue.Number, issue.Title))
+
+		// Status badge
+		stateIcon := "○"
+		if issue.State == "closed" {
+			stateIcon = "●"
+		}
+		sb.WriteString(fmt.Sprintf("%s **%s**  |  ", stateIcon, strings.ToUpper(issue.State)))
+
+		// Author
+		sb.WriteString(fmt.Sprintf("by **%s**  |  ", issue.Author))
+
+		// Dates
+		sb.WriteString(fmt.Sprintf("Created: %s  |  Updated: %s\n\n", formatDate(issue.CreatedAt), formatDate(issue.UpdatedAt)))
+
+		// Labels
+		if len(issue.Labels) > 0 {
+			sb.WriteString("Labels: ")
+			for i, label := range issue.Labels {
+				if i > 0 {
+					sb.WriteString("  ")
+				}
+				sb.WriteString(fmt.Sprintf("[%s]", label))
+			}
+			sb.WriteString("\n")
+		}
+
+		// Assignees
+		if len(issue.Assignees) > 0 {
+			sb.WriteString("Assignees: ")
+			for i, assignee := range issue.Assignees {
+				if i > 0 {
+					sb.WriteString(", ")
+				}
+				sb.WriteString(assignee)
+			}
+			sb.WriteString("\n")
+		}
+
+		// Comments count
+		if issue.CommentCnt > 0 {
+			sb.WriteString(fmt.Sprintf("%d comment(s)\n\n", issue.CommentCnt))
+		} else {
+			sb.WriteString("No comments\n\n")
+		}
+
+		// Body
+		if markdownRendered {
+			sb.WriteString(renderMarkdown(issue.Body))
+		} else {
+			sb.WriteString("--- Body ---\n")
+			sb.WriteString(issue.Body)
+		}
+
+		// URL at the bottom
+		sb.WriteString(fmt.Sprintf("\n\n%s", issue.HTMLURL))
+
+		return sb.String()
+	}
+
+	// Function to format comments for display
+	formatComments := func(comments []db.Comment) string {
+		if len(comments) == 0 {
+			return "No comments yet."
+		}
+
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("%d Comment(s)\n\n", len(comments)))
+
+		for i, comment := range comments {
+			if i > 0 {
+				sb.WriteString("\n")
+			}
+			sb.WriteString(fmt.Sprintf("--- Comment #%d ---\n", i+1))
+			sb.WriteString(fmt.Sprintf("By: %s  |  Date: %s\n\n", comment.Author, formatDate(comment.CreatedAt)))
+			sb.WriteString(comment.Body)
+		}
+
+		return sb.String()
 	}
 
 	// Function to fetch and display issues
 	issues := []db.IssueList{}
 	displayIssues := func() {
 		// Fetch issues from database with current sort settings
-		issues, err = db.ListIssuesSorted(database, owner, repo, currentSort, currentOrder)
+		issues, err = db.ListIssuesSorted(database, owner, repo, currentSort, currentSortOrder)
 		if err != nil {
 			// Just log the error, don't fail
 			_ = fmt.Errorf("failed to list issues: %w", err)
@@ -83,15 +207,16 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 			issueList.AddItem(text, secondary, rune('0'+issue.Number%10), nil)
 		}
 
-		// Update issue count in status
-		issueCount := len(issues)
+		// Update status bar
 		updateStatusBar()
 
 		// Update detail view for first selection
-		if issueCount > 0 {
-			issue := issues[0]
-			detailText := formatIssueDetail(issue, owner, repo)
-			detailView.SetText(detailText)
+		if len(issues) > 0 {
+			issueNum := issues[0].Number
+			detail, err := db.GetIssueDetail(database, owner, repo, issueNum)
+			if err == nil && detail != nil {
+				detailView.SetText(formatIssueDetailFull(detail))
+			}
 		} else {
 			detailView.SetText("No issues found.\n\nPress 'r' to sync issues from GitHub.")
 		}
@@ -99,6 +224,42 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 
 	// Create pages for modals
 	pages := tview.NewPages()
+
+	// Show comments modal
+	showComments := func(issueNum int) {
+		comments, err := db.GetComments(database, issueNum)
+		if err != nil {
+			commentsText := fmt.Sprintf("Error loading comments: %v", err)
+			modal := tview.NewModal()
+			modal.SetText(commentsText)
+			modal.AddButtons([]string{"Close"})
+			modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+				pages.SwitchToPage("main")
+				app.SetFocus(issueList)
+			})
+			pages.AddPage("comments", modal, true, true)
+			pages.SwitchToPage("comments")
+			return
+		}
+
+		commentsText := formatComments(comments)
+
+		commentsView := tview.NewTextView()
+		commentsView.SetText(commentsText)
+		commentsView.SetTextAlign(tview.AlignLeft)
+		commentsView.SetScrollable(true)
+
+		modal := tview.NewModal()
+		modal.SetText(commentsText)
+		modal.AddButtons([]string{"Close"})
+		modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+			pages.SwitchToPage("main")
+			app.SetFocus(issueList)
+		})
+
+		pages.AddPage("comments", modal, true, true)
+		pages.SwitchToPage("comments")
+	}
 
 	// Set up navigation handlers using tcell events
 	issueList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -123,17 +284,30 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 				return nil
 			case 'S':
 				// Toggle sort order (reverse)
-				currentOrder = ToggleSortOrder(currentOrder)
-				cfg.Display.SortOrder = currentOrder
+				currentSortOrder = ToggleSortOrder(currentSortOrder)
+				cfg.Display.SortOrder = currentSortOrder
 				if err := config.Save(cfg); err != nil {
 					_ = fmt.Errorf("failed to save config: %w", err)
 				}
 				displayIssues()
 				return nil
+			case 'm', 'M':
+				// Toggle markdown rendering
+				markdownRendered = !markdownRendered
+				updateStatusBar()
+				// Refresh detail view with current issue
+				if currentIndex >= 0 && currentIndex < len(issues) {
+					issueNum := issues[currentIndex].Number
+					detail, err := db.GetIssueDetail(database, owner, repo, issueNum)
+					if err == nil && detail != nil {
+						detailView.SetText(formatIssueDetailFull(detail))
+					}
+				}
+				return nil
 			}
 		case tcell.KeyEscape:
-			// Dismiss help if visible
-			if pages.HasPage("help") {
+			// Dismiss modal if visible
+			if pages.HasPage("help") || pages.HasPage("comments") {
 				pages.SwitchToPage("main")
 				app.SetFocus(issueList)
 			}
@@ -150,19 +324,27 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 
 	// Update detail view when selection changes
 	issueList.SetChangedFunc(func(index int, mainText, secondaryText string, shortcut rune) {
+		currentIndex = index
 		if index >= 0 && index < len(issues) {
-			issue := issues[index]
-			detailText := formatIssueDetail(issue, owner, repo)
-			detailView.SetText(detailText)
+			issueNum := issues[index].Number
+			detail, err := db.GetIssueDetail(database, owner, repo, issueNum)
+			if err == nil && detail != nil {
+				detailView.SetText(formatIssueDetailFull(detail))
+			}
 		}
 	})
 
-	// Update detail view on selection confirm
+	// Update detail view and show comments on selection confirm
 	issueList.SetSelectedFunc(func(index int, mainText, secondaryText string, shortcut rune) {
+		currentIndex = index
 		if index >= 0 && index < len(issues) {
-			issue := issues[index]
-			detailText := formatIssueDetail(issue, owner, repo)
-			detailView.SetText(detailText)
+			issueNum := issues[index].Number
+			detail, err := db.GetIssueDetail(database, owner, repo, issueNum)
+			if err == nil && detail != nil {
+				detailView.SetText(formatIssueDetailFull(detail))
+			}
+			// Show comments view
+			showComments(issueNum)
 		}
 	})
 
@@ -235,7 +417,7 @@ func formatIssueSecondary(issue db.IssueList, columns []string) string {
 	return strings.Join(parts, " ")
 }
 
-// formatIssueDetail formats an issue for the detail view
+// formatIssueDetail formats an issue for the detail view (for backward compatibility with tests)
 func formatIssueDetail(issue db.IssueList, owner, repo string) string {
 	return fmt.Sprintf(`
  Issue #%d - %s
@@ -281,9 +463,11 @@ func showHelp(app *tview.Application, pages *tview.Pages) {
    G / End        - Go to last item
 
  Actions:
-   Enter          - Select/refresh details
+   Enter          - View comments for selected issue
    r              - Refresh issues from GitHub
-   c              - Toggle columns configuration
+
+ View:
+   m              - Toggle markdown rendered/raw
 
  Sorting:
    s              - Cycle sort (updated → created → number → comments)

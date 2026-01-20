@@ -550,3 +550,356 @@ func TestListIssuesSortedInvalidOption(t *testing.T) {
 		t.Errorf("Expected 1 issue, got %d", len(issues))
 	}
 }
+
+func TestGetIssueDetail(t *testing.T) {
+	// Create a temp database
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	owner := "test-owner"
+	repo := "test-repo"
+
+	// Insert a test issue
+	issue := &github.Issue{
+		Number:    42,
+		Title:     "Test Issue",
+		Body:      "This is the **body** of the issue",
+		State:     "open",
+		Author:    github.User{Login: "testuser"},
+		Comments:  3,
+		HTMLURL:   "https://github.com/test-owner/test-repo/issues/42",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	err = UpsertIssue(db, owner, repo, issue)
+	if err != nil {
+		t.Fatalf("Failed to upsert issue: %v", err)
+	}
+
+	// Add labels
+	label1 := &github.Label{Name: "bug", Color: "ff0000"}
+	label2 := &github.Label{Name: "enhancement", Color: "00ff00"}
+	err = InsertLabel(db, 42, label1)
+	if err != nil {
+		t.Fatalf("Failed to insert label: %v", err)
+	}
+	err = InsertLabel(db, 42, label2)
+	if err != nil {
+		t.Fatalf("Failed to insert label: %v", err)
+	}
+
+	// Add assignees
+	assignee1 := &github.User{Login: "assignee1"}
+	assignee2 := &github.User{Login: "assignee2"}
+	err = InsertAssignee(db, 42, assignee1)
+	if err != nil {
+		t.Fatalf("Failed to insert assignee: %v", err)
+	}
+	err = InsertAssignee(db, 42, assignee2)
+	if err != nil {
+		t.Fatalf("Failed to insert assignee: %v", err)
+	}
+
+	// Get the issue detail
+	detail, err := GetIssueDetail(db, owner, repo, 42)
+	if err != nil {
+		t.Fatalf("Failed to get issue detail: %v", err)
+	}
+
+	if detail == nil {
+		t.Fatal("Expected issue detail, got nil")
+	}
+
+	if detail.Number != 42 {
+		t.Errorf("Expected issue number 42, got %d", detail.Number)
+	}
+	if detail.Title != "Test Issue" {
+		t.Errorf("Expected title 'Test Issue', got '%s'", detail.Title)
+	}
+	if detail.Body != "This is the **body** of the issue" {
+		t.Errorf("Expected body mismatch, got '%s'", detail.Body)
+	}
+	if detail.State != "open" {
+		t.Errorf("Expected state 'open', got '%s'", detail.State)
+	}
+	if detail.Author != "testuser" {
+		t.Errorf("Expected author 'testuser', got '%s'", detail.Author)
+	}
+	if len(detail.Labels) != 2 {
+		t.Errorf("Expected 2 labels, got %d", len(detail.Labels))
+	}
+	if len(detail.Assignees) != 2 {
+		t.Errorf("Expected 2 assignees, got %d", len(detail.Assignees))
+	}
+}
+
+func TestGetIssueDetailNotFound(t *testing.T) {
+	// Create a temp database
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	// Get a non-existent issue detail
+	detail, err := GetIssueDetail(db, "owner", "repo", 999)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if detail != nil {
+		t.Errorf("Expected nil for non-existent issue, got %+v", detail)
+	}
+}
+
+func TestGetLabels(t *testing.T) {
+	// Create a temp database
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	owner := "test-owner"
+	repo := "test-repo"
+
+	// First insert the issue (required for foreign key)
+	issue := &github.Issue{
+		Number:    1,
+		Title:     "Test Issue",
+		State:     "open",
+		Author:    github.User{Login: "testuser"},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	err = UpsertIssue(db, owner, repo, issue)
+	if err != nil {
+		t.Fatalf("Failed to upsert issue: %v", err)
+	}
+
+	// Insert labels
+	label1 := &github.Label{Name: "bug", Color: "ff0000"}
+	label2 := &github.Label{Name: "enhancement", Color: "00ff00"}
+	label3 := &github.Label{Name: "help wanted", Color: "0000ff"}
+	err = InsertLabel(db, 1, label1)
+	if err != nil {
+		t.Fatalf("Failed to insert label: %v", err)
+	}
+	err = InsertLabel(db, 1, label2)
+	if err != nil {
+		t.Fatalf("Failed to insert label: %v", err)
+	}
+	err = InsertLabel(db, 1, label3)
+	if err != nil {
+		t.Fatalf("Failed to insert label: %v", err)
+	}
+
+	// Get labels
+	labels, err := GetLabels(db, 1)
+	if err != nil {
+		t.Fatalf("Failed to get labels: %v", err)
+	}
+
+	if len(labels) != 3 {
+		t.Errorf("Expected 3 labels, got %d", len(labels))
+	}
+}
+
+func TestGetLabelsEmpty(t *testing.T) {
+	// Create a temp database
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	// Get labels for non-existent issue
+	labels, err := GetLabels(db, 999)
+	if err != nil {
+		t.Fatalf("Failed to get labels: %v", err)
+	}
+
+	if len(labels) != 0 {
+		t.Errorf("Expected 0 labels, got %d", len(labels))
+	}
+}
+
+func TestGetAssignees(t *testing.T) {
+	// Create a temp database
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	owner := "test-owner"
+	repo := "test-repo"
+
+	// First insert the issue (required for foreign key)
+	issue := &github.Issue{
+		Number:    1,
+		Title:     "Test Issue",
+		State:     "open",
+		Author:    github.User{Login: "testuser"},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	err = UpsertIssue(db, owner, repo, issue)
+	if err != nil {
+		t.Fatalf("Failed to upsert issue: %v", err)
+	}
+
+	// Insert assignees
+	assignee1 := &github.User{Login: "user1"}
+	assignee2 := &github.User{Login: "user2"}
+	err = InsertAssignee(db, 1, assignee1)
+	if err != nil {
+		t.Fatalf("Failed to insert assignee: %v", err)
+	}
+	err = InsertAssignee(db, 1, assignee2)
+	if err != nil {
+		t.Fatalf("Failed to insert assignee: %v", err)
+	}
+
+	// Get assignees
+	assignees, err := GetAssignees(db, 1)
+	if err != nil {
+		t.Fatalf("Failed to get assignees: %v", err)
+	}
+
+	if len(assignees) != 2 {
+		t.Errorf("Expected 2 assignees, got %d", len(assignees))
+	}
+}
+
+func TestGetAssigneesEmpty(t *testing.T) {
+	// Create a temp database
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	// Get assignees for non-existent issue
+	assignees, err := GetAssignees(db, 999)
+	if err != nil {
+		t.Fatalf("Failed to get assignees: %v", err)
+	}
+
+	if len(assignees) != 0 {
+		t.Errorf("Expected 0 assignees, got %d", len(assignees))
+	}
+}
+
+func TestGetComments(t *testing.T) {
+	// Create a temp database
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	owner := "test-owner"
+	repo := "test-repo"
+
+	// First insert the issue (required for foreign key)
+	issue := &github.Issue{
+		Number:    42,
+		Title:     "Test Issue",
+		State:     "open",
+		Author:    github.User{Login: "testuser"},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	err = UpsertIssue(db, owner, repo, issue)
+	if err != nil {
+		t.Fatalf("Failed to upsert issue: %v", err)
+	}
+
+	// Insert comments
+	comment1 := &github.Comment{
+		ID:        1,
+		Body:      "First comment",
+		Author:    github.User{Login: "commenter1"},
+		CreatedAt: time.Now().Add(-1 * time.Hour),
+	}
+	comment2 := &github.Comment{
+		ID:        2,
+		Body:      "Second comment",
+		Author:    github.User{Login: "commenter2"},
+		CreatedAt: time.Now(),
+	}
+	err = UpsertComment(db, 42, comment1)
+	if err != nil {
+		t.Fatalf("Failed to insert comment: %v", err)
+	}
+	err = UpsertComment(db, 42, comment2)
+	if err != nil {
+		t.Fatalf("Failed to insert comment: %v", err)
+	}
+
+	// Get comments
+	comments, err := GetComments(db, 42)
+	if err != nil {
+		t.Fatalf("Failed to get comments: %v", err)
+	}
+
+	if len(comments) != 2 {
+		t.Errorf("Expected 2 comments, got %d", len(comments))
+	}
+
+	// Comments should be ordered by created_at ascending
+	if comments[0].ID != 1 {
+		t.Errorf("Expected first comment to be ID 1, got %d", comments[0].ID)
+	}
+	if comments[1].ID != 2 {
+		t.Errorf("Expected second comment to be ID 2, got %d", comments[1].ID)
+	}
+}
+
+func TestGetCommentsEmpty(t *testing.T) {
+	// Create a temp database
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	// Get comments for issue with no comments
+	comments, err := GetComments(db, 999)
+	if err != nil {
+		t.Fatalf("Failed to get comments: %v", err)
+	}
+
+	if len(comments) != 0 {
+		t.Errorf("Expected 0 comments, got %d", len(comments))
+	}
+}

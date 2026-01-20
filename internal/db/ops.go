@@ -344,3 +344,143 @@ func GetIssue(db *sql.DB, owner, repo string, number int) (*IssueList, error) {
 	}
 	return &issue, nil
 }
+
+// IssueDetail represents the full details of an issue for the detail view
+type IssueDetail struct {
+	Number      int
+	Title       string
+	Body        string
+	State       string
+	Author      string
+	CreatedAt   string
+	UpdatedAt   string
+	CommentCnt  int
+	HTMLURL     string
+	Labels      []string
+	Assignees   []string
+}
+
+// GetIssueDetail returns full details of an issue including labels and assignees
+func GetIssueDetail(db *sql.DB, owner, repo string, number int) (*IssueDetail, error) {
+	query := `
+		SELECT number, title, body, state, author_login, created_at, updated_at, comment_count, html_url
+		FROM issues
+		WHERE owner = ? AND repo = ? AND number = ?;
+	`
+	var issue IssueDetail
+	err := db.QueryRow(query, owner, repo, number).Scan(
+		&issue.Number, &issue.Title, &issue.Body, &issue.State,
+		&issue.Author, &issue.CreatedAt, &issue.UpdatedAt,
+		&issue.CommentCnt, &issue.HTMLURL,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get issue detail: %w", err)
+	}
+
+	// Fetch labels
+	labels, err := GetLabels(db, number)
+	if err != nil {
+		return nil, err
+	}
+	issue.Labels = labels
+
+	// Fetch assignees
+	assignees, err := GetAssignees(db, number)
+	if err != nil {
+		return nil, err
+	}
+	issue.Assignees = assignees
+
+	return &issue, nil
+}
+
+// GetLabels returns all labels for an issue
+func GetLabels(db *sql.DB, issueNumber int) ([]string, error) {
+	query := `SELECT name FROM labels WHERE issue_number = ?;`
+	rows, err := db.Query(query, issueNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get labels: %w", err)
+	}
+	defer rows.Close()
+
+	var labels []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("failed to scan label: %w", err)
+		}
+		labels = append(labels, name)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating labels: %w", err)
+	}
+
+	return labels, nil
+}
+
+// GetAssignees returns all assignees for an issue
+func GetAssignees(db *sql.DB, issueNumber int) ([]string, error) {
+	query := `SELECT login FROM assignees WHERE issue_number = ?;`
+	rows, err := db.Query(query, issueNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get assignees: %w", err)
+	}
+	defer rows.Close()
+
+	var assignees []string
+	for rows.Next() {
+		var login string
+		if err := rows.Scan(&login); err != nil {
+			return nil, fmt.Errorf("failed to scan assignee: %w", err)
+		}
+		assignees = append(assignees, login)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating assignees: %w", err)
+	}
+
+	return assignees, nil
+}
+
+// Comment represents a comment on an issue
+type Comment struct {
+	ID        int
+	Body      string
+	Author    string
+	CreatedAt string
+}
+
+// GetComments returns all comments for an issue
+func GetComments(db *sql.DB, issueNumber int) ([]Comment, error) {
+	query := `
+		SELECT id, body, author_login, created_at
+		FROM comments
+		WHERE issue_number = ?
+		ORDER BY created_at ASC;
+	`
+	rows, err := db.Query(query, issueNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get comments: %w", err)
+	}
+	defer rows.Close()
+
+	var comments []Comment
+	for rows.Next() {
+		var comment Comment
+		if err := rows.Scan(&comment.ID, &comment.Body, &comment.Author, &comment.CreatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan comment: %w", err)
+		}
+		comments = append(comments, comment)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating comments: %w", err)
+	}
+
+	return comments, nil
+}
