@@ -202,7 +202,8 @@
       "labels": [
         "sync",
         "api"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-010",
@@ -214,14 +215,15 @@
         "Updates after each successful sync"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-009"
       ],
       "labels": [
         "tui",
         "status"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-011",
@@ -234,14 +236,15 @@
         "Help overlay dismissible with ? or Esc"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-005"
       ],
       "labels": [
         "tui",
         "help"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-012",
@@ -275,14 +278,15 @@
         "Network errors suggest checking connectivity and retrying"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-005"
       ],
       "labels": [
         "tui",
         "errors"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-014",
@@ -308,6 +312,6 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-01-20T05:53:16.985Z"
+    "updatedAt": "2026-01-20T06:45:28.250Z"
   }
 }

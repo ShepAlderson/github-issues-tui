@@ -31,7 +31,7 @@ func TestIntegration_ModelWithEmptyIssueList(t *testing.T) {
 	issues := []storage.Issue{}
 	columns := []Column{{Name: "number", Width: 7, Title: "#"}}
 
-	model := NewModel(issues, columns, time.Time{})
+	model := NewModel(issues, columns, time.Time{}, "default")
 
 	if model.IssueList == nil {
 		t.Fatal("Expected IssueList to be initialized")
@@ -56,7 +56,7 @@ func TestIntegration_ModelWithIssues(t *testing.T) {
 	}
 
 	columns := GetDefaultColumns(&config.Config{})
-	model := NewModel(issues, columns, now)
+	model := NewModel(issues, columns, now, "default")
 
 	if len(model.IssueList.Issues) != 1 {
 		t.Errorf("Expected 1 issue, got %d", len(model.IssueList.Issues))

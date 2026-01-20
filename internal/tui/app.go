@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/shepbook/ghissues/internal/sort"
 	"github.com/shepbook/ghissues/internal/storage"
+	"github.com/shepbook/ghissues/internal/theme"
 	"github.com/shepbook/ghissues/internal/timefmt"
 )
 
@@ -27,13 +28,17 @@ type Model struct {
 	Error         ErrorModel   // Error state for modal and status bar
 	Help          HelpModel    // Help overlay state
 	LastSync      time.Time    // Last sync timestamp
+	Theme         *theme.Theme // Color theme
 	Quitting      bool
 	Width         int
 	Height        int
 }
 
 // NewModel creates a new TUI model
-func NewModel(issues []storage.Issue, columns []Column, lastSync time.Time) Model {
+func NewModel(issues []storage.Issue, columns []Column, lastSync time.Time, themeName string) Model {
+	// Load theme
+	theme := theme.GetTheme(themeName)
+
 	issueList := NewIssueList(issues, columns)
 	model := Model{
 		IssueList:   issueList,
@@ -43,6 +48,7 @@ func NewModel(issues []storage.Issue, columns []Column, lastSync time.Time) Mode
 		Error:       ErrorModel{},
 		Help:        NewHelpModel(),
 		LastSync:    lastSync,
+		Theme:       theme,
 		Quitting:    false,
 	}
 	// Initialize detail panel with first issue if available
@@ -53,7 +59,10 @@ func NewModel(issues []storage.Issue, columns []Column, lastSync time.Time) Mode
 }
 
 // NewModelWithSort creates a new TUI model with specific sort settings
-func NewModelWithSort(issues []storage.Issue, columns []Column, sortField string, sortDescending bool, lastSync time.Time) Model {
+func NewModelWithSort(issues []storage.Issue, columns []Column, sortField string, sortDescending bool, lastSync time.Time, themeName string) Model {
+	// Load theme
+	theme := theme.GetTheme(themeName)
+
 	issueList := NewIssueListWithSort(issues, columns, sortField, sortDescending)
 	model := Model{
 		IssueList:   issueList,
@@ -63,6 +72,7 @@ func NewModelWithSort(issues []storage.Issue, columns []Column, sortField string
 		Error:       ErrorModel{},
 		Help:        NewHelpModel(),
 		LastSync:    lastSync,
+		Theme:       theme,
 		Quitting:    false,
 	}
 	// Initialize detail panel with first issue if available
@@ -305,7 +315,7 @@ func (m Model) View() string {
 
 	// If help is active, show help overlay
 	if m.Help.Active {
-		return m.Help.View()
+		return m.Help.View(m.Theme)
 	}
 
 	// If refresh is active or just completed, show refresh overlay
@@ -351,7 +361,7 @@ func (m Model) renderHeader() string {
 	// Add separator line
 	separator := strings.Repeat("─", m.Width)
 
-	style := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("blue"))
+	style := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.Theme.ListHeader))
 	return style.Render(header) + "\n" + lipgloss.NewStyle().Faint(true).Render(separator)
 }
 
@@ -401,7 +411,7 @@ func (m Model) renderIssueRow(issue storage.Issue, isCursor bool) string {
 
 	if isCursor {
 		row = lipgloss.NewStyle().
-			Background(lipgloss.Color("235")).
+			Background(lipgloss.Color(m.Theme.Cursor)).
 			Foreground(lipgloss.Color("white")).
 			Render(row)
 	}
@@ -416,7 +426,7 @@ func (m Model) renderStatusBar() string {
 
 	if m.IssueList.Selected != nil {
 		selectedInfo = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("green")).
+			Foreground(lipgloss.Color(m.Theme.Success)).
 			Render(" | Selected: #" + formatNumber(m.IssueList.Selected.Number))
 	}
 
@@ -428,7 +438,7 @@ func (m Model) renderStatusBar() string {
 		sortOrder = "▲" // Ascending
 	}
 	sortInfo := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("yellow")).
+		Foreground(lipgloss.Color(m.Theme.StatusKey)).
 		Render(" | Sort: " + sort.GetSortFieldLabel(m.IssueList.SortField) + sortOrder)
 
 	markdownHint := ""
@@ -442,19 +452,19 @@ func (m Model) renderStatusBar() string {
 
 	// Build last sync info
 	lastSyncInfo := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("cyan")).
+		Foreground(lipgloss.Color(m.Theme.StatusKey)).
 		Render(" | Last synced: " + FormatRelativeTime(m.LastSync))
 
 	// Build error info for minor errors
 	errorInfo := ""
 	if m.Error.Active && m.Error.IsMinor() {
 		errorInfo = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("red")).
+			Foreground(lipgloss.Color(m.Theme.Error)).
 			Render(" | Error: " + m.Error.Message)
 	}
 
 	status := lipgloss.NewStyle().
-		Faint(true).
+		Foreground(lipgloss.Color(m.Theme.StatusBar)).
 		Render("Issues: " + formatNumber(issueCount) +
 			" | ↑↓/jk: navigate | s: sort | r: refresh | Enter: comments | Space: select | ?: help | q: quit" +
 			markdownHint + selectedInfo + sortInfo + lastSyncInfo + errorInfo)
@@ -469,7 +479,7 @@ func (m Model) renderCommentsView() string {
 	}
 
 	// Get the full view content
-	content := m.CommentsView.View()
+	content := m.CommentsView.View(m.Theme)
 
 	// Build status bar for comments view
 	status := m.renderCommentsStatusBar()
@@ -487,7 +497,7 @@ func (m Model) renderCommentsStatusBar() string {
 	}
 
 	status := lipgloss.NewStyle().
-		Faint(true).
+		Foreground(lipgloss.Color(m.Theme.StatusBar)).
 		Render(fmt.Sprintf("Comments: %d | ↑↓/jk: scroll | m: toggle markdown (%s) | ?: help | Esc/q: back", commentCount, mode))
 
 	return status
@@ -537,7 +547,7 @@ func (m Model) renderSplitLayout() string {
 	// Render detail panel
 	detailView := ""
 	if m.DetailPanel != nil {
-		detailView = m.DetailPanel.View()
+		detailView = m.DetailPanel.View(m.Theme)
 	} else {
 		detailView = "No issue selected"
 	}
@@ -595,5 +605,5 @@ func (m Model) renderRefreshView() string {
 
 // renderErrorView renders the error modal
 func (m Model) renderErrorView() string {
-	return m.Error.View()
+	return m.Error.View(m.Theme)
 }

@@ -120,7 +120,7 @@ func (m RefreshModel) View() string {
 
 	// Build the view
 	style := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("86")).
+		Foreground(lipgloss.Color("86")). // Cyan is reasonable for progress
 		Bold(true)
 
 	content := fmt.Sprintf("\n%s\n%s %s (%s)",

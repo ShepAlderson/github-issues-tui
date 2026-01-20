@@ -68,6 +68,12 @@ func main() {
 		return
 	}
 
+	// Handle themes command
+	if command == "themes" {
+		handleThemesCommand(configPath)
+		return
+	}
+
 	// Check if config exists
 	if !config.ConfigExists(configPath) {
 		// Run first-time setup
@@ -190,8 +196,14 @@ func main() {
 		lastSync = time.Time{} // Use zero time if error
 	}
 
-	// Create and start TUI with sort configuration
-	model := tui.NewModelWithSort(issues, columns, sortField, sortDescending, lastSync)
+	// Get theme from config
+	themeName := cfg.Display.Theme
+	if themeName == "" {
+		themeName = "default"
+	}
+
+	// Create and start TUI with sort configuration and theme
+	model := tui.NewModelWithSort(issues, columns, sortField, sortDescending, lastSync, themeName)
 
 	// Load comments for all issues into the model cache
 	for _, issue := range issues {
@@ -259,5 +271,6 @@ func printHelp() {
 	fmt.Printf("  --version         Show version information\n\n")
 	fmt.Printf("Commands:\n")
 	fmt.Printf("  config            Run interactive configuration\n")
+	fmt.Printf("  themes            List available color themes and show current theme\n")
 	fmt.Printf("  sync              Sync issues from GitHub (also runs automatically on first use)\n")
 }

@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/shepbook/ghissues/internal/theme"
 )
 
 // HelpModel represents the help overlay state
@@ -53,7 +54,7 @@ func (m *HelpModel) Toggle() {
 }
 
 // View renders the help overlay
-func (m HelpModel) View() string {
+func (m HelpModel) View(theme *theme.Theme) string {
 	if !m.Active {
 		return ""
 	}
@@ -67,32 +68,32 @@ func (m HelpModel) View() string {
 	// Style definitions
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("86")). // Cyan
+		Foreground(lipgloss.Color(theme.HelpTitle)).
 		Width(modalWidth).
 		MarginBottom(1)
 
 	sectionStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("228")). // Yellow
+		Foreground(lipgloss.Color(theme.HelpSection)).
 		Width(modalWidth).
 		MarginTop(1).
 		MarginBottom(1)
 
 	keyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("212")). // Pink
+		Foreground(lipgloss.Color(theme.HelpKey)).
 		Width(20)
 
 	descStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("243")). // Light gray
+		Foreground(lipgloss.Color(theme.Faint)).
 		Width(modalWidth - 22)
 
 	borderStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("86")).
+		BorderForeground(lipgloss.Color(theme.Border)).
 		Padding(1, 1)
 
 	hintStyle := lipgloss.NewStyle().
-		Faint(true).
+		Foreground(lipgloss.Color(theme.Faint)).
 		MarginTop(1)
 
 	// Build content

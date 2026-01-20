@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/shepbook/ghissues/internal/storage"
+	"github.com/shepbook/ghissues/internal/theme"
 )
 
 // CommentsView represents the state of the comments view for an issue
@@ -54,27 +55,27 @@ func (v *CommentsView) SetViewport(height int) {
 }
 
 // View renders the comments view
-func (v *CommentsView) View() string {
+func (v *CommentsView) View(theme *theme.Theme) string {
 	var parts []string
 
 	// Header with issue number and title
 	headerStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("blue"))
+		Foreground(lipgloss.Color(theme.Title))
 	header := headerStyle.Render(fmt.Sprintf("#%d %s", v.Issue.Number, v.Issue.Title))
 	parts = append(parts, header)
 
 	// Separator
 	separator := strings.Repeat("─", 80)
-	parts = append(parts, lipgloss.NewStyle().Faint(true).Render(separator))
+	parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Faint)).Render(separator))
 
 	// Comments
 	if len(v.Comments) == 0 {
-		noCommentsStyle := lipgloss.NewStyle().Faint(true)
+		noCommentsStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Faint))
 		parts = append(parts, noCommentsStyle.Render("No comments on this issue."))
 	} else {
 		for i, comment := range v.Comments {
-			commentView := v.renderComment(comment, i)
+			commentView := v.renderComment(comment, i, theme)
 			parts = append(parts, commentView)
 			// Add separator between comments
 			if i < len(v.Comments)-1 {
@@ -87,29 +88,29 @@ func (v *CommentsView) View() string {
 }
 
 // renderComment renders a single comment
-func (v *CommentsView) renderComment(comment storage.Comment, index int) string {
+func (v *CommentsView) renderComment(comment storage.Comment, index int, theme *theme.Theme) string {
 	var parts []string
 
 	// Comment header with author and date
 	headerStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("green"))
+		Foreground(lipgloss.Color(theme.Success))
 	commentHeader := headerStyle.Render(fmt.Sprintf("%s commented on %s",
 		comment.Author,
 		comment.CreatedAt.Format("2006-01-02 15:04:05")))
 	parts = append(parts, commentHeader)
 
 	// Comment body
-	body := v.renderCommentBody(comment)
+	body := v.renderCommentBody(comment, theme)
 	parts = append(parts, body)
 
 	return strings.Join(parts, "\n")
 }
 
 // renderCommentBody renders the comment body, either as raw markdown or rendered
-func (v *CommentsView) renderCommentBody(comment storage.Comment) string {
+func (v *CommentsView) renderCommentBody(comment storage.Comment, theme *theme.Theme) string {
 	if comment.Body == "" {
-		bodyStyle := lipgloss.NewStyle().Faint(true)
+		bodyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Faint))
 		return bodyStyle.Render("No content.")
 	}
 
@@ -140,8 +141,8 @@ func (v *CommentsView) renderWithGlamour(markdown string) (string, error) {
 }
 
 // GetVisibleLines returns the visible lines based on scroll offset
-func (v *CommentsView) GetVisibleLines() []string {
-	view := v.View()
+func (v *CommentsView) GetVisibleLines(theme *theme.Theme) []string {
+	view := v.View(theme)
 	lines := strings.Split(view, "\n")
 
 	start := v.ScrollOffset

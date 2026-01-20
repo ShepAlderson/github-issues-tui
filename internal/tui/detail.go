@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/shepbook/ghissues/internal/storage"
+	"github.com/shepbook/ghissues/internal/theme"
 )
 
 // DetailPanel represents the state of the issue detail view
@@ -57,7 +58,7 @@ func (p *DetailPanel) SetViewport(height int) {
 }
 
 // View renders the detail panel
-func (p *DetailPanel) View() string {
+func (p *DetailPanel) View(theme *theme.Theme) string {
 	if p.Issue.Number == 0 {
 		return "No issue selected"
 	}
@@ -67,7 +68,7 @@ func (p *DetailPanel) View() string {
 	// Header with issue number and title
 	headerStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("blue"))
+		Foreground(lipgloss.Color(theme.Title))
 	header := headerStyle.Render(fmt.Sprintf("#%d %s", p.Issue.Number, p.Issue.Title))
 	parts = append(parts, header)
 
@@ -81,7 +82,7 @@ func (p *DetailPanel) View() string {
 		metaParts = append(metaParts, fmt.Sprintf("Closed: %s", p.Issue.ClosedAt.Format("2006-01-02 15:04")))
 	}
 	metaRow := strings.Join(metaParts, " | ")
-	metaStyle := lipgloss.NewStyle().Faint(true)
+	metaStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Faint))
 	parts = append(parts, metaStyle.Render(metaRow))
 
 	// Labels if present
@@ -92,7 +93,7 @@ func (p *DetailPanel) View() string {
 			label = strings.TrimSpace(label)
 			if label != "" {
 				labelStyle := lipgloss.NewStyle().
-					Background(lipgloss.Color("62")).
+					Background(lipgloss.Color(theme.Label)).
 					Foreground(lipgloss.Color("white")).
 					Padding(0, 1)
 				labelParts = append(labelParts, labelStyle.Render(label))
@@ -114,26 +115,26 @@ func (p *DetailPanel) View() string {
 			}
 		}
 		if len(assigneeList) > 0 {
-			assigneeStyle := lipgloss.NewStyle().Faint(true)
+			assigneeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Faint))
 			parts = append(parts, assigneeStyle.Render("Assignees: "+strings.Join(assigneeList, ", ")))
 		}
 	}
 
 	// Separator
 	separator := strings.Repeat("─", 80)
-	parts = append(parts, lipgloss.NewStyle().Faint(true).Render(separator))
+	parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Faint)).Render(separator))
 
 	// Body
-	body := p.renderBody()
+	body := p.renderBody(theme)
 	parts = append(parts, body)
 
 	return strings.Join(parts, "\n")
 }
 
 // renderBody renders the issue body, either as raw markdown or rendered
-func (p *DetailPanel) renderBody() string {
+func (p *DetailPanel) renderBody(theme *theme.Theme) string {
 	if p.Issue.Body == "" {
-		bodyStyle := lipgloss.NewStyle().Faint(true)
+		bodyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Faint))
 		return bodyStyle.Render("No description provided.")
 	}
 
@@ -166,8 +167,8 @@ func (p *DetailPanel) renderWithGlamour(markdown string) (string, error) {
 }
 
 // GetVisibleLines returns the visible lines based on scroll offset
-func (p *DetailPanel) GetVisibleLines() []string {
-	view := p.View()
+func (p *DetailPanel) GetVisibleLines(theme *theme.Theme) []string {
+	view := p.View(theme)
 	lines := strings.Split(view, "\n")
 
 	start := p.ScrollOffset

@@ -83,6 +83,30 @@ after each iteration and included in agent prompts for context.
 - **Deletion Handling**: List-based deletion removes items not in current remote dataset
 - **State-Based Rendering**: Check refresh state before rendering main UI to show overlay when active
 
+### Error Handling Pattern
+- **Severity Classification**: Distinguish critical (modal) from minor (status bar) errors automatically
+- **Error Pattern Matching**: Use string matching on error messages for classification flexibility
+- **Modal Acknowledgment**: Critical errors require user acknowledgment before dismissal
+- **Actionable Guidance**: Provide specific guidance for each error type (auth, repo, db, network)
+- **Status Bar Integration**: Minor errors show in status bar without blocking UI
+- **Safe Defaults**: Unknown errors default to critical for better user experience
+
+### Relative Time Display Pattern
+- **Tiered Granularity**: Use seconds, minutes, hours, days, weeks, months for human-readable time display
+- **Zero Time Handling**: Always check IsZero() before formatting to show appropriate fallback ("never" vs timestamp)
+- **Pluralization Logic**: Use helper function to handle singular/plural forms (e.g., "1 minute" vs "5 minutes")
+- **Testable Time Functions**: Pass `now` parameter instead of calling time.Now() for deterministic tests
+- **Metadata Display**: Use subtle colors (e.g., cyan) in status bar for metadata that doesn't require immediate attention
+- **Defensive Time Calculations**: Handle edge cases like future times and integer division (28 days / 30 = 0 months)
+### Help Overlay Pattern
+- **Context Organization**: Group keybindings by view/context (main, comments, detail) for better discoverability
+- **Toggle Activation**: Single key (?) both opens and closes help for simplicity
+- **Multiple Dismissal Keys**: Support both ? and Esc for user convenience
+- **Priority Order**: Check help state after error modal but before other overlays (refresh, drill-down views)
+- **Consistent Modal Styling**: Use same border, centering, and styling as other overlays (error, refresh)
+- **Status Bar Integration**: Include help key hint in all views for discoverability
+- **Fixed Width Content**: Use fixed width for modal content to simplify centering calculations
+
 ---
 
 ## 2026-01-19 - US-001
@@ -509,5 +533,172 @@ t Coverage**: All tests passing with table-driven test patterns\n\n### 📝 Patt
 
 **Commit:**
 Created commit: `feat: US-009 - Data Refresh`
+
+---
+## ✓ Iteration 9 - US-009: Data Refresh
+*2026-01-20T06:15:30.376Z (1333s)*
+
+**Status:** Completed
+
+**Notes:**
+TUI","status":"completed","activeForm":"Adding r/R keybinding to trigger refresh in TUI"},{"content":"Integrate auto-refresh on app launch","status":"completed","activeForm":"Integrating auto-refresh on app launch"},{"content":"Run quality checks (go test, go vet, go build)","status":"completed","activeForm":"Running quality checks"}]}}
+{"type":"assistant","message":{"id":"msg_20260120141505ad71bada25f64e29","type":"message","role":"assistant","model":"glm-4.7","content":[{"type":"text","text":"
+
+---
+
+## 2026-01-20 - US-013
+- Implemented comprehensive error handling system with modal and status bar display
+- Created error model with automatic severity classification
+- Added actionable guidance for common error types
+- Integrated error handling into TUI with proper state management
+- Files changed:
+  - `internal/tui/error.go` - Error model with classification, modal rendering, and actionable guidance
+  - `internal/tui/error_test.go` - Comprehensive error handling tests (100% passing)
+  - `internal/tui/app.go` - Error state integration with modal overlay and status bar display
+
+**Learnings:**
+- **Error severity classification** is essential for good UX - not all errors need to block the UI
+- **String-based error matching** is flexible but requires careful pattern design for false positives
+- **Modal acknowledgment pattern** ensures users see critical errors before dismissing
+- **Actionable guidance** transforms errors from frustrating to helpful - tell users what to do
+- **lipgloss border styling** with rounded borders and colors creates clear visual hierarchy
+- **Error state priority** matters - check error modal state before other keybindings
+- **Status bar integration** keeps minor errors visible without blocking workflows
+- **Centering calculations** must account for border padding and content width
+
+**Gotchas:**
+- **Error message matching** should use lowercase for case-insensitive comparison
+- **Critical vs minor distinction** requires careful consideration of user impact
+- **Modal dismissal logic** needs two-stage acknowledgment (show complete, then dismiss on keypress)
+- **Guidance text length** affects modal width - keep it concise but helpful
+- **Test data isolation** is important - error tests need varied error message patterns
+- **Border padding** in lipgloss affects centering calculations - account for it
+- **Error model reuse** - single error model can handle both modal and status bar display
+- **Status bar space** is limited - truncate long error messages or show only key info
+
+**Patterns Discovered:**
+- **Error Severity Pattern**: Classify errors as critical (modal) or minor (status bar) based on message patterns
+- **Modal Acknowledgment Pattern**: Two-stage dismissal (mark complete, then dismiss) ensures user awareness
+- **Actionable Guidance Pattern**: Provide specific, actionable steps for each error category
+- **Error State Priority Pattern**: Check error modal state first in Update to block other interactions
+- **Status Bar Error Pattern**: Show minor errors in status bar without blocking UI workflow
+
+**Commit:**
+Created commit: `feat: US-013 - Error Handling`
+
+---
+## ✓ Iteration 10 - US-013: Error Handling
+*2026-01-20T06:29:22.511Z (831s)*
+
+**Status:** Completed
+
+**Notes:**
+y Checks:\n- ✅ All TUI tests passing (100%)\n- ✅ Core package tests passing (auth, config, database, sort)\n- ✅ `go vet` passes with no warnings\n- ✅ Application builds successfully\n- ✅ Commit created with detailed message\n\n### Patterns Discovered:\nAdded **Error Handling Pattern** to codebase patterns, documenting:\n- Error severity classification (critical vs minor)\n- Modal acknowledgment pattern\n- Actionable guidance pattern\n- Error state priority pattern\n- Status bar error pattern\n\n
+
+---
+
+## 2026-01-20 - US-010
+- Implemented last synced indicator in TUI status bar with relative time display
+- Created timefmt package with FormatRelative function for human-readable time formatting
+- Added LastSync field to TUI Model to track when data was last updated
+- Integrated last sync time loading from database metadata on app startup
+- Updated last sync timestamp on successful refresh completion
+- Files changed:
+  - `internal/timefmt/timefmt.go` - Relative time formatting utility with pluralization
+  - `internal/timefmt/timefmt_test.go` - Comprehensive tests covering all time ranges (100% passing)
+  - `internal/tui/app.go` - Added LastSync field and status bar display with cyan color
+  - `internal/tui/integration_test.go` - Updated tests to include last sync parameter
+  - `cmd/ghissues/main.go` - Load last sync from database on startup
+
+**Learnings:**
+- **Relative time formatting** improves UX significantly - users understand "5 minutes ago" better than timestamps
+- **Zero time handling** is important - show "never" instead of confusing users with epoch time
+- **Time granularity tiers** work well - seconds, minutes, hours, days, weeks, months provide good coverage
+- **Pluralization logic** needs careful handling - singular vs plural forms matter for readability
+- **Status bar space** is limited - keep labels concise but informative
+- **Color coding** helps visual hierarchy - cyan for metadata distinguishes it from other status elements
+- **Table-driven tests** are perfect for time formatting - cover many time ranges in one test function
+- **Pre-existing infrastructure** - UpdateLastSync/GetLastSync were already implemented from US-009
+- **TDD approach works smoothly** - write failing tests, implement, watch them pass
+- **Time calculations** should use now parameter for testability - don't call time.Now() directly
+
+**Gotchas:**
+- **Month calculation** can be tricky - 28 days / 30 = 0, need to check days < 30 before dividing
+- **Test timing** - time.Now() calls in tests need to be close together or use fixed times
+- **Import order** - adding new imports requires updating existing code that uses the package
+- **Function signature changes** ripple through codebase - update all call sites when adding parameters
+- **Time zone handling** - use RFC3339 for storage, but comparisons are timezone-agnostic with time.Since
+- **Zero time checks** - always use IsZero() method, not comparison to time.Time{}
+- **Integer division** - 28 days / 30 days = 0 months, handle this explicitly before division
+- **Status bar overflow** - too much text gets truncated, prioritize essential information
+- **Color consistency** - use consistent colors for similar information types
+- **Future time handling** - be defensive, handle negative durations gracefully even if unexpected
+
+**Patterns Discovered:**
+- **Relative Time Pattern**: Use tiered granularity (seconds → minutes → hours → days → weeks → months) for human-readable time display
+- **Zero Time Pattern**: Always check IsZero() before formatting time values to show appropriate fallback ("never" vs timestamp)
+- **Pluralization Pattern**: Use helper function to handle singular/plural forms for better readability
+- **Metadata Display Pattern**: Use subtle colors in status bar for metadata that doesn't require immediate attention
+- **Testable Time Functions**: Pass `now` parameter instead of calling time.Now() for deterministic tests
+
+**Commit:**
+Created commit: `feat: US-010 - Last Synced Indicator`
+
+---
+## ✓ Iteration 11 - US-010: Last Synced Indicator
+*2026-01-20T06:36:02.292Z (399s)*
+
+**Status:** Completed
+
+**Notes:**
+aw timestamps\n- **Tiered granularity** provides good coverage from seconds to months\n- **Zero time handling** is critical - show \"never\" not confusing epoch times\n- **Testability** - pass `now` parameter instead of calling `time.Now()` directly\n- **Month calculation edge case** - check days < 30 before integer division\n\n### ✅ Quality Checks Passed\n- All tests passing (100%)\n- `go vet` passes with no warnings\n- Application builds successfully\n- Commit created with detailed message\n\n
+
+---
+
+## 2026-01-20 - US-011
+- Implemented comprehensive help overlay with keybinding documentation
+- Created HelpModel with toggle, update, and view methods
+- Organized keybindings by context (Main View, Comments View)
+- Added help toggle with ? key from any view
+- Implemented dismissible help overlay with ? and Esc keys
+- Updated status bars to include ?: help hint
+- Files changed:
+  - `internal/tui/help.go` - Help model with keybinding documentation and styled modal
+  - `internal/tui/help_test.go` - Comprehensive tests (11 tests, 100% passing)
+  - `internal/tui/app.go` - Integration of help overlay and status bar updates
+
+**Learnings:**
+- **Help overlay priority** should be after error modal but before other overlays - errors need immediate attention
+- **Context-sensitive help** improves discoverability - show keybindings for current view
+- **Modal styling consistency** is important - use same border and centering pattern as error/refresh overlays
+- **Toggle pattern** works well for help - single key (?) both opens and closes help
+- **Status bar space** is limited - prioritize most common actions and reference to help for full list
+- **lipgloss width constraints** help with centering calculations - use fixed width for modal content
+- **Table-driven tests** are perfect for verifying UI content - check all expected keybindings are present
+- **View method testing** requires understanding of lipgloss rendering - test structure, not exact formatting
+
+**Gotchas:**
+- **Help overlay state** needs to be checked in Update before main view keybindings - blocks other interactions when active
+- **Window size updates** must propagate to all overlays - help, error, refresh all need width/height
+- **Key name capitalization** matters for tests - "Enter" vs "enter" in help text
+- **Border padding** affects centering calculations - lipgloss padding adds space outside content
+- **Status bar truncation** happens automatically with lipgloss - long text gets cut off, keep hints concise
+- **Help in drill-down views** should work the same as main view - check for help active before comments view rendering
+- **Multiple dismissal keys** improve UX - both ? and Esc dismiss help for user convenience
+- **Section organization** improves readability - group keybindings by context (main vs comments)
+
+**Patterns Discovered:**
+- **Help Overlay Pattern**: Full-screen centered modal with organized keybinding sections by context
+- **Persistent Footer Pattern**: Context-sensitive status bar shows common keys with help reference
+- **Toggle Key Pattern**: Single key (?) both opens and closes overlay for simplicity
+
+## ✓ Iteration 12 - US-011: Keybinding Help
+*2026-01-20T06:45:27.241Z (564s)*
+
+**Status:** Completed
+
+**Notes:**
+Footer updates based on current view (list, detail, comments)\n   - Main view footer (app.go:407-458)\n   - Comments view footer (app.go:475-489)\n\n✅ Help overlay dismissible with ? or Esc\n   - ? dismissal in help.go:67\n   - Esc dismissal in help.go:67\n\nAll acceptance criteria met!","stderr":"","interrupted":false,"isImage":false}}
+{"type":"assistant","message":{"id":"msg_20260120144520fbe236885cd741c6","type":"message","role":"assistant","model":"glm-4.7","content":[{"type":"text","text":"
 
 ---

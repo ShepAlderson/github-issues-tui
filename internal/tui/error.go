@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/shepbook/ghissues/internal/theme"
 )
 
 // ErrorSeverity represents the severity level of an error
@@ -224,7 +225,7 @@ func (m ErrorModel) Update(msg tea.Msg) (ErrorModel, tea.Cmd) {
 }
 
 // View renders the error modal (for critical errors)
-func (m ErrorModel) View() string {
+func (m ErrorModel) View(theme *theme.Theme) string {
 	if !m.Active {
 		return ""
 	}
@@ -244,7 +245,7 @@ func (m ErrorModel) View() string {
 	// Style definitions
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("196")). // Red for errors
+		Foreground(lipgloss.Color(theme.Error)).
 		Width(modalWidth).
 		MarginBottom(1)
 
@@ -254,13 +255,13 @@ func (m ErrorModel) View() string {
 		MarginBottom(1)
 
 	guidanceStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("243")). // Light gray
+		Foreground(lipgloss.Color(theme.Faint)).
 		Width(modalWidth).
 		MarginBottom(1)
 
 	borderStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("196")).
+		BorderForeground(lipgloss.Color(theme.Error)).
 		Padding(1, 1)
 
 	// Build content
@@ -285,7 +286,7 @@ func (m ErrorModel) View() string {
 	}
 
 	// Dismiss hint
-	hintStyle := lipgloss.NewStyle().Faint(true).MarginTop(1)
+	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Faint)).MarginTop(1)
 	hint := "Press any key to continue"
 	if m.Complete {
 		hint = "Press any key to dismiss"
