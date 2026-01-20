@@ -184,6 +184,20 @@ func main() {
 
 	// Create and start TUI with sort configuration
 	model := tui.NewModelWithSort(issues, columns, sortField, sortDescending)
+
+	// Load comments for all issues into the model cache
+	for _, issue := range issues {
+		if issue.Comments > 0 {
+			comments, err := storage.GetCommentsForIssue(db, issue.Number)
+			if err != nil {
+				// Log but continue - comments are optional
+				fmt.Fprintf(os.Stderr, "Warning: Failed to load comments for issue #%d: %v\n", issue.Number, err)
+			} else {
+				model.SetComments(issue.Number, comments)
+			}
+		}
+	}
+
 	program := tea.NewProgram(model, tea.WithAltScreen())
 
 	if _, err := program.Run(); err != nil {

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -11,11 +12,13 @@ import (
 
 // Model represents the main application state
 type Model struct {
-	IssueList   *IssueList
-	DetailPanel *DetailPanel
-	Quitting    bool
-	Width       int
-	Height      int
+	IssueList     *IssueList
+	DetailPanel   *DetailPanel
+	CommentsView  *CommentsView // Comments view for drill-down
+	AllComments   map[int][]storage.Comment // Cache comments by issue number
+	Quitting      bool
+	Width         int
+	Height        int
 }
 
 // NewModel creates a new TUI model
@@ -24,6 +27,7 @@ func NewModel(issues []storage.Issue, columns []Column) Model {
 	model := Model{
 		IssueList:   issueList,
 		DetailPanel: nil,
+		AllComments: make(map[int][]storage.Comment),
 		Quitting:    false,
 	}
 	// Initialize detail panel with first issue if available
@@ -39,6 +43,7 @@ func NewModelWithSort(issues []storage.Issue, columns []Column, sortField string
 	model := Model{
 		IssueList:   issueList,
 		DetailPanel: nil,
+		AllComments: make(map[int][]storage.Comment),
 		Quitting:    false,
 	}
 	// Initialize detail panel with first issue if available
@@ -57,6 +62,12 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// If in comments view, handle comments-specific keybindings
+		if m.CommentsView != nil {
+			return m.updateCommentsView(msg)
+		}
+
+		// Otherwise handle main view keybindings
 		switch msg.String() {
 		case "q", "ctrl+c":
 			m.Quitting = true
@@ -72,7 +83,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateDetailPanel()
 			return m, nil
 
-		case "enter", " ":
+		case "enter":
+			// Open comments view for current issue
+			return m.openCommentsView()
+
+		case " ":
 			m.IssueList.SelectCurrent()
 			m.updateDetailPanel()
 			return m, nil
@@ -106,10 +121,71 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.DetailPanel != nil {
 			m.DetailPanel.SetViewport(detailHeight)
 		}
+		if m.CommentsView != nil {
+			m.CommentsView.SetViewport(m.Height - 3)
+		}
 		return m, nil
 	}
 
 	return m, nil
+}
+
+// updateCommentsView handles keybindings when in comments view
+func (m Model) updateCommentsView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "q", "esc":
+		// Close comments view and return to main view
+		m.CommentsView = nil
+		return m, nil
+
+	case "j", "down":
+		m.CommentsView.ScrollDown()
+		return m, nil
+
+	case "k", "up":
+		m.CommentsView.ScrollUp()
+		return m, nil
+
+	case "m":
+		// Toggle markdown rendering in comments view
+		m.CommentsView.ToggleMarkdown()
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// openCommentsView opens the comments view for the current issue
+func (m Model) openCommentsView() (tea.Model, tea.Cmd) {
+	if len(m.IssueList.Issues) == 0 {
+		return m, nil
+	}
+
+	if m.IssueList.Cursor < 0 || m.IssueList.Cursor >= len(m.IssueList.Issues) {
+		return m, nil
+	}
+
+	issue := m.IssueList.Issues[m.IssueList.Cursor]
+
+	// Get comments from cache
+	comments, ok := m.AllComments[issue.Number]
+	if !ok {
+		// No comments loaded yet, create empty slice
+		comments = []storage.Comment{}
+	}
+
+	m.CommentsView = NewCommentsView(issue, comments)
+	m.CommentsView.SetViewport(m.Height - 3)
+
+	return m, nil
+}
+
+// SetComments sets the comments for a specific issue in the cache
+func (m *Model) SetComments(issueNumber int, comments []storage.Comment) {
+	if m.AllComments == nil {
+		m.AllComments = make(map[int][]storage.Comment)
+	}
+	m.AllComments[issueNumber] = comments
 }
 
 // View renders the UI
@@ -120,6 +196,11 @@ func (m Model) View() string {
 
 	if m.Width == 0 || m.Height == 0 {
 		return "Loading..."
+	}
+
+	// If in comments view, render comments view
+	if m.CommentsView != nil {
+		return m.renderCommentsView()
 	}
 
 	// Build header
@@ -247,8 +328,39 @@ func (m Model) renderStatusBar() string {
 	status := lipgloss.NewStyle().
 		Faint(true).
 		Render("Issues: " + formatNumber(issueCount) +
-			" | ↑↓/jk: navigate | s: sort field | S: sort order | Enter: select | q: quit" +
+			" | ↑↓/jk: navigate | s: sort field | S: sort order | Enter: comments | Space: select | q: quit" +
 			markdownHint + selectedInfo + sortInfo)
+
+	return status
+}
+
+// renderCommentsView renders the comments view
+func (m Model) renderCommentsView() string {
+	if m.CommentsView == nil {
+		return "Error: Comments view is nil"
+	}
+
+	// Get the full view content
+	content := m.CommentsView.View()
+
+	// Build status bar for comments view
+	status := m.renderCommentsStatusBar()
+
+	return content + "\n" + status
+}
+
+// renderCommentsStatusBar renders the status bar for comments view
+func (m Model) renderCommentsStatusBar() string {
+	commentCount := len(m.CommentsView.Comments)
+
+	mode := "raw"
+	if m.CommentsView.RenderMarkdown {
+		mode = "rendered"
+	}
+
+	status := lipgloss.NewStyle().
+		Faint(true).
+		Render(fmt.Sprintf("Comments: %d | ↑↓/jk: scroll | m: toggle markdown (%s) | Esc/q: back to list", commentCount, mode))
 
 	return status
 }
