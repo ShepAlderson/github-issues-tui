@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/shepbook/ghissues/internal/auth"
@@ -182,8 +183,15 @@ func main() {
 		sortDescending = true // Default to descending (most recent first)
 	}
 
+	// Get last sync time
+	lastSync, err := storage.GetLastSync(db)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to get last sync time: %v\n", err)
+		lastSync = time.Time{} // Use zero time if error
+	}
+
 	// Create and start TUI with sort configuration
-	model := tui.NewModelWithSort(issues, columns, sortField, sortDescending)
+	model := tui.NewModelWithSort(issues, columns, sortField, sortDescending, lastSync)
 
 	// Load comments for all issues into the model cache
 	for _, issue := range issues {

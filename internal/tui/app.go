@@ -9,7 +9,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/shepbook/ghissues/internal/sort"
 	"github.com/shepbook/ghissues/internal/storage"
+	"github.com/shepbook/ghissues/internal/timefmt"
 )
+
+// FormatRelativeTime formats a time as a relative string like "5 minutes ago"
+func FormatRelativeTime(t time.Time) string {
+	return timefmt.FormatRelative(t, time.Now())
+}
 
 // Model represents the main application state
 type Model struct {
@@ -19,13 +25,14 @@ type Model struct {
 	AllComments   map[int][]storage.Comment // Cache comments by issue number
 	Refresh       RefreshModel // Refresh progress state
 	Error         ErrorModel   // Error state for modal and status bar
+	LastSync      time.Time    // Last sync timestamp
 	Quitting      bool
 	Width         int
 	Height        int
 }
 
 // NewModel creates a new TUI model
-func NewModel(issues []storage.Issue, columns []Column) Model {
+func NewModel(issues []storage.Issue, columns []Column, lastSync time.Time) Model {
 	issueList := NewIssueList(issues, columns)
 	model := Model{
 		IssueList:   issueList,
@@ -33,6 +40,7 @@ func NewModel(issues []storage.Issue, columns []Column) Model {
 		AllComments: make(map[int][]storage.Comment),
 		Refresh:     NewRefreshModel(),
 		Error:       ErrorModel{},
+		LastSync:    lastSync,
 		Quitting:    false,
 	}
 	// Initialize detail panel with first issue if available
@@ -43,7 +51,7 @@ func NewModel(issues []storage.Issue, columns []Column) Model {
 }
 
 // NewModelWithSort creates a new TUI model with specific sort settings
-func NewModelWithSort(issues []storage.Issue, columns []Column, sortField string, sortDescending bool) Model {
+func NewModelWithSort(issues []storage.Issue, columns []Column, sortField string, sortDescending bool, lastSync time.Time) Model {
 	issueList := NewIssueListWithSort(issues, columns, sortField, sortDescending)
 	model := Model{
 		IssueList:   issueList,
@@ -51,6 +59,7 @@ func NewModelWithSort(issues []storage.Issue, columns []Column, sortField string
 		AllComments: make(map[int][]storage.Comment),
 		Refresh:     NewRefreshModel(),
 		Error:       ErrorModel{},
+		LastSync:    lastSync,
 		Quitting:    false,
 	}
 	// Initialize detail panel with first issue if available
@@ -160,6 +169,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case RefreshCompleteMsg:
 		updated, _ := m.Refresh.Update(msg)
 		m.Refresh = updated
+
+		// Update last sync time on successful refresh
+		if msg.Success {
+			m.LastSync = time.Now()
+		}
 
 		// If refresh failed, show error
 		if !msg.Success && msg.Error != nil {
@@ -398,6 +412,11 @@ func (m Model) renderStatusBar() string {
 		markdownHint = " | m: toggle markdown (" + mode + ")"
 	}
 
+	// Build last sync info
+	lastSyncInfo := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("cyan")).
+		Render(" | Last synced: " + FormatRelativeTime(m.LastSync))
+
 	// Build error info for minor errors
 	errorInfo := ""
 	if m.Error.Active && m.Error.IsMinor() {
@@ -410,7 +429,7 @@ func (m Model) renderStatusBar() string {
 		Faint(true).
 		Render("Issues: " + formatNumber(issueCount) +
 			" | ↑↓/jk: navigate | s: sort field | S: sort order | r: refresh | R: full refresh | Enter: comments | Space: select | q: quit" +
-			markdownHint + selectedInfo + sortInfo + errorInfo)
+			markdownHint + selectedInfo + sortInfo + lastSyncInfo + errorInfo)
 
 	return status
 }
