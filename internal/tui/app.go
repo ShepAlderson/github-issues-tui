@@ -25,6 +25,7 @@ type Model struct {
 	AllComments   map[int][]storage.Comment // Cache comments by issue number
 	Refresh       RefreshModel // Refresh progress state
 	Error         ErrorModel   // Error state for modal and status bar
+	Help          HelpModel    // Help overlay state
 	LastSync      time.Time    // Last sync timestamp
 	Quitting      bool
 	Width         int
@@ -40,6 +41,7 @@ func NewModel(issues []storage.Issue, columns []Column, lastSync time.Time) Mode
 		AllComments: make(map[int][]storage.Comment),
 		Refresh:     NewRefreshModel(),
 		Error:       ErrorModel{},
+		Help:        NewHelpModel(),
 		LastSync:    lastSync,
 		Quitting:    false,
 	}
@@ -59,6 +61,7 @@ func NewModelWithSort(issues []storage.Issue, columns []Column, sortField string
 		AllComments: make(map[int][]storage.Comment),
 		Refresh:     NewRefreshModel(),
 		Error:       ErrorModel{},
+		Help:        NewHelpModel(),
 		LastSync:    lastSync,
 		Quitting:    false,
 	}
@@ -82,6 +85,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.Error.Active {
 			updated, _ := m.Error.Update(msg)
 			m.Error = updated
+			return m, nil
+		}
+
+		// If help is active, let help model handle the key
+		if m.Help.Active {
+			updated, _ := m.Help.Update(msg)
+			m.Help = updated
+			return m, nil
+		}
+
+		// Toggle help with ? key
+		if msg.String() == "?" {
+			m.Help.Toggle()
 			return m, nil
 		}
 
@@ -201,6 +217,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Refresh = updated
 		updatedError, _ := m.Error.Update(msg)
 		m.Error = updatedError
+		updatedHelp, _ := m.Help.Update(msg)
+		m.Help = updatedHelp
 		return m, nil
 	}
 
@@ -210,6 +228,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // updateCommentsView handles keybindings when in comments view
 func (m Model) updateCommentsView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
+	case "?":
+		// Toggle help overlay
+		m.Help.Toggle()
+		return m, nil
+
 	case "q", "esc":
 		// Close comments view and return to main view
 		m.CommentsView = nil
@@ -278,6 +301,11 @@ func (m Model) View() string {
 	// If error modal is active, show error overlay
 	if m.Error.Active {
 		return m.renderErrorView()
+	}
+
+	// If help is active, show help overlay
+	if m.Help.Active {
+		return m.Help.View()
 	}
 
 	// If refresh is active or just completed, show refresh overlay
@@ -428,7 +456,7 @@ func (m Model) renderStatusBar() string {
 	status := lipgloss.NewStyle().
 		Faint(true).
 		Render("Issues: " + formatNumber(issueCount) +
-			" | ↑↓/jk: navigate | s: sort field | S: sort order | r: refresh | R: full refresh | Enter: comments | Space: select | q: quit" +
+			" | ↑↓/jk: navigate | s: sort | r: refresh | Enter: comments | Space: select | ?: help | q: quit" +
 			markdownHint + selectedInfo + sortInfo + lastSyncInfo + errorInfo)
 
 	return status
@@ -460,7 +488,7 @@ func (m Model) renderCommentsStatusBar() string {
 
 	status := lipgloss.NewStyle().
 		Faint(true).
-		Render(fmt.Sprintf("Comments: %d | ↑↓/jk: scroll | m: toggle markdown (%s) | Esc/q: back to list", commentCount, mode))
+		Render(fmt.Sprintf("Comments: %d | ↑↓/jk: scroll | m: toggle markdown (%s) | ?: help | Esc/q: back", commentCount, mode))
 
 	return status
 }
