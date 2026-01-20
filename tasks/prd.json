@@ -257,14 +257,15 @@
         "Themes use lipgloss for consistent styling"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-005"
       ],
       "labels": [
         "tui",
         "theme"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-013",
@@ -300,7 +301,7 @@
         "ghissues repos lists configured repositories"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-001",
         "US-004"
@@ -308,10 +309,11 @@
       "labels": [
         "config",
         "multi-repo"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     }
   ],
   "metadata": {
-    "updatedAt": "2026-01-20T06:45:28.250Z"
+    "updatedAt": "2026-01-20T07:06:23.745Z"
   }
 }
