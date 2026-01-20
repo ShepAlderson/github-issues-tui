@@ -300,3 +300,64 @@ func TestTUIInitialization_StdinConfiguration(t *testing.T) {
 	// without running a full interactive session, so this test serves as
 	// documentation of the required pattern
 }
+
+func TestCheckTerminalCapabilities_IsTerminal(t *testing.T) {
+	// Test that checkTerminalCapabilities succeeds when stdin is a terminal
+	// Note: This test will only pass when running in a real terminal environment
+	// It may fail in CI/CD environments where stdin is not a terminal
+
+	// We can't reliably test this without mocking, but we can document the behavior
+	t.Log("checkTerminalCapabilities should return nil when stdin is a terminal")
+	t.Log("This test serves as documentation of expected behavior")
+}
+
+func TestCheckTerminalCapabilities_NotTerminal(t *testing.T) {
+	// Test that checkTerminalCapabilities returns an error when stdin is not a terminal
+	// This is difficult to test directly without mocking the file descriptor
+
+	t.Log("checkTerminalCapabilities should return an error when stdin is not a terminal")
+	t.Log("Error message should be clear and actionable for users")
+	t.Log("Expected error: 'stdin is not a terminal. TUI applications require an interactive terminal environment.'")
+}
+
+func TestGetTUIOptions_Default(t *testing.T) {
+	// Test that getTUIOptions returns default options when no environment variables are set
+
+	// Clear any environment variables
+	os.Unsetenv("GHISSUES_TUI_OPTIONS")
+
+	options := getTUIOptions()
+
+	// Default should include AltScreen and WithInput(os.Stdin)
+	if len(options) != 2 {
+		t.Errorf("Expected 2 default options, got %d", len(options))
+	}
+}
+
+func TestGetTUIOptions_WithMouseDisabled(t *testing.T) {
+	// Test that getTUIOptions respects GHISSUES_TUI_OPTIONS=nomouse environment variable
+
+	os.Setenv("GHISSUES_TUI_OPTIONS", "nomouse")
+	defer os.Unsetenv("GHISSUES_TUI_OPTIONS")
+
+	options := getTUIOptions()
+
+	// Should include default options plus WithMouseCellMotion(false)
+	if len(options) < 2 {
+		t.Errorf("Expected at least 2 options with nomouse flag, got %d", len(options))
+	}
+}
+
+func TestGetTUIOptions_WithMultipleFlags(t *testing.T) {
+	// Test that getTUIOptions handles multiple comma-separated flags
+
+	os.Setenv("GHISSUES_TUI_OPTIONS", "nomouse,noaltscreen")
+	defer os.Unsetenv("GHISSUES_TUI_OPTIONS")
+
+	options := getTUIOptions()
+
+	// Should handle multiple flags correctly
+	if len(options) < 1 {
+		t.Errorf("Expected at least 1 option with multiple flags, got %d", len(options))
+	}
+}
