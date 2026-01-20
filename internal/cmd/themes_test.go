@@ -31,11 +31,11 @@ func TestRunThemesCommand_NonInteractive(t *testing.T) {
 	}
 
 	tests := []struct {
-		name        string
-		themeName   string
-		wantTheme   string
+		name         string
+		themeName    string
+		wantTheme    string
 		wantInOutput string
-		wantErr     bool
+		wantErr      bool
 	}{
 		{
 			name:         "set dracula theme",
@@ -224,28 +224,28 @@ func TestListThemesCommand(t *testing.T) {
 
 func TestGetCurrentTheme(t *testing.T) {
 	tests := []struct {
-		name     string
-		cfg      *config.Config
-		want     string
+		name string
+		cfg  *config.Config
+		want string
 	}{
 		{
-			name:     "config with theme",
-			cfg:      &config.Config{},
-			want:     "default",
+			name: "config with theme",
+			cfg:  &config.Config{},
+			want: "default",
 		},
 		{
-			name:     "config with custom theme",
-			cfg:      &config.Config{Display: struct {
-				Columns []string "toml:\"columns\""
+			name: "config with custom theme",
+			cfg: &config.Config{Display: struct {
+				Columns []string    "toml:\"columns\""
 				Sort    config.Sort "toml:\"sort\""
-				Theme   string "toml:\"theme\""
+				Theme   string      "toml:\"theme\""
 			}{Theme: "dracula"}},
-			want:     "dracula",
+			want: "dracula",
 		},
 		{
-			name:     "nil config",
-			cfg:      nil,
-			want:     "default",
+			name: "nil config",
+			cfg:  nil,
+			want: "default",
 		},
 	}
 

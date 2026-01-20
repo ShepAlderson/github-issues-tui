@@ -17,16 +17,16 @@ import (
 
 // ListModel represents the TUI model for the issue list view
 type ListModel struct {
-	db        *db.DB
-	config    *config.Config
-	theme     config.Theme
-	issues    []*db.Issue
-	table     table.Model
-	selected  int
-	width     int
-	height    int
-	quitting  bool
-	err       error
+	db       *db.DB
+	config   *config.Config
+	theme    config.Theme
+	issues   []*db.Issue
+	table    table.Model
+	selected int
+	width    int
+	height   int
+	quitting bool
+	err      error
 
 	// Sort state
 	sortField      string

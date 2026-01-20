@@ -244,10 +244,10 @@ func TestClient_FetchOpenIssues_HandlesError(t *testing.T) {
 func TestClient_GetRepo(t *testing.T) {
 	// GetRepo should parse owner/repo format
 	tests := []struct {
-		repo         string
-		expectOwner  string
-		expectName   string
-		expectError  bool
+		repo        string
+		expectOwner string
+		expectName  string
+		expectError bool
 	}{
 		{
 			repo:        "owner/repo",

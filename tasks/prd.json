@@ -257,14 +257,15 @@
         "Themes use lipgloss for consistent styling"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-005"
       ],
       "labels": [
         "tui",
         "theme"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-013",
@@ -312,6 +313,6 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-01-20T22:31:59.767Z"
+    "updatedAt": "2026-01-20T22:37:38.056Z"
   }
 }

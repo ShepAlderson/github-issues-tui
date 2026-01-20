@@ -58,16 +58,16 @@ func TestDB_StoreAndGetIssues(t *testing.T) {
 
 	// Create a test issue
 	issue := &Issue{
-		Number:      1,
-		Title:       "Test Issue",
-		Body:        "This is a test issue",
-		State:       "open",
-		Author:      "testuser",
-		CreatedAt:   "2026-01-20T10:00:00Z",
-		UpdatedAt:   "2026-01-20T10:00:00Z",
+		Number:       1,
+		Title:        "Test Issue",
+		Body:         "This is a test issue",
+		State:        "open",
+		Author:       "testuser",
+		CreatedAt:    "2026-01-20T10:00:00Z",
+		UpdatedAt:    "2026-01-20T10:00:00Z",
 		CommentCount: 5,
-		Labels:      []string{"bug", "help wanted"},
-		Assignees:   []string{"user1", "user2"},
+		Labels:       []string{"bug", "help wanted"},
+		Assignees:    []string{"user1", "user2"},
 	}
 
 	// Store the issue
@@ -294,10 +294,10 @@ func TestDB_GetIssuesForDisplaySorted(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		sortField      string
-		descending     bool
-		expectedOrder  []int // Expected issue numbers in order
+		name          string
+		sortField     string
+		descending    bool
+		expectedOrder []int // Expected issue numbers in order
 	}{
 		{
 			name:          "Sort by updated_at descending (default)",

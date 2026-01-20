@@ -18,12 +18,12 @@ type keybinding struct {
 // HelpModel represents the TUI model for the help overlay
 // It displays keybindings organized by context
 type HelpModel struct {
-	viewType     ViewType
-	width        int
-	height       int
-	active       bool
-	theme        config.Theme
-	keybindings  map[string][]keybinding
+	viewType    ViewType
+	width       int
+	height      int
+	active      bool
+	theme       config.Theme
+	keybindings map[string][]keybinding
 }
 
 // NewHelpModel creates a new help model for the specified view type

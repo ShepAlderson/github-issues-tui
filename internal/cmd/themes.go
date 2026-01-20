@@ -105,7 +105,7 @@ func RunThemesCommand(configPath string, input io.Reader, output io.Writer, nonI
 	fmt.Fprintln(output)
 	fmt.Fprintf(output, "Current theme: %s\n", getCurrentTheme(cfg))
 	fmt.Fprintln(output)
-	fmt.Fprint(output, "Select a theme (1-" + fmt.Sprintf("%d", len(themes)) + "), or press Enter to keep current: ")
+	fmt.Fprint(output, "Select a theme (1-"+fmt.Sprintf("%d", len(themes))+"), or press Enter to keep current: ")
 
 	// Read user input
 	reader := bufio.NewReader(input)

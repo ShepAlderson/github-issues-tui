@@ -24,40 +24,58 @@ func TestRunSyncCommand(t *testing.T) {
 			if page == "" || page == "1" {
 				// First page - return 2 issues
 				issues := []struct {
-					Number    int      `json:"number"`
-					Title     string   `json:"title"`
-					Body      string   `json:"body"`
-					State     string   `json:"state"`
-					User      struct{ Login string `json:"login"` } `json:"user"`
-					CreatedAt string   `json:"created_at"`
-					UpdatedAt string   `json:"updated_at"`
-					Comments  int      `json:"comments"`
-					Labels    []struct{ Name string `json:"name"` } `json:"labels"`
-					Assignees []struct{ Login string `json:"login"` } `json:"assignees"`
+					Number int    `json:"number"`
+					Title  string `json:"title"`
+					Body   string `json:"body"`
+					State  string `json:"state"`
+					User   struct {
+						Login string `json:"login"`
+					} `json:"user"`
+					CreatedAt string `json:"created_at"`
+					UpdatedAt string `json:"updated_at"`
+					Comments  int    `json:"comments"`
+					Labels    []struct {
+						Name string `json:"name"`
+					} `json:"labels"`
+					Assignees []struct {
+						Login string `json:"login"`
+					} `json:"assignees"`
 				}{
 					{
-						Number:    1,
-						Title:     "First Issue",
-						Body:      "Body of first issue",
-						State:     "open",
-						User:      struct{ Login string `json:"login"` }{Login: "user1"},
+						Number: 1,
+						Title:  "First Issue",
+						Body:   "Body of first issue",
+						State:  "open",
+						User: struct {
+							Login string `json:"login"`
+						}{Login: "user1"},
 						CreatedAt: "2026-01-20T10:00:00Z",
 						UpdatedAt: "2026-01-20T10:00:00Z",
 						Comments:  2,
-						Labels:    []struct{ Name string `json:"name"` }{{Name: "bug"}, {Name: "help wanted"}},
-						Assignees: []struct{ Login string `json:"login"` }{{Login: "assignee1"}},
+						Labels: []struct {
+							Name string `json:"name"`
+						}{{Name: "bug"}, {Name: "help wanted"}},
+						Assignees: []struct {
+							Login string `json:"login"`
+						}{{Login: "assignee1"}},
 					},
 					{
-						Number:    2,
-						Title:     "Second Issue",
-						Body:      "Body of second issue",
-						State:     "open",
-						User:      struct{ Login string `json:"login"` }{Login: "user2"},
+						Number: 2,
+						Title:  "Second Issue",
+						Body:   "Body of second issue",
+						State:  "open",
+						User: struct {
+							Login string `json:"login"`
+						}{Login: "user2"},
 						CreatedAt: "2026-01-20T11:00:00Z",
 						UpdatedAt: "2026-01-20T11:00:00Z",
 						Comments:  0,
-						Labels:    []struct{ Name string `json:"name"` }{{Name: "enhancement"}},
-						Assignees: []struct{ Login string `json:"login"` }{},
+						Labels: []struct {
+							Name string `json:"name"`
+						}{{Name: "enhancement"}},
+						Assignees: []struct {
+							Login string `json:"login"`
+						}{},
 					},
 				}
 				// Set Link header to indicate no next page
@@ -67,21 +85,27 @@ func TestRunSyncCommand(t *testing.T) {
 		} else if r.URL.Path == "/repos/testowner/testrepo/issues/1/comments" {
 			// Return comments for issue 1
 			comments := []struct {
-				ID        int64  `json:"id"`
-				Body      string `json:"body"`
-				User      struct{ Login string `json:"login"` } `json:"user"`
+				ID   int64  `json:"id"`
+				Body string `json:"body"`
+				User struct {
+					Login string `json:"login"`
+				} `json:"user"`
 				CreatedAt string `json:"created_at"`
 			}{
 				{
-					ID:        100,
-					Body:      "First comment on issue 1",
-					User:      struct{ Login string `json:"login"` }{Login: "commenter1"},
+					ID:   100,
+					Body: "First comment on issue 1",
+					User: struct {
+						Login string `json:"login"`
+					}{Login: "commenter1"},
 					CreatedAt: "2026-01-20T10:05:00Z",
 				},
 				{
-					ID:        101,
-					Body:      "Second comment on issue 1",
-					User:      struct{ Login string `json:"login"` }{Login: "commenter2"},
+					ID:   101,
+					Body: "Second comment on issue 1",
+					User: struct {
+						Login string `json:"login"`
+					}{Login: "commenter2"},
 					CreatedAt: "2026-01-20T10:10:00Z",
 				},
 			}

@@ -225,7 +225,7 @@ func RunIncrementalSync(dbPath string, config *SyncConfig, output io.Writer) err
 
 	// Start the incremental sync
 	fmt.Fprintf(output, "Performing incremental sync since %s...\n", lastSyncDate)
-	
+
 	// Get all currently stored issue numbers
 	storedIssueNumbers, err := database.GetAllIssueNumbers()
 	if err != nil {
@@ -426,7 +426,7 @@ func fetchIssuesWithProgress(ctx context.Context, client *ghclient.Client, repo 
 		fmt.Fprintf(output, "Fetching issues updated since %s...\n", since)
 		return client.FetchIssuesSince(repo, since)
 	}
-	
+
 	fmt.Fprintln(output, "Fetching all issues from GitHub...")
 	return client.FetchOpenIssues(repo)
 }

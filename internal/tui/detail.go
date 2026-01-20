@@ -13,16 +13,16 @@ import (
 
 // DetailModel represents the TUI model for the issue detail view
 type DetailModel struct {
-	db            *db.DB
-	issue         *db.Issue
-	viewport      viewport.Model
-	showRendered  bool // Toggle between raw markdown and rendered
-	quitting      bool
-	err           error
-	viewComments  bool // Flag to navigate to comments
-	width         int
-	height        int
-	showHelp      bool // Flag to show help
+	db           *db.DB
+	issue        *db.Issue
+	viewport     viewport.Model
+	showRendered bool // Toggle between raw markdown and rendered
+	quitting     bool
+	err          error
+	viewComments bool // Flag to navigate to comments
+	width        int
+	height       int
+	showHelp     bool // Flag to show help
 }
 
 // NewDetailModel creates a new issue detail model
@@ -275,6 +275,7 @@ func (m DetailModel) ShouldShowHelp() bool {
 func (m *DetailModel) ClearHelpFlag() {
 	m.showHelp = false
 }
+
 // Close closes the database connection
 func (m *DetailModel) Close() error {
 	if m.db != nil {

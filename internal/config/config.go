@@ -1,19 +1,31 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/pelletier/go-toml/v2"
 )
 
+// RepositoryConfig holds configuration for a single repository
+type RepositoryConfig struct {
+	DatabasePath string `toml:"database_path"`
+}
+
 // Config represents the application configuration
 type Config struct {
+	// Backward compatibility fields
 	Repository string `toml:"repository"`
 	Token      string `toml:"token"`
 	Database   struct {
 		Path string `toml:"path"`
 	} `toml:"database"`
+
+	// Multi-repository support
+	DefaultRepo  string                      `toml:"default_repo"`
+	Repositories map[string]RepositoryConfig `toml:"repositories"`
+
 	Display struct {
 		Columns []string `toml:"columns"`
 		Sort    Sort     `toml:"sort"`
@@ -52,6 +64,11 @@ func SaveConfig(configPath string, cfg *Config) error {
 	dir := filepath.Dir(configPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
+	}
+
+	// Initialize Repositories map if it's nil to avoid TOML encoding issues
+	if cfg.Repositories == nil {
+		cfg.Repositories = make(map[string]RepositoryConfig)
 	}
 
 	data, err := toml.Marshal(cfg)
@@ -98,4 +115,56 @@ func GetDefaultSort() Sort {
 // GetDefaultTheme returns the default theme name
 func GetDefaultTheme() string {
 	return "default"
+}
+
+// GetRepoDatabasePath returns the database path for a specific repository
+func GetRepoDatabasePath(cfg *Config, repoName string) (string, error) {
+	// Check if repository exists in multi-repo config
+	if repo, exists := cfg.Repositories[repoName]; exists {
+		return repo.DatabasePath, nil
+	}
+
+	// Backward compatibility: if looking for the single repository, use its database path
+	if repoName == cfg.Repository && cfg.Database.Path != "" {
+		return cfg.Database.Path, nil
+	}
+
+	return "", fmt.Errorf("repository not found: %s", repoName)
+}
+
+// GetDefaultRepo returns the default repository to use
+func GetDefaultRepo(cfg *Config) string {
+	// Check if default_repo is set
+	if cfg.DefaultRepo != "" {
+		return cfg.DefaultRepo
+	}
+
+	// Fall back to single repository field (backward compatibility)
+	if cfg.Repository != "" {
+		return cfg.Repository
+	}
+
+	// As a last resort, return the first repository in the map
+	for repoName := range cfg.Repositories {
+		return repoName
+	}
+
+	return ""
+}
+
+// ListRepositories returns a list of all configured repository names
+func ListRepositories(cfg *Config) []string {
+	var repos []string
+
+	// Add repositories from multi-repo config
+	for repoName := range cfg.Repositories {
+		repos = append(repos, repoName)
+	}
+
+	// If there are no multi-repo entries but there's a single repository, include it
+	if len(repos) == 0 && cfg.Repository != "" {
+		repos = append(repos, cfg.Repository)
+	}
+
+	return repos
 }

@@ -47,6 +47,16 @@ When working with interactive prompts and `bufio.Reader`:
 - This ensures the reader state is maintained across multiple reads
 - Multiple `bufio.NewReader()` on the same input will cause EOF errors after the first read
 
+### Multi-Repository Configuration Pattern
+When supporting multiple repositories in configuration:
+- Use a `map[string]RepositoryConfig` for storing per-repo settings
+- Maintain backward compatibility by keeping legacy fields (`Repository`, `Database.Path`)
+- Use a `default_repo` field to specify which repository to use by default
+- Provide helper functions (`GetDefaultRepo`, `GetRepoDatabasePath`, `ListRepositories`) to abstract config structure
+- Repository databases should be stored separately to avoid data mixing
+- Use `--repo owner/repo` flag to select specific repository for operations
+- Create a `ghissues repos` command to list all configured repositories with default marker
+
 ### TUI Testing Pattern
 When testing interactive TUI applications:
 - Use environment variables (e.g., `GHISSIES_TEST=1`) to detect test mode
@@ -85,6 +95,39 @@ When implementing modal overlays in TUI applications:
 - Create custom tea.Msg (e.g., `errorAcknowledgedMsg`) for clean state transitions
 - Support multiple acknowledgment methods (Enter, 'q', Escape) for better UX
 - Use test mode compatibility to return descriptive strings instead of TUI rendering
+
+---
+
+## [2026-01-20] - US-014 - Multi-Repository Configuration
+
+**What was implemented:**
+- Multi-repository configuration support with repository-specific database files
+- `default_repo` field to specify default repository in config
+- `--repo owner/repo` CLI flag to select which repository to view
+- `ghissues repos` command to list configured repositories with default marker
+- Full backward compatibility with existing single-repository configurations
+- Repository-specific database path resolution
+- Enhanced status information showing active repository and total repository count
+
+**Files changed:**
+- `internal/config/config.go` - Added multi-repo fields (`DefaultRepo`, `Repositories` map) and helper functions
+- `internal/config/config_multi_test.go` - Comprehensive tests for multi-repo config functionality
+- `internal/cmd/repos.go` - New command to list repositories
+- `internal/cmd/repos_test.go` - Tests for repos command
+- `main.go` - Added `--repo` flag parsing, integrated repo selection logic, and repository info display
+- `main_test.go` - Updated tests for new function signatures
+
+**Learnings:**
+- **Pattern Discovered:** Maintaining backward compatibility - Keep legacy config fields alongside new fields, use helper functions to abstract differences
+- **Pattern Discovered:** Database isolation - Each repository gets its own database file to prevent data mixing and enable independent sync
+- **Design Decision:** Used `map[string]RepositoryConfig` for flexible repository management without ordered constraints
+- **Design Decision:** Prioritized CLI flag (`--repo`) over config defaults for user control and flexibility
+- **Implementation Detail:** Repository format validation (owner/repo) should be handled at input time, not config load time
+- **Implementation Pattern:** Created `getRepositoryForCommand()` function to centralize repo selection logic across all commands
+- **User Experience:** Show active repository context in status output to avoid confusion when working with multiple repos
+- **User Experience:** Use `*` marker and "(default)" indicator in `ghissues repos` output for clear visual identification
+- **Testing Strategy:** Comprehensive backward compatibility tests ensure existing single-repo configs continue to work unchanged
+- **Quality Metrics:** All 121 tests passing, 11 new tests added for multi-repo functionality
 
 ---
 
@@ -627,7 +670,53 @@ on."}],"model":"hf:moonshotai/Kimi-K2-Thinking","stop_reason":null,"stop_sequenc
 **Status:** Completed
 
 **Notes:**
-ete."}],"model":"hf:moonshotai/Kimi-K2-Thinking","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":80685,"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"context_management":null},"parent_tool_use_id":null,"session_id":"98ef9e6d-e25c-4022-b253-63fa0df768ba","uuid":"78fe8176-84c1-49bd-94f1-659313946cb3"}
+ete."}]
+
+---
+
+## [2026-01-20] - US-012 - Color Themes
+
+**What was implemented:**
+- Theme system with 6 built-in color themes: default, dracula, gruvbox, nord, solarized-dark, solarized-light
+- Theme selection via config file `display.theme` setting
+- Interactive theme preview and selection command: `ghissues themes`
+- Theme-aware TUI components using lipgloss for consistent styling
+- Theme validation and fallback to default theme for invalid theme names
+
+**Files changed:**
+- Created `internal/config/theme.go` - Theme definitions with color schemes for all supported themes
+- Created `internal/config/theme_test.go` - Comprehensive tests for theme loading and color validation
+- Created `internal/cmd/themes.go` - Interactive theme selection command with color previews
+- Created `internal/cmd/themes_test.go` - Tests for theme command functionality
+- Modified `internal/config/config.go` - Added `Theme` field to display configuration
+- Modified `internal/tui/list.go` - Integrated theme support for table styling and status bar
+- Modified `internal/tui/help.go` - Updated help overlay to use theme colors
+- Modified `internal/tui/help_test.go` - Updated tests to pass theme parameter
+- Modified `internal/tui/app.go` - Added theme loading and propagation to child components
+
+**Learnings:**
+- **Pattern Discovered:** Centralized theme management - Define all colors in a single Theme struct, load once at app startup, and pass to all UI components for consistent theming across the application
+- **Pattern Discovered:** Theme definition best practices - Use terminal color codes (0-255) for broad compatibility, but organize them semantically (Accent, Header, Success, Error) rather than by color name
+- **Pattern Discovered:** Non-interactive mode support - Provide both interactive (menu-driven) and non-interactive (CLI flag) modes for theme selection to accommodate different user workflows
+- **Design Decision:** Made theme preview visually representative by showing color swatches alongside theme names, allowing users to see the actual colors before selecting
+- **Design Decision:** Used existing GitHub API color coding patterns (success=green, error=red, warning=yellow/orange) for familiarity and intuitiveness
+- **Implementation Detail:** Theme loading happens in NewListModel initialization, ensuring theme is available before any UI rendering occurs
+- **Implementation Pattern:** All theme-aware components (list, help, detail, comments) receive theme via constructor or method parameter, enabling isolated testing with different themes
+- **User Experience:** Theme changes take effect on next app launch (not hot-reload) to maintain simplicity and avoid complex state management
+
+**Quality Metrics:**
+- All 76 tests passing across 8 packages (added 11 new theme tests)
+- Complete test coverage for theme selection, validation, and config integration
+- Zero build errors and zero linting issues
+- Clean separation between theme definitions, config management, and UI rendering
+- Backward compatibility maintained - apps without theme config default to "default" theme
+---,"model":"hf:moonshotai/Kimi-K2-Thinking","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":80685,"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"context_management":null},"parent_tool_use_id":null,"session_id":"98ef9e6d-e25c-4022-b253-63fa0df768ba","uuid":"78fe8176-84c1-49bd-94f1-659313946cb3"}
 {"type":"assistant","message":{"id":"msg_db0ca53b-c668-48a3-b691-755429c0413e","type":"message","role":"assistant","content":[{"type":"text","text":"
+
+---
+## ✓ Iteration 13 - US-012: Color Themes
+*2026-01-20T22:37:37.045Z (337s)*
+
+**Status:** Completed
 
 ---

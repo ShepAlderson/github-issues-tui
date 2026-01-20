@@ -18,16 +18,16 @@ type Client struct {
 
 // Issue represents a GitHub issue response
 type Issue struct {
-	Number    int       `json:"number"`
-	Title     string    `json:"title"`
-	Body      string    `json:"body"`
-	State     string    `json:"state"`
-	User      User      `json:"user"`
-	CreatedAt string    `json:"created_at"`
-	UpdatedAt string    `json:"updated_at"`
-	Comments  int       `json:"comments"`
-	Labels    []Label   `json:"labels"`
-	Assignees []User    `json:"assignees"`
+	Number    int     `json:"number"`
+	Title     string  `json:"title"`
+	Body      string  `json:"body"`
+	State     string  `json:"state"`
+	User      User    `json:"user"`
+	CreatedAt string  `json:"created_at"`
+	UpdatedAt string  `json:"updated_at"`
+	Comments  int     `json:"comments"`
+	Labels    []Label `json:"labels"`
+	Assignees []User  `json:"assignees"`
 }
 
 // User represents a GitHub user

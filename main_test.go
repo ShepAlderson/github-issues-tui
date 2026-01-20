@@ -149,7 +149,7 @@ func TestRunMain_TooManyArgs(t *testing.T) {
 		t.Fatal("Expected error for too many arguments")
 	}
 
-	if err.Error() != "too many arguments" {
+	if !strings.Contains(err.Error(), "too many arguments") {
 		t.Errorf("Expected 'too many arguments' error, got: %v", err)
 	}
 }
@@ -187,7 +187,7 @@ func TestGetDatabasePath_Default(t *testing.T) {
 	os.Chdir(tmpDir)
 	defer os.Chdir("/Users/shepbook/git/github-issues-tui")
 
-	path := getDatabasePath(nil, "")
+	path := getDatabasePath(nil, "", "")
 
 	// On macOS, paths might be resolved differently (/var vs /private/var)
 	// So we check the base name matches and the path is absolute
@@ -207,7 +207,7 @@ func TestGetDatabasePath_FromConfig(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Database.Path = configPath
 
-	path := getDatabasePath(cfg, "")
+	path := getDatabasePath(cfg, "", "")
 
 	if path != configPath {
 		t.Errorf("Expected config path %q, got %q", configPath, path)
@@ -222,7 +222,7 @@ func TestGetDatabasePath_FromFlag(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Database.Path = filepath.Join(tmpDir, "config.db")
 
-	path := getDatabasePath(cfg, flagPath)
+	path := getDatabasePath(cfg, flagPath, "")
 
 	if path != flagPath {
 		t.Errorf("Expected flag path %q, got %q", flagPath, path)

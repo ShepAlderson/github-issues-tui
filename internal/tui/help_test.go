@@ -10,23 +10,23 @@ import (
 
 func TestNewHelpModel(t *testing.T) {
 	tests := []struct {
-		name        string
-		viewType    ViewType
+		name         string
+		viewType     ViewType
 		wantBindings int
 	}{
 		{
-			name:        "ListView",
-			viewType:    ListView,
+			name:         "ListView",
+			viewType:     ListView,
 			wantBindings: 4, // list, detail, comment, global sections
 		},
 		{
-			name:        "DetailView",
-			viewType:    DetailView,
+			name:         "DetailView",
+			viewType:     DetailView,
 			wantBindings: 4,
 		},
 		{
-			name:        "CommentsView",
-			viewType:    CommentsView,
+			name:         "CommentsView",
+			viewType:     CommentsView,
 			wantBindings: 4,
 		},
 	}
@@ -196,12 +196,12 @@ func TestGetListKeybindings(t *testing.T) {
 
 	// Verify specific keybindings exist
 	expectedKeys := map[string]bool{
-		"j/k":  false,
-		"↑/↓": false,
+		"j/k":   false,
+		"↑/↓":   false,
 		"enter": false,
-		"s":    false,
-		"S":    false,
-		"r":    false,
+		"s":     false,
+		"S":     false,
+		"r":     false,
 	}
 
 	for _, kb := range keybindings {
@@ -227,7 +227,7 @@ func TestGetDetailKeybindings(t *testing.T) {
 	// Verify specific keybindings exist
 	expectedKeys := map[string]bool{
 		"j/k":   false,
-		"↑/↓":  false,
+		"↑/↓":   false,
 		"m":     false,
 		"c":     false,
 		"q/esc": false,
@@ -256,7 +256,7 @@ func TestGetCommentsKeybindings(t *testing.T) {
 	// Verify specific keybindings exist
 	expectedKeys := map[string]bool{
 		"j/k":   false,
-		"↑/↓":  false,
+		"↑/↓":   false,
 		"m":     false,
 		"q/esc": false,
 	}
@@ -283,7 +283,7 @@ func TestGetGlobalKeybindings(t *testing.T) {
 
 	// Verify specific keybindings exist
 	expectedKeys := map[string]bool{
-		"?":       false,
+		"?":      false,
 		"ctrl+c": false,
 	}
 
@@ -302,7 +302,7 @@ func TestGetGlobalKeybindings(t *testing.T) {
 
 func TestGetContextSensitiveKeybindings(t *testing.T) {
 	tests := []struct {
-		viewType ViewType
+		viewType         ViewType
 		expectedSections int
 	}{
 		{ListView, 4},
@@ -351,7 +351,6 @@ func TestGetFooter(t *testing.T) {
 			wantKeys: []string{"?", "q", "m"},
 		},
 	}
-
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

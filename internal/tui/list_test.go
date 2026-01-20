@@ -575,4 +575,3 @@ func TestListModel_StatusBarWithLastSynced(t *testing.T) {
 		t.Errorf("Expected relative time in status bar, got:\n%s", view)
 	}
 }
-

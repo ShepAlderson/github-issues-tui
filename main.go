@@ -22,23 +22,42 @@ func main() {
 func runMain(args []string, configPath string, input io.Reader, output io.Writer) error {
 	// Parse flags
 	var dbFlag string
-	if len(args) >= 2 && args[1] == "--db" {
-		if len(args) < 3 {
-			return fmt.Errorf("--db flag requires a path argument")
+	var repoFlag string
+	argIndex := 1
+
+	for argIndex < len(args) {
+		if args[argIndex] == "--db" {
+			if len(args) < argIndex+2 {
+				return fmt.Errorf("--db flag requires a path argument")
+			}
+			dbFlag = args[argIndex+1]
+			// Remove the flag from args for further processing
+			args = append(args[:argIndex], args[argIndex+2:]...)
+		} else if args[argIndex] == "--repo" {
+			if len(args) < argIndex+2 {
+				return fmt.Errorf("--repo flag requires a repository argument (owner/repo)")
+			}
+			repoFlag = args[argIndex+1]
+			// Remove the flag from args for further processing
+			args = append(args[:argIndex], args[argIndex+2:]...)
+		} else {
+			argIndex++
 		}
-		dbFlag = args[2]
-		// Remove the flag from args for further processing
-		args = append(args[:1], args[3:]...)
 	}
 
 	// Check number of arguments
 	if len(args) > 2 {
-		return fmt.Errorf("too many arguments")
+		return fmt.Errorf("too many arguments\n\nUsage:\n  ghissues [command] [flags]\n\nCommands:\n  config    Configure repository and authentication\n  repos     List configured repositories\n  sync      Sync issues from GitHub to local database\n  list      Show TUI with list of issues (default)\n\nFlags:\n  --db <path>     Override database path\n  --repo <name>   Specify repository (owner/repo) for multi-repo setups")
 	}
 
 	// Check if config command was requested
 	if len(args) >= 2 && args[1] == "config" {
 		return cmd.RunConfigCommand(configPath, input, output)
+	}
+
+	// Check if repos command was requested
+	if len(args) >= 2 && args[1] == "repos" {
+		return cmd.RunReposCommand(configPath, output)
 	}
 
 	// Check if sync command was requested
@@ -75,7 +94,7 @@ func runMain(args []string, configPath string, input io.Reader, output io.Writer
 		}
 
 		// Determine database path
-		dbPath := getDatabasePath(cfg, dbFlag)
+		dbPath := getDatabasePath(cfg, dbFlag, repoFlag)
 		if err := ensureDatabasePath(dbPath); err != nil {
 			return fmt.Errorf("database path error: %w", err)
 		}
@@ -83,7 +102,7 @@ func runMain(args []string, configPath string, input io.Reader, output io.Writer
 		// Run sync command
 		syncConfig := &cmd.SyncConfig{
 			Token:      token,
-			Repository: cfg.Repository,
+			Repository: getRepositoryForCommand(cfg, repoFlag),
 			GitHubURL:  "", // Use default GitHub API or override via env var in tests
 		}
 
@@ -127,8 +146,8 @@ func runMain(args []string, configPath string, input io.Reader, output io.Writer
 			return fmt.Errorf("config file exists but could not be loaded")
 		}
 
-		// Determine database path
-		dbPath := getDatabasePath(cfg, dbFlag)
+		// Determine database path with repo support
+		dbPath := getDatabasePath(cfg, dbFlag, repoFlag)
 		if err := ensureDatabasePath(dbPath); err != nil {
 			return fmt.Errorf("database path error: %w", err)
 		}
@@ -149,7 +168,7 @@ func runMain(args []string, configPath string, input io.Reader, output io.Writer
 		fmt.Fprintln(output, "Checking for updates...")
 		syncConfig := &cmd.SyncConfig{
 			Token:      token,
-			Repository: cfg.Repository,
+			Repository: getRepositoryForCommand(cfg, repoFlag),
 			GitHubURL:  "", // Use default GitHub API or override via env var in tests
 		}
 
@@ -200,7 +219,7 @@ func runMain(args []string, configPath string, input io.Reader, output io.Writer
 	}
 
 	// Determine database path with priority: flag > config > default
-	dbPath := getDatabasePath(cfg, dbFlag)
+	dbPath := getDatabasePath(cfg, dbFlag, repoFlag)
 
 	// Ensure database path is valid and parent directories exist
 	if err := ensureDatabasePath(dbPath); err != nil {
@@ -223,13 +242,26 @@ func runMain(args []string, configPath string, input io.Reader, output io.Writer
 	}
 
 	fmt.Fprintf(output, "Configuration loaded successfully!\n")
-	fmt.Fprintf(output, "Repository: %s\n", cfg.Repository)
+
+	// Show repository info
+	repoForDisplay := config.GetDefaultRepo(cfg)
+	if repoFlag != "" {
+		repoForDisplay = repoFlag
+		fmt.Fprintf(output, "Repository (via --repo): %s\n", repoForDisplay)
+	} else if len(config.ListRepositories(cfg)) > 1 {
+		fmt.Fprintf(output, "Default Repository: %s\n", repoForDisplay)
+		fmt.Fprintf(output, "Repositories: %d configured (use 'ghissues repos' to list)\n", len(config.ListRepositories(cfg)))
+	} else {
+		fmt.Fprintf(output, "Repository: %s\n", repoForDisplay)
+	}
+
 	fmt.Fprintf(output, "Database: %s\n", dbPath)
 	fmt.Fprintf(output, "Authentication: %s token (validated)\n", source)
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "Available commands:")
 	fmt.Fprintln(output, "  ghissues config  - Configure repository and authentication")
 	fmt.Fprintln(output, "  ghissues sync    - Sync issues from GitHub to local database")
+	fmt.Fprintln(output, "  ghissues repos   - List configured repositories")
 	fmt.Fprintln(output, "  ghissues list    - Show TUI with list of issues (default)")
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "Run 'ghissues' or 'ghissues list' to launch the TUI")
@@ -247,21 +279,39 @@ func getConfigFilePath() string {
 	return config.GetDefaultConfigPath()
 }
 
-// getDatabasePath determines the database path with priority: flag > config > default
-func getDatabasePath(cfg *config.Config, flagPath string) string {
+// getDatabasePath determines the database path with priority: flag > repo-specific > config > default
+func getDatabasePath(cfg *config.Config, flagPath string, repoFlag string) string {
 	// Priority 1: Command line flag
 	if flagPath != "" {
 		return flagPath
 	}
 
-	// Priority 2: Config file
+	// Priority 2: Repository-specific database from multi-repo config
+	if repoFlag != "" && cfg != nil {
+		if dbPath, err := config.GetRepoDatabasePath(cfg, repoFlag); err == nil {
+			return dbPath
+		}
+	}
+
+	// Priority 3: Single repository database from config (backward compatibility)
 	if cfg != nil && cfg.Database.Path != "" {
 		return cfg.Database.Path
 	}
 
-	// Priority 3: Default location (.ghissues.db in current directory)
+	// Priority 4: Default location (.ghissues.db in current directory)
 	cwd, _ := os.Getwd()
 	return filepath.Join(cwd, ".ghissues.db")
+}
+
+// getRepositoryForCommand returns the repository to use for a command
+func getRepositoryForCommand(cfg *config.Config, repoFlag string) string {
+	// If --repo flag is provided, use it
+	if repoFlag != "" {
+		return repoFlag
+	}
+
+	// Otherwise, use the default repository from config
+	return config.GetDefaultRepo(cfg)
 }
 
 // ensureDatabasePath ensures the parent directory for the database path exists and is writable
