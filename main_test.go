@@ -301,7 +301,7 @@ path = "/tmp/test.db"
 	}
 
 	// Check that TUI would be displayed (in test mode shows simple message)
-	if !bytes.Contains(output.Bytes(), []byte("Issue list TUI would be displayed here")) {
+	if !bytes.Contains(output.Bytes(), []byte("App view would be displayed here")) {
 		t.Error("Output should indicate TUI would be displayed")
 	}
 	// Check that issues count is shown
@@ -388,7 +388,7 @@ func TestRunMain_AuthenticationFlow(t *testing.T) {
 			}
 
 			// Check that TUI would be displayed (in test mode shows simple message)
-			if !bytes.Contains(output.Bytes(), []byte("Issue list TUI would be displayed here")) {
+			if !bytes.Contains(output.Bytes(), []byte("App view would be displayed here")) {
 				t.Error("Expected TUI message in output")
 			}
 		})
@@ -528,7 +528,7 @@ func TestMain_AvailableCommands(t *testing.T) {
 
 	outputStr := output.String()
 	// Check that TUI would be displayed
-	if !strings.Contains(outputStr, "Issue list TUI would be displayed here") {
+	if !strings.Contains(outputStr, "App view would be displayed here") {
 		t.Error("Expected TUI to be launched")
 	}
 	if !strings.Contains(outputStr, "Found") {

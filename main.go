@@ -133,8 +133,8 @@ func runMain(args []string, configPath string, input io.Reader, output io.Writer
 			return fmt.Errorf("database path error: %w", err)
 		}
 
-		// Run list command (TUI)
-		return tui.RunListView(dbPath, cfg, output)
+		// Run list command (TUI with list + detail views)
+		return tui.RunAppView(dbPath, cfg, output)
 	}
 
 	// Check if config file exists
