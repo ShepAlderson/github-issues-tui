@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/shepbook/git/github-issues-tui/internal/config"
@@ -27,6 +28,10 @@ type AppModel struct {
 	config        *config.Config
 	dbPath        string
 	err           error
+	width         int
+	height        int
+	errorMsg      ErrorMessage
+	errorModal    ModalDialog
 }
 
 // NewAppModel creates a new application model
@@ -57,6 +62,26 @@ func (m AppModel) Init() tea.Cmd {
 
 // Update handles messages and updates the model
 func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle error acknowledgment first
+	if _, ok := msg.(errorAcknowledgedMsg); ok {
+		m.clearError()
+		return m, nil
+	}
+
+	// Handle window size
+	if msg, ok := msg.(tea.WindowSizeMsg); ok {
+		m.width = msg.Width
+		m.height = msg.Height
+	}
+
+	// Check if error modal is active and should handle input
+	if m.errorModal.IsActive() {
+		updated, cmd := m.errorModal.Update(msg)
+		m.errorModal = *(updated.(*ModalDialog))
+		return m, cmd
+	}
+
+	// Normal view switching logic continues...
 	switch m.currentView {
 	case ListView:
 		// Handle list view
@@ -171,34 +196,70 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// setError sets an error and creates modal if critical
+func (m *AppModel) setError(err error) {
+	m.errorMsg = newErrorMessage(err)
+	if m.errorMsg.severity == ErrorSeverityCritical {
+		m.errorModal = NewModalDialog(m.errorMsg, m.width, m.height)
+	}
+}
+
+// clearError clears the current error
+func (m *AppModel) clearError() {
+	m.errorMsg = ErrorMessage{}
+	m.errorModal = ModalDialog{}
+}
+
 // View renders the UI
 func (m AppModel) View() string {
 	if m.err != nil {
 		return fmt.Sprintf("Error: %v\n", m.err)
 	}
 
+	// Show critical error modal if active
+	if m.errorModal.IsActive() {
+		if os.Getenv("GHISSIES_TEST") == "1" {
+			return "Error modal displayed: " + m.errorMsg.userMsg + "\n"
+		}
+		return m.errorModal.View()
+	}
+
+	// Show main content
+	var content string
 	switch m.currentView {
 	case ListView:
 		if m.listModel != nil {
-			return m.listModel.View()
+			content = m.listModel.View()
+		} else {
+			content = "List view not initialized\n"
 		}
-		return "List view not initialized\n"
 
 	case DetailView:
 		if m.detailModel != nil {
-			return m.detailModel.View()
+			content = m.detailModel.View()
+		} else {
+			content = "Detail view not initialized\n"
 		}
-		return "Detail view not initialized\n"
 
 	case CommentsView:
 		if m.commentsModel != nil {
-			return m.commentsModel.View()
+			content = m.commentsModel.View()
+		} else {
+			content = "Comments view not initialized\n"
 		}
-		return "Comments view not initialized\n"
 
 	default:
-		return "Unknown view\n"
+		content = "Unknown view\n"
 	}
+
+	// For minor errors that haven't been acknowledged, show in status bar
+	if m.errorMsg.severity == ErrorSeverityMinor && m.errorMsg.IsValid() {
+		// Append error message to content
+		content = strings.TrimRight(content, "\n")
+		content += "\n\n" + m.errorMsg.userMsg + "\n"
+	}
+
+	return content
 }
 
 // Close closes all models

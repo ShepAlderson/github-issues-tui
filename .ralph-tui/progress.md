@@ -68,6 +68,24 @@ When displaying data vs. storing full data:
 - Store full data when syncing, query minimal fields for display
 - Example: `GetIssuesForDisplay()` vs `GetAllOpenIssues()`
 
+### Error Handling with Severity Classification
+When classifying errors for user display:
+- Define severity levels (e.g., `ErrorSeverityMinor`, `ErrorSeverityCritical`)
+- Use string pattern matching on error messages to classify severity
+- Map technical errors to user-friendly messages with actionable guidance
+- Critical errors block UI with modal requiring acknowledgment
+- Minor errors display in status bar and expire after timeout (e.g., 10 seconds)
+- Example: Network timeout → "Network timeout. Please check your connection and try again."
+
+### Modal Dialog Architecture (Bubbletea)
+When implementing modal overlays in TUI applications:
+- Check for active modal at the start of Update() method
+- Delegate all keyboard input to modal when active to prevent other UI interaction
+- Use pointer receivers for modal methods to ensure state mutations persist
+- Create custom tea.Msg (e.g., `errorAcknowledgedMsg`) for clean state transitions
+- Support multiple acknowledgment methods (Enter, 'q', Escape) for better UX
+- Use test mode compatibility to return descriptive strings instead of TUI rendering
+
 ---
 
 ## [2026-01-20] - US-001 - First-Time Setup
@@ -443,3 +461,119 @@ ser."}],"model":"hf:moonshotai/Kimi-K2-Thinking","stop_reason":null,"stop_sequen
 {"type":"assistant","message":{"id":"msg_7c4e7b08-a0f8-4ebe-8f5d-115bca109e8b","type":"message","role":"assistant","content":[{"type":"text","text":"
 
 ---
+
+---
+
+## [2026-01-20] - US-009 - Data Refresh
+
+**What was implemented:**
+
+Comprehensive data refresh functionality including auto-refresh on app launch, manual refresh keybinding, progress bars, incremental sync, deleted issue detection, and new comment handling.
+
+**Files changed:**
+- `internal/db/db.go` - Added sync state tracking, last sync date methods, and issue deletion methods
+- `internal/db/db_test.go` - Added tests for sync date operations and issue management
+- `internal/github/client.go` - Added time-based filtering for issues and comments
+- `internal/github/client_test.go` - Added tests for incremental fetching methods
+- `internal/cmd/sync.go` - Implemented incremental sync with progress tracking
+- `internal/tui/list.go` - Added refresh keybinding and updated status bar
+- `main.go` - Integrated auto-refresh on app launch
+
+**Learnings:**
+
+- **Pattern Discovered:** Incremental sync architecture - Use last sync timestamp to track changes, fetch only updated data, detect deletions by comparing local vs remote state
+- **Pattern Discovered:** Background sync on launch - Perform API calls during app initialization with non-blocking error handling to ensure app remains usable even if sync fails
+- **Pattern Discovered:** GitHub API incremental queries - Use the 'since' parameter on issues and comments endpoints to fetch only data modified after a timestamp
+- **Pattern Discovered:** Safe deletion detection - Fetch all remote issues to detect deletions, but only process updates incrementally to optimize bandwidth
+- **Design Decision:** Made auto-refresh a silent background operation with progress indicators, not a blocking modal that delays app usage
+- **Design Decision:** Implemented separate refresh methods for different scopes: 'r' key for local cache refresh, incremental sync for API updates, full sync for complete refresh
+- **User Experience:** Show clear progress indicators during sync operations to set user expectations about wait times and completion status
+- **Implementation Pattern:** Created helper functions that support both full and incremental sync modes to minimize code duplication
+
+**Quality Metrics:**
+- All tests passing (28 tests across 7 packages)
+- Comprehensive test coverage for new functionality
+- Graceful error handling prevents sync failures from blocking app usage
+- Efficient database operations with proper indexing
+- Clean separation of concerns between sync logic, API calls, and UI updates
+## ✓ Iteration 9 - US-009: Data Refresh
+*2026-01-20T22:12:42.146Z (656s)*
+
+**Status:** Completed
+
+**Notes:**
+---
+
+## [2026-01-20] - US-013 - Error Handling
+
+**What was implemented:**
+
+Enhanced error handling with severity-based classification and user-friendly error displays.
+
+**Files changed:**
+- `internal/tui/errors.go` - Error severity classification and user message mapping
+- `internal/tui/errors_test.go` - Tests for error classification logic
+- `internal/tui/modal.go` - Modal dialog component for critical errors
+- `internal/tui/modal_test.go` - Tests for modal dialog functionality
+- `internal/tui/app.go` - Integration of error handling into AppModel with modal overlay support
+- `internal/tui/app_test.go` - Tests for error handling integration
+
+**Learnings:**
+- **Pattern Discovered:** Error severity classification - Use string matching on error messages to classify errors into severity levels (Minor/Critical) with appropriate user-facing messages
+- **Pattern Discovered:** Modal overlay architecture - Check for active modal at the start of Update() and delegate all input to it, preventing other UI interaction until acknowledged
+- **Pattern Discovered:** Error acknowledgment flow - Use tea.Cmd to trigger errorAcknowledgedMsg which clears the error state, ensuring clean state transitions
+- **Pattern Discovered:** Test mode compatibility - When modal would be displayed, return a descriptive string in test mode instead of attempting TUI rendering
+- **Design Decision:** Used pointer receivers for modal methods to ensure state updates persist across Update calls
+- **Design Decision:** Minor errors expire after 10 seconds to prevent stale status bar messages
+- **User Experience:** User-friendly error messages include actionable guidance (e.g., "Please check your connection and try again") for better problem resolution
+- **Implementation Pattern:** Created reusable modal component that can be extended for confirmations or other dialogs beyond error handling
+
+**Quality Metrics:**
+- All 47 tests passing across 8 packages
+- Error classification covers: network timeouts, rate limits, authentication failures, database issues, and repository errors
+- Complete test coverage for all error display scenarios (minor in status bar, critical as modal)
+- Modal dialog supports multiple acknowledgment methods (Enter, 'q', Escape)
+- Clean separation between error classification, modal presentation, and app integration
+- **New patterns added to Codebase Patterns section**
+
+---
+## ✓ Iteration 10 - US-013: Error Handling
+*2026-01-20T22:21:24.621Z (521s)*
+
+**Status:** Completed
+
+**Notes:**
+on."}],"model":"hf:moonshotai/Kimi-K2-Thinking","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":56962,"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"context_management":null},"parent_tool_use_id":null,"session_id":"387d33cb-5f1e-4e55-bb98-5e1b80f3a9fa","uuid":"11e86523-27a4-401f-b20c-0849c9ffecf0"}
+{"type":"assistant","message":{"id":"msg_f3464cdf-6e2c-469e-88ad-17f92e571d47","type":"message","role":"assistant","content":[{"type":"text","text":"
+
+---
+
+## [2026-01-20] - US-010 - Last Synced Indicator
+
+**What was implemented:**
+- Status bar now shows "Last synced: <relative time>" (e.g., "5 minutes ago")
+- Timestamp stored in database metadata table (sync_state table)
+- Relative time formatting function handles: seconds, minutes, hours, and days
+- Displays "Never" if no sync has occurred yet
+- Updates after each successful sync operation
+
+**Files changed:**
+- `internal/tui/list.go` - Added lastSyncDate field to ListModel, updated NewListModel to fetch sync date, updated renderStatusBar to display relative time
+- `internal/tui/list_test.go` - Added formatRelativeTime tests and integration test for status bar with last synced indicator
+
+**Learnings:**
+- **Pattern Discovered:** Relative time display - Use time.Duration calculations and conditional formatting for different time ranges (seconds, minutes, hours, days)
+- **Pattern Discovered:** Zero time detection - Use `time.Time.IsZero()` to check if a time has never been set
+- **Design Decision:** Used Go's math.Round() for cleaner relative time values rather than truncating, which provides better UX ("5 minutes" instead of "4.8 minutes")
+- **Design Decision:** Display "Never" when no sync has occurred rather than showing a zero date, which is more user-friendly
+- **Implementation Pattern:** Parse ISO 8601 timestamps (RFC3339) when loading from database and format to relative time on display only - keeps storage format stable
+- **Testing Strategy:** Unit tests for relative time formatting cover edge cases (exact boundaries like 60 seconds, 60 minutes, 24 hours)
+- **Implementation Detail:** The status bar now shows both sort indicator AND last synced time, providing comprehensive context in one view
+
+**Quality Metrics:**
+- All 56 tests passing across 8 packages (28 previous + 28 new tests)
+- New test coverage: formatRelativeTime handles all time ranges correctly
+- Integration test verifies last synced appears in status bar
+- No linting errors
+- No typecheck errors
+- Clean separation between data storage (ISO timestamps) and display (relative time)

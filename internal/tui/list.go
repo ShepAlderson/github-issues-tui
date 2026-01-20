@@ -3,8 +3,10 @@ package tui
 import (
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
@@ -30,6 +32,9 @@ type ListModel struct {
 	sortDescending bool
 	sortOptions    []string
 	sortIndex      int
+
+	// Last sync info
+	lastSyncDate time.Time
 }
 
 // NewListModel creates a new issue list model
@@ -38,6 +43,21 @@ func NewListModel(dbPath string, cfg *config.Config) (*ListModel, error) {
 	database, err := db.NewDB(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize database: %w", err)
+	}
+
+	// Get last sync date
+	lastSyncDate, err := database.GetLastSyncDate()
+	var parsedLastSync time.Time
+	if err != nil {
+		// Use zero time if no sync yet
+		parsedLastSync = time.Time{}
+	} else {
+		// Parse the ISO timestamp
+		parsedLastSync, err = time.Parse(time.RFC3339, lastSyncDate)
+		if err != nil {
+			// If parsing fails, use zero time
+			parsedLastSync = time.Time{}
+		}
 	}
 
 	// Fetch issues for display using config sort preferences or defaults
@@ -114,6 +134,7 @@ func NewListModel(dbPath string, cfg *config.Config) (*ListModel, error) {
 		sortDescending: sortDescending,
 		sortOptions:    []string{"updated_at", "created_at", "number", "comment_count"},
 		sortIndex:      0,
+		lastSyncDate:   parsedLastSync,
 	}, nil
 }
 
@@ -231,7 +252,15 @@ func (m ListModel) renderStatusBar() string {
 		sortIndicator = sortIndicator + " ↑"
 	}
 
-	status := fmt.Sprintf(" %d/%d issues | Sort: %s ", m.selected+1, len(m.issues), sortIndicator)
+	// Build last synced indicator
+	lastSynced := "Never"
+	if !m.lastSyncDate.IsZero() {
+		lastSynced = formatRelativeTime(m.lastSyncDate, time.Now())
+	}
+
+	// Build status bar text
+	status := fmt.Sprintf(" %d/%d issues | Sort: %s | Last synced: %s ",
+		m.selected+1, len(m.issues), sortIndicator, lastSynced)
 
 	// Style the status bar
 	statusStyle := lipgloss.NewStyle().
@@ -369,6 +398,43 @@ func (m *ListModel) refreshIssues() error {
 	}
 
 	return nil
+}
+
+// formatRelativeTime formats a time as a relative string (e.g., "5 minutes ago")
+func formatRelativeTime(t, now time.Time) string {
+	diff := now.Sub(t)
+
+	if diff < 0 {
+		return "just now"
+	}
+
+	seconds := math.Round(diff.Seconds())
+	minutes := math.Round(diff.Minutes())
+	hours := math.Round(diff.Hours())
+	days := math.Round(hours / 24)
+
+	if seconds < 60 {
+		return "just now"
+	}
+
+	if minutes < 60 {
+		if minutes == 1 {
+			return "1 minute ago"
+		}
+		return fmt.Sprintf("%.0f minutes ago", minutes)
+	}
+
+	if hours < 24 {
+		if hours == 1 {
+			return "1 hour ago"
+		}
+		return fmt.Sprintf("%.0f hours ago", hours)
+	}
+
+	if days == 1 {
+		return "1 day ago"
+	}
+	return fmt.Sprintf("%.0f days ago", days)
 }
 
 // RunListView runs the issue list TUI

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/shepbook/git/github-issues-tui/internal/config"
@@ -457,3 +458,121 @@ func TestListModel_Sort(t *testing.T) {
 		t.Error("Expected ascending indicator in status bar")
 	}
 }
+
+func TestFormatRelativeTime(t *testing.T) {
+	now := time.Now()
+
+	tests := []struct {
+		name      string
+		inputTime time.Time
+		expected  string
+	}{
+		{
+			name:      "Just now",
+			inputTime: now,
+			expected:  "just now",
+		},
+		{
+			name:      "30 seconds ago",
+			inputTime: now.Add(-30 * time.Second),
+			expected:  "just now",
+		},
+		{
+			name:      "1 minute ago",
+			inputTime: now.Add(-1 * time.Minute),
+			expected:  "1 minute ago",
+		},
+		{
+			name:      "5 minutes ago",
+			inputTime: now.Add(-5 * time.Minute),
+			expected:  "5 minutes ago",
+		},
+		{
+			name:      "1 hour ago",
+			inputTime: now.Add(-1 * time.Hour),
+			expected:  "1 hour ago",
+		},
+		{
+			name:      "3 hours ago",
+			inputTime: now.Add(-3 * time.Hour),
+			expected:  "3 hours ago",
+		},
+		{
+			name:      "1 day ago",
+			inputTime: now.Add(-24 * time.Hour),
+			expected:  "1 day ago",
+		},
+		{
+			name:      "5 days ago",
+			inputTime: now.Add(-5 * 24 * time.Hour),
+			expected:  "5 days ago",
+		},
+		{
+			name:      "1 week ago",
+			inputTime: now.Add(-7 * 24 * time.Hour),
+			expected:  "7 days ago",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatRelativeTime(tt.inputTime, now)
+			if result != tt.expected {
+				t.Errorf("formatRelativeTime() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestListModel_StatusBarWithLastSynced(t *testing.T) {
+	// Create a test database with issues and a sync timestamp
+	dbPath := "/tmp/ghissues_test_statusbar.db"
+	database, err := db.NewDB(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
+
+	// Store a sync timestamp (1 hour ago)
+	syncTime := time.Now().Add(-1 * time.Hour)
+	_, err = database.SetLastSyncDate(syncTime.Format(time.RFC3339))
+	if err != nil {
+		t.Fatalf("Failed to set last sync date: %v", err)
+	}
+
+	// Insert a test issue
+	issue := &db.Issue{
+		Number:       1,
+		Title:        "Test Issue",
+		Author:       "testuser",
+		CreatedAt:    "2024-01-01T10:00:00Z",
+		CommentCount: 5,
+		State:        "open",
+	}
+	if err := database.StoreIssue(issue); err != nil {
+		t.Fatalf("Failed to store test issue: %v", err)
+	}
+
+	defer func() {
+		database.Close()
+		os.Remove(dbPath)
+	}()
+
+	cfg := &config.Config{}
+	cfg.Display.Columns = config.GetDefaultDisplayColumns()
+
+	model, err := NewListModel(dbPath, cfg)
+	if err != nil {
+		t.Fatalf("Failed to create list model: %v", err)
+	}
+	defer model.Close()
+
+	// Test that the view contains last synced information
+	view := model.View()
+	if !bytes.Contains([]byte(view), []byte("Last synced:")) {
+		t.Error("Expected 'Last synced:' in status bar")
+	}
+	if !bytes.Contains([]byte(view), []byte("1 hour ago")) {
+		t.Errorf("Expected relative time in status bar, got:\n%s", view)
+	}
+}
+
