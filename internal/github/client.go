@@ -393,3 +393,109 @@ func parseNextPage(linkHeader string) *int {
 	}
 	return nil
 }
+
+// FetchIssuesSince fetches all open issues updated since the given timestamp with automatic pagination
+// The since parameter should be in RFC3339 format (e.g., "2006-01-02T15:04:05Z07:00")
+func (c *Client) FetchIssuesSince(ctx context.Context, owner, repo, since string) ([]Issue, int, error) {
+	var allIssues []Issue
+	totalCount := 0
+	page := 1
+
+	for {
+		select {
+		case <-ctx.Done():
+			return allIssues, totalCount, ctx.Err()
+		default:
+		}
+
+		issues, count, nextPage, err := c.fetchIssuesPageSince(ctx, owner, repo, page, since)
+		if err != nil {
+			return allIssues, totalCount, err
+		}
+
+		totalCount = count
+		allIssues = append(allIssues, issues...)
+
+		if nextPage == nil {
+			break
+		}
+		page = *nextPage
+	}
+
+	return allIssues, totalCount, nil
+}
+
+// fetchIssuesPageSince fetches a single page of issues with since filter
+func (c *Client) fetchIssuesPageSince(ctx context.Context, owner, repo string, page int, since string) ([]Issue, int, *int, error) {
+	reqURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/issues", owner, repo)
+	u, err := url.Parse(reqURL)
+	if err != nil {
+		return nil, 0, nil, fmt.Errorf("failed to parse URL: %w", err)
+	}
+
+	q := u.Query()
+	q.Set("state", "open")
+	q.Set("per_page", "100")
+	q.Set("page", strconv.Itoa(page))
+	if since != "" {
+		q.Set("since", since)
+	}
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	if err != nil {
+		return nil, 0, nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	req.Header.Set("User-Agent", "ghissues-tui")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, 0, nil, fmt.Errorf("failed to fetch issues: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, 0, nil, fmt.Errorf("invalid GitHub token")
+	}
+
+	if resp.StatusCode == http.StatusForbidden {
+		remaining := resp.Header.Get("X-RateLimit-Remaining")
+		if remaining == "0" {
+			resetTime := resp.Header.Get("X-RateLimit-Reset")
+			return nil, 0, nil, fmt.Errorf("GitHub API rate limit exceeded, resets at %s", resetTime)
+		}
+		return nil, 0, nil, fmt.Errorf("GitHub API access denied")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, 0, nil, fmt.Errorf("GitHub API error (status %d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var issues []Issue
+	if err := json.NewDecoder(resp.Body).Decode(&issues); err != nil {
+		return nil, 0, nil, fmt.Errorf("failed to parse issues response: %w", err)
+	}
+
+	// Get total count from header
+	totalStr := resp.Header.Get("X-Total-Count")
+	totalCount := 0
+	if totalStr != "" {
+		if n, err := strconv.Atoi(totalStr); err == nil {
+			totalCount = n
+		}
+	}
+
+	// Determine next page
+	var nextPage *int
+	if linkHeader := resp.Header.Get("Link"); linkHeader != "" {
+		if next := parseNextPage(linkHeader); next != nil {
+			nextPage = next
+		}
+	}
+
+	return issues, totalCount, nextPage, nil
+}

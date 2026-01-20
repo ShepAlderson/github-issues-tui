@@ -12,6 +12,16 @@ import (
 	"github.com/shepbook/ghissues/internal/db"
 )
 
+// runTUIWithRefresh starts the TUI with automatic refresh on launch
+func RunTUIWithRefresh(dbPath string, cfg *config.Config) error {
+	// Perform initial sync in background
+	go func() {
+		_ = RefreshSync(dbPath, cfg, nil)
+	}()
+
+	return RunTUI(dbPath, cfg)
+}
+
 // RunTUI starts the TUI application
 func RunTUI(dbPath string, cfg *config.Config) error {
 	// Open database
@@ -37,6 +47,10 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 
 	// Markdown mode state
 	markdownRendered := true
+
+	// Refresh state - must be declared before updateStatusBar
+	isRefreshing := false
+	refreshStatus := ""
 
 	// Create the tview application
 	app := tview.NewApplication()
@@ -80,6 +94,10 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 			}
 			statusBar.SetText(fmt.Sprintf(" ghissues | %s/%s | Comments View%s | q or Esc to return | m for markdown toggle ",
 				owner, repo, markdownText))
+		} else if isRefreshing {
+			// Show refresh status during refresh
+			statusBar.SetText(fmt.Sprintf(" ghissues | %s/%s | Refreshing... %s | j/k or arrows to navigate | r to refresh | q to quit ",
+				owner, repo, refreshStatus))
 		} else {
 			// Issue list status bar
 			sortText := FormatSortDisplay(currentSort, currentSortOrder)
@@ -89,7 +107,7 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 			} else {
 				markdownText = " [Raw]"
 			}
-			statusBar.SetText(fmt.Sprintf(" ghissues | %s/%s | %s | %sj/k or arrows to navigate | q to quit | s to sort | S to reverse | ? for help | m for markdown toggle ",
+			statusBar.SetText(fmt.Sprintf(" ghissues | %s/%s | %s | %sj/k or arrows to navigate | q to quit | s to sort | S to reverse | ? for help | m for markdown toggle | r to refresh ",
 				owner, repo, sortText, markdownText))
 		}
 	}
@@ -332,6 +350,36 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 					if err == nil && detail != nil {
 						detailView.SetText(formatIssueDetailFull(detail))
 					}
+				}
+				return nil
+			case 'r', 'R':
+				// Manual refresh - only if not already refreshing and not in comments view
+				if !isRefreshing && !inCommentsView {
+					isRefreshing = true
+					updateStatusBar()
+
+					// Run refresh in a goroutine
+					go func() {
+						progress := func(current, total int, status string) {
+							refreshStatus = status
+							app.QueueUpdateDraw(func() {
+								updateStatusBar()
+							})
+						}
+
+						err := RefreshSync(dbPath, cfg, progress)
+
+						app.QueueUpdateDraw(func() {
+							isRefreshing = false
+							refreshStatus = ""
+							if err != nil {
+								refreshStatus = fmt.Sprintf("(Error: %v)", err)
+							}
+							updateStatusBar()
+							// Refresh the issue list
+							displayIssues()
+						})
+					}()
 				}
 				return nil
 			}

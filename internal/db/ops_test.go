@@ -1,6 +1,7 @@
 package db
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -439,5 +440,205 @@ func TestOpen_FileCreated(t *testing.T) {
 	// File should exist now
 	if _, err := os.Stat(dbPath); err != nil {
 		t.Errorf("database file not created: %v", err)
+	}
+}
+
+func TestGetLastSyncTime_Empty(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+
+	lastSync, err := GetLastSyncTime(db, "owner", "repo")
+	if err != nil {
+		t.Fatalf("GetLastSyncTime() error = %v", err)
+	}
+	if lastSync != "" {
+		t.Errorf("expected empty string for no issues, got %q", lastSync)
+	}
+}
+
+func TestGetLastSyncTime_WithIssues(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+
+	// Insert an issue
+	issue := &github.Issue{
+		Number:    1,
+		Title:     "Test Issue",
+		Body:      "",
+		State:     "open",
+		Author:    github.User{Login: "testuser"},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	UpsertIssue(db, "owner", "repo", issue)
+
+	lastSync, err := GetLastSyncTime(db, "owner", "repo")
+	if err != nil {
+		t.Fatalf("GetLastSyncTime() error = %v", err)
+	}
+	if lastSync == "" {
+		t.Error("expected non-empty sync time after inserting issue")
+	}
+}
+
+func TestGetIssueNumbers_Empty(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+
+	numbers, err := GetIssueNumbers(db, "owner", "repo")
+	if err != nil {
+		t.Fatalf("GetIssueNumbers() error = %v", err)
+	}
+	if len(numbers) != 0 {
+		t.Errorf("expected 0 numbers, got %d", len(numbers))
+	}
+}
+
+func TestGetIssueNumbers_WithIssues(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+
+	// Insert some issues
+	for i := 1; i <= 5; i++ {
+		issue := &github.Issue{
+			Number:    i,
+			Title:     fmt.Sprintf("Test Issue %d", i),
+			Body:      "",
+			State:     "open",
+			Author:    github.User{Login: "testuser"},
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+		UpsertIssue(db, "owner", "repo", issue)
+	}
+
+	numbers, err := GetIssueNumbers(db, "owner", "repo")
+	if err != nil {
+		t.Fatalf("GetIssueNumbers() error = %v", err)
+	}
+	if len(numbers) != 5 {
+		t.Errorf("expected 5 numbers, got %d", len(numbers))
+	}
+	// Check they're the expected values
+	for i, num := range numbers {
+		if num != i+1 {
+			t.Errorf("expected %d, got %d", i+1, num)
+		}
+	}
+}
+
+func TestDeleteIssue(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+
+	// Insert an issue
+	issue := &github.Issue{
+		Number:    1,
+		Title:     "Test Issue",
+		Body:      "",
+		State:     "open",
+		Author:    github.User{Login: "testuser"},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	UpsertIssue(db, "owner", "repo", issue)
+
+	// Delete it
+	if err := DeleteIssue(db, "owner", "repo", 1); err != nil {
+		t.Fatalf("DeleteIssue() error = %v", err)
+	}
+
+	// Verify it's gone
+	count, err := GetIssueCount(db, "owner", "repo")
+	if err != nil {
+		t.Fatalf("GetIssueCount() error = %v", err)
+	}
+	if count != 0 {
+		t.Errorf("expected 0 issues after delete, got %d", count)
+	}
+}
+
+func TestDeleteIssues(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+
+	// Insert some issues
+	for i := 1; i <= 5; i++ {
+		issue := &github.Issue{
+			Number:    i,
+			Title:     fmt.Sprintf("Test Issue %d", i),
+			Body:      "",
+			State:     "open",
+			Author:    github.User{Login: "testuser"},
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+		UpsertIssue(db, "owner", "repo", issue)
+	}
+
+	// Delete some issues
+	if err := DeleteIssues(db, "owner", "repo", []int{1, 3, 5}); err != nil {
+		t.Fatalf("DeleteIssues() error = %v", err)
+	}
+
+	// Verify remaining issues
+	numbers, err := GetIssueNumbers(db, "owner", "repo")
+	if err != nil {
+		t.Fatalf("GetIssueNumbers() error = %v", err)
+	}
+	if len(numbers) != 2 {
+		t.Errorf("expected 2 remaining issues, got %d", len(numbers))
+	}
+}
+
+func TestDeleteIssues_Empty(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+
+	// Delete with empty list should not error
+	if err := DeleteIssues(db, "owner", "repo", []int{}); err != nil {
+		t.Errorf("DeleteIssues() with empty list should not error: %v", err)
 	}
 }

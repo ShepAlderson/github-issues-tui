@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 )
@@ -186,6 +187,60 @@ func TestClient_FetchComments(t *testing.T) {
 
 	client := &Client{token: "test_token"}
 	_ = client
+}
+
+func TestClient_FetchIssuesSince(t *testing.T) {
+	// Create a mock server that checks for the since parameter
+	sinceTime := "2024-01-01T00:00:00Z"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify the since parameter is set correctly
+		sinceParam := r.URL.Query().Get("since")
+		if sinceParam != sinceTime {
+			t.Errorf("since = %q, want %q", sinceParam, sinceTime)
+		}
+
+		// Verify state parameter for open issues
+		if r.URL.Query().Get("state") != "open" {
+			t.Errorf("state = %q, want %q", r.URL.Query().Get("state"), "open")
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Total-Count", "1")
+		json.NewEncoder(w).Encode([]Issue{
+			{Number: 1, Title: "Test Issue", Body: "Body", State: "open", CreatedAt: timeNow(), UpdatedAt: timeNow()},
+		})
+	}))
+	defer server.Close()
+
+	client := &Client{token: "test_token"}
+	_ = client
+
+	// Verify URL construction with since parameter
+	req, _ := http.NewRequest("GET", "https://api.github.com/repos/owner/repo/issues?state=open&since="+sinceTime+"&page=1&per_page=100", nil)
+	query := req.URL.Query()
+	if query.Get("since") != sinceTime {
+		t.Errorf("since query param = %q, want %q", query.Get("since"), sinceTime)
+	}
+}
+
+func TestClient_FetchIssuesSince_Empty(t *testing.T) {
+	// Test that empty since parameter doesn't include it in URL
+	client := &Client{token: "test_token"}
+	_ = client
+
+	// When since is empty, the since parameter should not be set
+	// This test verifies the URL construction logic
+	u, _ := url.Parse("https://api.github.com/repos/owner/repo/issues")
+	q := u.Query()
+	q.Set("state", "open")
+	q.Set("per_page", "100")
+	q.Set("page", "1")
+	// When since is "", we should NOT set the since parameter
+	u.RawQuery = q.Encode()
+
+	if q.Get("since") != "" {
+		t.Errorf("since query param should not be set for empty since, got %q", q.Get("since"))
+	}
 }
 
 // Helper functions

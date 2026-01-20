@@ -87,7 +87,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("Configuration complete. Run 'ghissues config' to reconfigure, 'ghissues sync' to fetch issues, or 'ghissues' to start the app.")
+	// Run TUI with auto-refresh
+	fmt.Println("Starting TUI with auto-refresh...")
+	if err := RunTUIWithRefresh(dbPath, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 // validateAuth attempts to get and validate a GitHub token

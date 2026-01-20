@@ -80,6 +80,25 @@ after each iteration and included in agent prompts for context.
 - Use closures to access and modify state from event handlers
 - Update UI immediately after state changes
 
+**Incremental Sync Pattern**: Sync only updated issues using GitHub's `since` parameter:
+- Get last sync time from database using MAX(synced_at)
+- Use `FetchIssuesSince` with RFC3339 timestamp for incremental fetch
+- Track issues present before and after sync to detect deletions
+- Always fetch comments for updated issues to get new comments
+
+**TUI Refresh Pattern**: Implement background refresh with progress display in status bar:
+- Use goroutine for async refresh with ProgressCallback
+- Use app.QueueUpdateDraw() for thread-safe UI updates from goroutine
+- Track isRefreshing state to prevent concurrent refreshes
+- Update status bar with progress info during refresh
+- Refresh issue list after sync completes
+
+**ProgressCallback Pattern**: Report progress during long-running operations:
+- Define callback type: `func(current, total int, status string)`
+- Call callback periodically with current progress and status message
+- Can pass nil for no progress reporting (silent mode)
+- Update status bar in UI thread using QueueUpdateDraw()
+
 ---
 
 ## 2026-01-20 - US-001
@@ -382,3 +401,47 @@ ruct\n- `internal/config/config_display_test.go` - Added 7 tests for sort config
     - Duplicate variable declarations: Cannot redeclare with := in same scope
     - Status bar context: Need to call updateStatusBar() when switching views
     - Package-level vs closure functions: Tests can only access package-level functions
+## ✓ Iteration 8 - US-008: Comments View
+*2026-01-20T09:18:22.894Z (362s)*
+
+**Status:** Completed
+
+**Notes:**
+t\n- Updated help modal with dedicated comments view section\n\n**Files changed:**\n- `cmd/ghissues/tui.go` - 221 lines: Full drill-down implementation\n- `cmd/ghissues/tui_test.go` - 53 lines: 3 new tests for `formatComments`\n- `.ralph-tui/progress.md` - Updated with 2 new patterns and learnings\n\n**New patterns documented:**\n- Drill-Down View Pattern: Replace pages content for primary views instead of modals\n- View State Pattern: Track view context with boolean flags for conditional UI\n\n
+
+---
+
+---
+
+## 2026-01-20 - US-009
+- What was implemented:
+  - Added auto-refresh on app launch via RunTUIWithRefresh function
+  - Added manual refresh with 'r' or 'R' keybinding
+  - Progress bar shown in status bar during refresh
+  - Incremental sync using GitHub API's `since` parameter
+  - Handles deleted issues (removes from local db)
+  - Handles new comments on existing issues (always fetches comments for updated issues)
+  - Added RefreshSync function with ProgressCallback for progress reporting
+  - Added GetLastSyncTime, GetIssueNumbers, DeleteIssue functions to db package
+
+- Files changed:
+  - internal/db/ops.go (added GetLastSyncTime, GetIssueNumbers, DeleteIssue, DeleteIssues functions)
+  - internal/db/ops_test.go (added 7 tests for new DB functions)
+  - internal/github/client.go (added FetchIssuesSince function with since parameter support)
+  - internal/github/fetch_test.go (added 2 tests for FetchIssuesSince)
+  - cmd/ghissues/sync.go (added RefreshSync function with ProgressCallback type)
+  - cmd/ghissues/sync_test.go (added 2 tests for ProgressCallback)
+  - cmd/ghissues/tui.go (added RunTUIWithRefresh, isRefreshing state, refreshStatus, 'r' key handler)
+  - cmd/ghissues/main.go (updated to use RunTUIWithRefresh for auto-refresh on launch)
+
+- **Learnings:**
+  - Patterns discovered:
+    - Incremental Sync: Use GitHub's `since` parameter to fetch only updated issues
+    - TUI Refresh: Use goroutine + QueueUpdateDraw for async operations in tview
+    - ProgressCallback: Define callback type for progress reporting in long-running ops
+  - Gotchas encountered:
+    - sql.NullString needed for scanning NULL values from MAX() aggregate
+    - Variable scope in closures: isRefreshing must be declared before updateStatusBar closure
+    - UI updates from goroutine need QueueUpdateDraw for thread safety
+    - Prevent concurrent refreshes with isRefreshing flag check
+    - Fetch comments for all updated issues to handle new comments

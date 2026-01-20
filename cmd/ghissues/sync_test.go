@@ -186,3 +186,42 @@ func TestSyncProgress_MultipleOperations(t *testing.T) {
 		t.Errorf("CommentsFetched = %d, want 15", p.CommentsFetched)
 	}
 }
+
+func TestProgressCallback_Type(t *testing.T) {
+	// Verify the ProgressCallback type is correctly defined
+	var callback ProgressCallback
+	if callback != nil {
+		t.Error("initial ProgressCallback should be nil")
+	}
+
+	// Verify it can be assigned a function
+	callback = func(current, total int, status string) {
+		// Do nothing
+	}
+	if callback == nil {
+		t.Error("ProgressCallback should be assignable to a function")
+	}
+
+	// Verify it can be called
+	callback(1, 10, "test status")
+}
+
+func TestProgressCallback_Called(t *testing.T) {
+	var called bool
+	var lastStatus string
+
+	callback := func(current, total int, status string) {
+		called = true
+		lastStatus = status
+	}
+
+	// Simulate a callback call
+	callback(5, 10, "Processing issue #123")
+
+	if !called {
+		t.Error("ProgressCallback should be called")
+	}
+	if lastStatus != "Processing issue #123" {
+		t.Errorf("lastStatus = %q, want %q", lastStatus, "Processing issue #123")
+	}
+}

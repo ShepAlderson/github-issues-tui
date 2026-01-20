@@ -484,3 +484,63 @@ func GetComments(db *sql.DB, issueNumber int) ([]Comment, error) {
 
 	return comments, nil
 }
+
+// GetLastSyncTime returns the latest synced_at timestamp for issues in a repository
+func GetLastSyncTime(db *sql.DB, owner, repo string) (string, error) {
+	query := `SELECT MAX(synced_at) FROM issues WHERE owner = ? AND repo = ?;`
+	var lastSync sql.NullString
+	err := db.QueryRow(query, owner, repo).Scan(&lastSync)
+	if err != nil {
+		return "", err
+	}
+	if !lastSync.Valid {
+		return "", nil
+	}
+	return lastSync.String, nil
+}
+
+// GetIssueNumbers returns all issue numbers for a repository
+func GetIssueNumbers(db *sql.DB, owner, repo string) ([]int, error) {
+	query := `SELECT number FROM issues WHERE owner = ? AND repo = ?;`
+	rows, err := db.Query(query, owner, repo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get issue numbers: %w", err)
+	}
+	defer rows.Close()
+
+	var numbers []int
+	for rows.Next() {
+		var number int
+		if err := rows.Scan(&number); err != nil {
+			return nil, fmt.Errorf("failed to scan issue number: %w", err)
+		}
+		numbers = append(numbers, number)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating issue numbers: %w", err)
+	}
+
+	return numbers, nil
+}
+
+// DeleteIssue removes an issue from the database
+func DeleteIssue(db *sql.DB, owner, repo string, number int) error {
+	query := `DELETE FROM issues WHERE owner = ? AND repo = ? AND number = ?;`
+	_, err := db.Exec(query, owner, repo, number)
+	return err
+}
+
+// DeleteIssues removes multiple issues from the database
+func DeleteIssues(db *sql.DB, owner, repo string, numbers []int) error {
+	if len(numbers) == 0 {
+		return nil
+	}
+	query := `DELETE FROM issues WHERE owner = ? AND repo = ? AND number = ?;`
+	for _, number := range numbers {
+		if _, err := db.Exec(query, owner, repo, number); err != nil {
+			return fmt.Errorf("failed to delete issue %d: %w", number, err)
+		}
+	}
+	return nil
+}
