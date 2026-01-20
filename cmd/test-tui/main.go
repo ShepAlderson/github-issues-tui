@@ -43,8 +43,8 @@ func getTUIOptions() []tea.ProgramOption {
 	for _, flag := range flags {
 		flag = strings.TrimSpace(flag)
 		switch flag {
-		case "nomouse":
-			// Disable mouse support (useful for debugging)
+		case "mouse":
+			// Enable mouse support (not added by default)
 			options = append(options, tea.WithMouseCellMotion())
 		case "noaltscreen":
 			// Disable alt screen (useful for debugging - output stays in terminal)

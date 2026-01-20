@@ -734,8 +734,11 @@ func (m Model) renderDetailPanel(width, height int) string {
 
 // renderMarkdown renders markdown content using glamour
 func renderMarkdown(content string, width int) (string, error) {
+	// Use DarkStyle instead of WithAutoStyle() to avoid terminal color queries
+	// WithAutoStyle() sends OSC 11 sequences to query terminal background color,
+	// and the terminal's response gets misinterpreted as keyboard input by bubbletea
 	r, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
+		glamour.WithStylePath("dark"),
 		glamour.WithWordWrap(width),
 	)
 	if err != nil {

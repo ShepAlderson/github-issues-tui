@@ -1,0 +1,35 @@
+DEBUG: Received msg type: tea.WindowSizeMsg, value: {Width:80 Height:25}
+DEBUG: Received msg type: tea.KeyMsg, value: alt+]
+DEBUG: Received msg type: tea.KeyMsg, value: 11;rgb:0000/0000/0000
+DEBUG: Received msg type: tea.KeyMsg, value: alt+\
+DEBUG: Received msg type: tea.KeyMsg, value: ]11;rgb:0000/0000/0000
+DEBUG: Received msg type: tea.KeyMsg, value: alt+\
+DEBUG: Received msg type: tea.KeyMsg, value: 1;rgb:0000/0000/0000
+DEBUG: Received msg type: tea.WindowSizeMsg, value: {Width:88 Height:26}
+DEBUG: Received msg type: tea.KeyMsg, value: alt+\
+DEBUG: Received msg type: tea.WindowSizeMsg, value: {Width:178 Height:53}
+DEBUG: Received msg type: tea.KeyMsg, value: alt+]
+DEBUG: Received msg type: tea.KeyMsg, value: 11;rgb:0000/0000/0000
+DEBUG: Received msg type: tea.KeyMsg, value: alt+\
+DEBUG: Received msg type: tea.KeyMsg, value: alt+]
+DEBUG: Received msg type: tea.KeyMsg, value: 11;rgb:0000/0000/0000
+DEBUG: Received msg type: tea.KeyMsg, value: alt+\
+DEBUG: Received msg type: tea.KeyMsg, value: ]11;rgb:0000/0000/0000
+DEBUG: Received msg type: tea.KeyMsg, value: alt+\
+DEBUG: Received msg type: tea.KeyMsg, value: ]11;rgb:0000/0000/0000
+DEBUG: Received msg type: tea.KeyMsg, value: alt+\
+DEBUG: Received msg type: tea.KeyMsg, value: alt+]
+DEBUG: Received msg type: tea.KeyMsg, value: 11;rgb:0000/0000/0000
+DEBUG: Received msg type: tea.KeyMsg, value: alt+\
+DEBUG: Received msg type: tea.KeyMsg, value: ]11;rgb:0000/0000/0000
+DEBUG: Received msg type: tea.KeyMsg, value: alt+\
+DEBUG: Received msg type: tea.KeyMsg, value: alt+]
+DEBUG: Received msg type: tea.KeyMsg, value: 11;rgb:0000/0000/0000
+DEBUG: Received msg type: tea.KeyMsg, value: alt+\
+DEBUG: Received msg type: tea.KeyMsg, value: ]11;rgb:0000/0000/0000
+DEBUG: Received msg type: tea.KeyMsg, value: alt+\
+DEBUG: Received msg type: tea.KeyMsg, value: ]11;rgb:0000/0000/0000
+DEBUG: Received msg type: tea.KeyMsg, value: alt+\
+DEBUG: Received msg type: tea.KeyMsg, value: 11;rgb:0000/0000/0000
+DEBUG: Received msg type: tea.KeyMsg, value: alt+\
+DEBUG: Received msg type: tea.KeyMsg, value: 0000/0000

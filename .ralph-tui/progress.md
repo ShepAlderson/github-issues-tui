@@ -134,3 +134,12 @@ n)`) was the critical change that enabled all these keybindings to work properly
   - **Key insight:** The primary fix (US-2) works, but defensive checks catch edge cases like piped input or non-terminal environments early with helpful messages
 
 ---
+## ✓ Iteration 4 - US-4: Alternative Diagnostics (If Primary Fix Fails)
+*2026-01-20T03:16:37.526Z (264s)*
+
+**Status:** Completed
+
+**Notes:**
+omouse` - Disable mouse support\n   - `noaltscreen` - Disable alternate screen buffer\n   - Comma-separated combinations\n\n4. ✅ **Documented fallback configurations for edge cases** - Created comprehensive `docs/TROUBLESHOOTING.md` with:\n   - Terminal compatibility issues\n   - Environment variable usage examples\n   - Edge cases (SSH, tmux, CI/CD)\n   - Debugging options\n\nAll acceptance criteria are met! All tests pass, quality checks pass, and the implementation follows TDD principles.\n\n
+
+---
