@@ -43,11 +43,22 @@ type Config struct {
 	AuthMethod AuthMethod `toml:"auth_method"`
 	Token      string     `toml:"token,omitempty"`
 	Database   Database   `toml:"database"`
+	Display    Display    `toml:"display"`
 }
 
 // Database represents database configuration
 type Database struct {
 	Path string `toml:"path"`
+}
+
+// Display represents display configuration
+type Display struct {
+	Columns []string `toml:"columns"`
+}
+
+// DefaultColumns returns the default columns to display in the issue list
+func DefaultColumns() []string {
+	return []string{"number", "title", "author", "date", "comments"}
 }
 
 // Load reads the configuration from the config file
@@ -61,6 +72,11 @@ func Load() (*Config, error) {
 	var cfg Config
 	if err := parseConfig(data, &cfg); err != nil {
 		return nil, err
+	}
+
+	// Apply defaults
+	if len(cfg.Display.Columns) == 0 {
+		cfg.Display.Columns = DefaultColumns()
 	}
 
 	return &cfg, nil

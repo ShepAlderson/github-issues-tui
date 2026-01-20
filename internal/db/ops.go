@@ -258,3 +258,63 @@ func GetCommentCount(db *sql.DB, issueNumber int) (int, error) {
 	}
 	return count, nil
 }
+
+// IssueList represents an issue for display in the list view
+type IssueList struct {
+	Number      int
+	Title       string
+	Author      string
+	CreatedAt   string
+	CommentCnt  int
+	State       string
+}
+
+// ListIssues returns a list of issues for a repository, ordered by updated time descending
+func ListIssues(db *sql.DB, owner, repo string) ([]IssueList, error) {
+	query := `
+		SELECT number, title, author_login, created_at, comment_count, state
+		FROM issues
+		WHERE owner = ? AND repo = ?
+		ORDER BY updated_at DESC;
+	`
+	rows, err := db.Query(query, owner, repo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list issues: %w", err)
+	}
+	defer rows.Close()
+
+	var issues []IssueList
+	for rows.Next() {
+		var issue IssueList
+		if err := rows.Scan(&issue.Number, &issue.Title, &issue.Author, &issue.CreatedAt, &issue.CommentCnt, &issue.State); err != nil {
+			return nil, fmt.Errorf("failed to scan issue: %w", err)
+		}
+		issues = append(issues, issue)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating issues: %w", err)
+	}
+
+	return issues, nil
+}
+
+// GetIssue returns a single issue by number
+func GetIssue(db *sql.DB, owner, repo string, number int) (*IssueList, error) {
+	query := `
+		SELECT number, title, author_login, created_at, comment_count, state
+		FROM issues
+		WHERE owner = ? AND repo = ? AND number = ?;
+	`
+	var issue IssueList
+	err := db.QueryRow(query, owner, repo, number).Scan(
+		&issue.Number, &issue.Title, &issue.Author, &issue.CreatedAt, &issue.CommentCnt, &issue.State,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get issue: %w", err)
+	}
+	return &issue, nil
+}

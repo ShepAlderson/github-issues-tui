@@ -39,6 +39,15 @@ func main() {
 		return
 	}
 
+	// Check for 'tui' subcommand
+	if len(os.Args) > 1 && os.Args[1] == "tui" {
+		if err := runTUI(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	// Check if config exists, if not run setup
 	if !config.Exists() {
 		fmt.Println("Welcome to ghissues! Let's set up your configuration.")
@@ -98,4 +107,27 @@ func validateAuth() error {
 	}
 
 	return nil
+}
+
+// runTUI runs the TUI application
+func runTUI() error {
+	// Check if config exists
+	if !config.Exists() {
+		return fmt.Errorf("configuration not found. Run 'ghissues config' first")
+	}
+
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Determine database path
+	dbPath, err := db.GetPath(dbFlag, cfg)
+	if err != nil {
+		return err
+	}
+
+	// Run the TUI
+	return RunTUI(dbPath, cfg)
 }
