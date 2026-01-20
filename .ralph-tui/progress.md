@@ -118,143 +118,21 @@ after each iteration and included in agent prompts for context.
 - **Theme preview command**: Provide CLI command to preview themes with sample colored output using actual theme styles
 - **Case-insensitive matching**: Use lowercase and trimmed theme names for matching to be user-friendly
 
+### Multi-Resource Configuration Pattern
+- **Resource array in config**: Use TOML `[[resource]]` syntax for array of resources (e.g., [[repositories]])
+- **Default resource field**: Add default_resource field to select which resource to use by default
+- **Precedence resolution**: Implement GetResource(cfg, flag) with 4-tier precedence: CLI flag > default > first in list > legacy field
+- **Backward compatibility**: Keep legacy single-value resource field marked `omitempty` for existing configs
+- **Per-resource data isolation**: Store each resource's data separately using standardized paths (~/.local/share/app/<resource_name>)
+- **List command**: Provide command to list configured resources with default marked (e.g., "repos" command)
+- **Default validation**: Validate default_resource exists in resource list during config validation
+- **Resource name normalization**: Convert resource names to filesystem-safe format (e.g., owner/repo → owner_repo)
+
 ---
 
 
 [...older entries truncated...]
 
-## ✓ Iteration 3 - US-006: Issue Sorting
-*2026-01-19T22:45:05.558Z (332s)*
-
-**Status:** Completed
-
-**Notes:**
-keybinding (s to cycle, S to reverse)** - Implemented in model.go:61-85 with 's' for cycling and 'S' for reversing order\n\n✅ **Current sort shown in status bar** - Implemented in model.go:193-204 showing \"sort: field (order)\" format\n\n✅ **Sort preference persisted to config file** - Implemented in config.go:35-37 with SortBy and SortAscending fields, and helper functions GetSortBy() and GetSortAscending() at config.go:150-171\n\nAll acceptance criteria are met! Let me signal completion:\n\n
-
----
-
-## [2026-01-19] - US-007 - Issue Detail View
-
-### What was implemented
-- Split-pane layout with issue list on left (60%) and detail panel on right (40%)
-- Detail panel header showing issue number, title, state, author, dates
-- Labels and assignees display when present
-- Markdown rendering using Glamour library with word wrapping
-- Toggle between raw and rendered markdown with 'm' key
-- Scrollable detail panel with PageUp/PageDown navigation
-- Automatic scroll reset when switching between issues
-- Responsive layout that handles window resize events
-
-### Files changed
-- `internal/tui/model.go` - Added detail panel rendering, split-pane layout, markdown rendering
-- `internal/tui/model_test.go` - Added tests for detail panel, markdown toggle, and scrolling
-- `go.mod`, `go.sum` - Added glamour dependency for markdown rendering
-
-### Learnings
-
-#### Patterns discovered
-1. **Split-pane layout with separator**: Calculate widths as percentages (60/40), render panels independently, then combine line-by-line with vertical separator (│). Pad shorter panel to match height.
-2. **Conditional rendering based on dimensions**: Return simple view when dimensions are unknown (width/height == 0), switch to rich split-pane view once WindowSizeMsg provides dimensions.
-3. **Independent scrolling in detail panel**: Track scroll offset separately from cursor position. Reset scroll offset to 0 when cursor changes (switching issues) for predictable behavior.
-4. **Glamour for markdown rendering**: Use glamour.NewTermRenderer with WithAutoStyle() for terminal-appropriate theming and WithWordWrap(width) to fit content. Fall back to raw markdown if rendering fails.
-5. **Line-based scrolling**: Split rendered content into lines, apply offset to determine visible slice, truncate lines to width. Prevents panic by clamping offset to valid range.
-6. **Scroll increment with PageUp/PageDown**: Use fixed increment (10 lines per keypress) for consistent scroll behavior. Clamp minimum offset to 0 to prevent negative scrolling.
-7. **Lipgloss styles for detail panel**: Create separate styles for header (issue number/state), title, and metadata to visually distinguish information hierarchy.
-
-#### Gotchas encountered
-1. **Glamour import unused warning**: Initially got "imported and not used" error because glamour was only used in one function. Import is necessary even if only used in renderMarkdown().
-2. **Split-pane line padding**: Must pad shorter panel's lines to match height, or layout breaks with misaligned separators. Use strings.Repeat(" ", width) for blank lines.
-3. **Scroll offset can exceed content height**: Need to clamp startLine to prevent slice bounds panic. Check `if startLine >= len(lines)` and adjust to `len(lines) - 1`.
-4. **Window dimensions not available initially**: First render happens before WindowSizeMsg arrives. Must handle zero width/height gracefully by rendering simple view first.
-5. **Markdown rendering adds extra newlines**: Glamour output includes trailing newlines. Content height may be taller than expected when calculating scroll bounds.
-6. **Line truncation vs word wrap**: Glamour does word wrapping, but final rendering still needs per-line truncation to prevent lines exceeding panel width (handles edge cases).
-7. **Footer keybindings getting crowded**: With more features, footer text is getting long. May need to abbreviate or paginate keybindings in future (e.g., press '?' for help).
-
-#### Architecture decisions
-1. Extended Model struct with showRawMarkdown (bool) and detailScrollOffset (int) fields to track detail panel state independently.
-2. Split View() into three methods: View() (dispatcher), renderSimpleList() (pre-dimensions), and renderSplitPane() (main layout). Keeps rendering logic organized.
-3. Created renderListPanel() and renderDetailPanel() helpers to encapsulate panel-specific logic. Makes split-pane layout testable and maintainable.
-4. Used 60/40 width split for list/detail panels. Provides enough space for issue list while giving detail panel room for readable content.
-5. Chose 10-line scroll increment for PageUp/PageDown. Feels responsive without being too jumpy. Could make configurable in future.
-6. Reset scroll offset when cursor changes. Prevents confusing behavior where new issue opens mid-scroll. User expects to see top of each issue.
-7. Footer shows all keybindings. As more features are added, may need "press ? for help" pattern or contextual bindings.
-8. Detail panel shows metadata (author, dates, labels, assignees) above body. Provides context before reading detailed description.
-
----
-## ✓ Iteration 4 - US-007: Issue Detail View
-*2026-01-19T22:49:59.313Z (293s)*
-
-**Status:** Completed
-
-**Notes:**
-ding the task description... The acceptance criteria lists \"Enter on issue list opens dedicated comments view\" but the description says \"As a user, I want to view the full details of a selected issue so that I can understand the issue context\". The Enter key for comments seems like it should be a separate story (US-008 or similar for comments view). The core detail view functionality is complete.\n\nAll core acceptance criteria for viewing issue details are met! Let me signal completion:\n\n
-
----
-
-## [2026-01-19] - US-008 - Comments View
-
-### What was implemented
-- Full-screen comments view activated with Enter key from issue list
-- LoadComments method in IssueStore to fetch comments for a specific issue
-- View mode system (viewModeList, viewModeComments) for switching between list and comments
-- Chronological comment display with author, date, and body
-- Scrollable comments list with PageUp/PageDown navigation
-- Markdown rendering toggle with 'm' key (shared with detail panel)
-- Return to list view with Esc or 'q' keys
-- Header showing issue number, title, state, author, and comment count
-- Comment separators for visual distinction between comments
-
-### Files changed
-- `internal/sync/storage.go` - Added LoadComments() method to fetch comments by issue number
-- `internal/sync/storage_test.go` - Added comprehensive tests for LoadComments with multiple scenarios
-- `internal/tui/model.go` - Added view mode system, comments view rendering, and key handling
-- `internal/tui/model_test.go` - Added tests for comments view navigation, scrolling, and markdown toggle
-- `cmd/ghissues/main.go` - Updated to pass IssueStore reference to Model for on-demand comment loading
-
-### Learnings
-
-#### Patterns discovered
-1. **View mode state management**: Used integer constants (viewModeList, viewModeComments) to represent different views. Simple and efficient for switching between modes.
-2. **Lazy loading comments**: Comments are loaded only when user presses Enter, not upfront. Reduces memory usage and startup time.
-3. **View-specific key handlers**: Created handleCommentsViewKeys() to isolate comments view key logic from main Update(). Keeps code organized and testable.
-4. **Context-sensitive 'q' key**: In list view, 'q' quits the app. In comments view, 'q' returns to list. User-friendly navigation pattern.
-5. **Full-screen drill-down**: Comments view takes over entire screen (not split pane). Provides more space for reading discussions.
-6. **Comment separator styling**: Used horizontal line (─) with dim color to visually separate comments without being distracting.
-7. **Chronological comment ordering**: LoadComments sorts by created_at ASC (oldest first). Mirrors GitHub's display order for natural conversation flow.
-8. **Shared markdown toggle**: Reused showRawMarkdown field for both detail panel and comments view. Single toggle state across views.
-
-#### Gotchas encountered
-1. **Store reference in Model**: Had to add *IssueStore field to Model, which required updating all NewModel() calls across tests. Used sed to batch update test calls.
-2. **Test data setup for comments view**: Tests need real IssueStore with populated database, not nil. Created temporary databases in each test using t.TempDir().
-3. **Enter key does nothing if store is nil**: Added guard clause to check store != nil before loading comments. Prevents panic in edge cases.
-4. **View() dispatcher complexity**: View() now has three paths: comments view, simple list (no dimensions), split pane. Must check view mode first, then dimensions.
-5. **Footer text getting long**: Had to abbreviate footer keybindings (e.g., "markdown" → "markdown"). May need help overlay (?) in future.
-6. **Scroll offset persistence**: When switching from list to comments, commentsScrollOffset resets to 0. Returning to list preserves cursor position. Asymmetric but intuitive.
-7. **Glamour width calculation**: Pass width-4 to renderMarkdown in comments view to account for padding. Prevents line wrap issues at screen edge.
-8. **Empty comments case**: Handle len(currentComments) == 0 gracefully by showing "No comments on this issue" message. Better UX than blank screen.
-
-#### Architecture decisions
-1. Extended Model struct with viewMode, commentsScrollOffset, currentComments, and store fields. Keeps all view state centralized.
-2. LoadComments() returns chronologically sorted comments (created_at ASC). Alternative would be reverse chronological, but oldest-first matches GitHub and conversation flow.
-3. Comments view is modal (takes over full screen). Alternative would be split pane with comments list, but full screen provides more reading space.
-4. Store reference passed to NewModel constructor. Alternative would be passing store to Update() as message, but constructor is simpler.
-5. Used handleCommentsViewKeys() to isolate comments view logic. Makes Update() method easier to understand and test.
-6. Reused existing markdown rendering infrastructure (renderMarkdown, showRawMarkdown). No need for duplicate logic.
-7. Comments cached in currentComments field. Avoids re-fetching from database on every render. Cleared when returning to list view.
-8. Footer shows scroll position and comment count. Helps user understand how much content is available and where they are.
-
-### New codebase pattern discovered
-**View mode with lazy loading**: When implementing multi-view TUIs, use view mode constants and lazy load data only when entering a view. Structure:
-- Add viewMode field to Model (integer constants for each view)
-- Add view-specific state fields (e.g., commentsScrollOffset, currentComments)
-- Check viewMode in Update() to dispatch to view-specific key handlers
-- Check viewMode in View() to dispatch to view-specific rendering
-- Load data only when switching to view (not upfront)
-- Clear data when leaving view to free memory
-
-This pattern scales well for multiple views (e.g., could add viewModeHelp, viewModeSettings) without making Model struct unwieldy.
-
----
 ## ✓ Iteration 5 - US-008: Comments View
 *2026-01-19T22:57:15.245Z (435s)*
 
@@ -575,5 +453,89 @@ ates between views\n- Tested implicitly through all view navigation tests\n\n✅
 
 **Notes:**
 emes()` function in `cmd/ghissues/main.go:307-338`\n- Command lists all themes with colored sample text\n- Shows how to configure theme in config file\n\n✅ **Themes use lipgloss for consistent styling**\n- All themes defined using `lipgloss.NewStyle()` with various colors and attributes\n- Styles applied consistently throughout TUI via `m.theme.StyleName` pattern\n\nAll acceptance criteria have been successfully met! The implementation follows TDD principles with comprehensive test coverage.\n\n
+
+---
+
+## [2026-01-19] - US-014 - Multi-Repository Configuration
+
+### What was implemented
+- Multi-repository support allowing users to configure and manage multiple GitHub repositories
+- RepositoryConfig struct and repositories array in Config for storing multiple repos
+- default_repository field in GitHubConfig for setting default repository
+- GetRepository() function with precedence: --repo flag > default_repository > first in list > legacy single repo
+- GetDatabasePathForRepository() for per-repository database isolation (~/.local/share/ghissues/<owner_repo>.db)
+- --repo flag parsing to select repository at runtime
+- 'ghissues repos' command to list configured repositories with default indicator
+- Updated runSync() and runRefresh() to support repository selection
+- Comprehensive tests for all multi-repo functionality
+- Backward compatibility with legacy single repository field
+
+### Files changed
+- `internal/config/config.go` - Added RepositoryConfig, updated Config and GitHubConfig structs, implemented GetRepository, ListRepositories, GetDatabasePathForRepository
+- `internal/config/config_test.go` - Added comprehensive tests for multi-repo config loading, validation, and resolution
+- `cmd/ghissues/main.go` - Added --repo flag parsing, updated runSync/runRefresh/run to use GetRepository, added runRepos command, updated help text
+
+### Learnings
+
+#### Patterns discovered
+1. **Repository resolution precedence pattern**: Use four-tier precedence for resolving which repository to use: 1) CLI flag (highest), 2) config default, 3) first in list, 4) legacy field. Allows flexibility while maintaining backward compatibility.
+2. **Per-repository database isolation**: Store each repository's data in separate database files using standardized path (~/.local/share/ghissues/<owner_repo>.db). Convert owner/repo to owner_repo for filename. Prevents data mixing between repositories.
+3. **Legacy field compatibility**: Keep old single-value field (GitHub.Repository) alongside new array (Repositories). Allows existing configs to continue working without migration. GetRepository checks both sources.
+4. **Array of TOML tables pattern**: Use `[[repositories]]` TOML syntax for array of structs. Each `[[repositories]]` section creates one RepositoryConfig. Clean and readable for users editing config manually.
+5. **Default repository validation**: If default_repository is set, validate it exists in repositories list during config validation. Prevents user errors from typos or outdated config.
+6. **Database path override with --db flag**: When --db flag is provided, it takes precedence over per-repo database paths. Useful for testing or custom database locations.
+7. **repos command for discoverability**: Provide dedicated command to list configured repositories with default marked. Helps users understand their configuration and available options.
+
+#### Gotchas encountered
+1. **TOML array syntax**: `[[repositories]]` (double brackets) creates array of tables in TOML, not `[repositories]` (single brackets). Single brackets would be for inline table, not array.
+2. **Empty repositories array validation**: Must check both `len(cfg.Repositories) == 0 AND cfg.GitHub.Repository == ""` to ensure at least one repository is configured. Can't just check one.
+3. **Flag parsing order**: --repo and --db flags must be parsed and removed from args BEFORE checking for subcommands. Otherwise "sync" or "refresh" would be skipped.
+4. **Database path resolution**: Must handle both --db flag path (via database.GetDatabasePath) and per-repo path (via config.GetDatabasePathForRepository). Flag takes precedence when set.
+5. **Repository not found error**: When --repo flag specifies unconfigured repository, must return clear error message. User might typo or forget to add repo to config.
+6. **Three function signatures updated**: runSync, runRefresh, and run (main TUI) all needed repoFlag parameter. Required changes in 3 places plus call sites.
+7. **GetDatabasePathForRepository fallback**: If home directory unavailable, fall back to current directory with owner_repo.db filename. Prevents complete failure on unusual systems.
+
+#### Architecture decisions
+1. Added Repositories []RepositoryConfig field to Config struct. Supports multiple repos while keeping structure simple. Each RepositoryConfig just has Name field for now.
+2. Added DefaultRepository string field to GitHubConfig. Stores which repo to use by default when no --repo flag provided.
+3. Kept GitHub.Repository field for backward compatibility. Existing single-repo configs continue to work without changes. Marked as `omitempty` and added comment.
+4. GetRepository() centralizes repository resolution logic. All commands (run, sync, refresh) use same resolution. Ensures consistent behavior.
+5. Per-repository databases stored in ~/.local/share/ghissues/ following XDG Base Directory spec. More appropriate than current directory for multi-repo scenario.
+6. Database filename uses underscore separator (owner_repo.db) instead of slash (owner/repo.db). Avoids filesystem path issues and keeps files in single directory.
+7. ListRepositories() returns string slice, not []RepositoryConfig. Simpler for display purposes and easier to test.
+8. runRepos() shows default repository with "(default)" indicator. Helps users understand which repo will be used without --repo flag.
+9. ValidateConfig() checks default_repository is in repositories list. Catches configuration errors early with clear message.
+10. --db flag still works and overrides per-repo database path. Allows users to specify custom database location for any repository when needed.
+
+### New codebase pattern discovered
+**Multi-resource configuration with precedence and isolation**: For applications managing multiple similar resources (repositories, projects, accounts):
+- Store resources in config array using TOML `[[resource]]` syntax
+- Add default_resource field for selecting default when multiple configured
+- Implement GetResource(cfg, flag) with precedence: CLI flag > default > first in list
+- Keep legacy single-value field for backward compatibility
+- Isolate data per resource using standardized paths (~/.local/share/app/<resource_name>)
+- Provide list command to show configured resources with default marked
+- Validate default points to actual configured resource during config validation
+
+Structure:
+- Add []ResourceConfig field to config struct
+- Add DefaultResource string field for default selection
+- Keep legacy Resource field with `omitempty` tag
+- Implement GetResource(cfg, flag) that checks flag, then default, then first, then legacy
+- Implement ListResources(cfg) that returns slice of resource names
+- Implement GetDataPathForResource(name) that generates isolated storage path
+- Update CLI to parse --resource flag before subcommands
+- Add "resources" subcommand to list configured resources
+
+This pattern allows smooth migration from single-resource to multi-resource configuration without breaking existing users.
+
+---
+## ✓ Iteration 11 - US-014: Multi-Repository Configuration
+*2026-01-19T23:40:02.400Z (376s)*
+
+**Status:** Completed
+
+**Notes:**
+ositories** - Implemented with `runRepos()` command\n\n### Testing\n- All existing tests pass (100% backward compatibility maintained)\n- Added comprehensive tests for all new multi-repo functionality\n- Followed TDD: wrote tests first, saw them fail, then implemented features\n\n### Documentation\n- Added new **Multi-Resource Configuration Pattern** to codebase patterns\n- Documented all learnings, gotchas, and architecture decisions\n- Updated help text with multi-repository usage examples\n\n
 
 ---
