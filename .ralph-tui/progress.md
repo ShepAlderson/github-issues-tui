@@ -54,6 +54,13 @@ after each iteration and included in agent prompts for context.
 - Setting up signal handler for SIGINT/SIGTERM
 - Returning early with cleanup message on cancellation
 
+**TUI Pattern with tview**: Use `rivo/tview` for terminal UI:
+- Explicit type declarations to avoid type inference issues with tview primitives
+- Use `tcell.EventKey` for keyboard input handling
+- Chain methods on Flex, Pages, List, TextView for layout composition
+- Use SetInputCapture for custom key handling
+- Modal dialogs for help screens using Pages
+
 ---
 
 ## 2026-01-20 - US-001
@@ -204,3 +211,46 @@ after each iteration and included in agent prompts for context.
 {"type":"assistant","message":{"id":"msg_ce244bd4-361d-40fc-949c-20e66dd79b6e","type":"message","role":"assistant","content":[{"type":"text","text":"\n\n
 
 ---
+## ✓ Iteration 4 - US-003: Initial Issue Sync
+*2026-01-20T08:54:47.570Z (467s)*
+
+**Status:** Completed
+
+**Notes:**
+Sync can be cancelled with Ctrl+C gracefully\n\n**Files changed:**\n- `internal/github/client.go` - Added structs and fetching functions\n- `internal/github/issue_test.go`, `internal/github/fetch_test.go` - 21 tests\n- `internal/db/ops.go`, `internal/db/ops_test.go` - Database operations with 14 tests\n- `cmd/ghissues/sync.go`, `cmd/ghissues/sync_test.go` - Sync command with 11 tests\n- `cmd/ghissues/main.go` - Added sync subcommand handler\n- `go.mod` - Added `modernc.org/sqlite` dependency\n\n
+
+---
+
+## 2026-01-20 - US-005
+- What was implemented:
+  - Added Display struct with Columns field to Config for configurable issue list columns
+  - Created IssueList struct and ListIssues, GetIssue functions in db/ops.go
+  - Built TUI with issue list view using tview library
+  - Vertical split layout: issue list (left) + details placeholder (right)
+  - Vim keys (j/k) and arrow keys for navigation
+  - Issue count shown in status bar
+  - Help modal with keyboard shortcuts
+  - Default columns: number, title, author, date, comments
+
+- Files changed:
+  - internal/config/config.go (added Display struct, DefaultColumns, apply defaults in Load)
+  - internal/config/config_display_test.go (3 tests for Display.Columns)
+  - internal/db/ops.go (added IssueList struct, ListIssues, GetIssue functions)
+  - internal/db/ops_list_test.go (6 tests for ListIssues/GetIssue)
+  - cmd/ghissues/tui.go (new file with TUI, issue list, navigation, status bar)
+  - cmd/ghissues/tui_test.go (10 tests for TUI helper functions)
+  - cmd/ghissues/main.go (added tui subcommand handler)
+  - go.mod (added rivo/tview and gdamore/tcell/v2 dependencies)
+
+- **Learnings:**
+  - Patterns discovered:
+    - TUI Pattern with tview: Explicit type declarations avoid type inference issues
+    - Flex layout with FlexColumn for vertical split (left panel, right panel)
+    - Pages for modal dialogs (help screen)
+    - SetInputCapture for custom key handling with tcell.EventKey
+    - Status bar using TextView at bottom of FlexRow layout
+  - Gotchas encountered:
+    - tview.NewList() returning *Box instead of *List in type inference - use explicit type declarations
+    - tcell.KeyRune, tcell.KeyEscape, tcell.KeyCtrlC for keyboard events
+    - Method chaining on tview primitives requires explicit variable declaration
+    - ValidateColumns should return false for empty column lists
