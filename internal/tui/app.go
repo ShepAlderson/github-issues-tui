@@ -185,6 +185,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				})
 			}
 			return m, cmd
+
+		case "pgdn":
+			// Scroll detail panel down
+			if m.DetailPanel != nil {
+				m.DetailPanel.ScrollDown()
+			}
+			return m, nil
+
+		case "pgup":
+			// Scroll detail panel up
+			if m.DetailPanel != nil {
+				m.DetailPanel.ScrollUp()
+			}
+			return m, nil
 		}
 
 	case RefreshProgressMsg:
@@ -466,7 +480,7 @@ func (m Model) renderStatusBar() string {
 	status := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.Theme.StatusBar)).
 		Render("Issues: " + formatNumber(issueCount) +
-			" | ↑↓/jk: navigate | s: sort | r: refresh | Enter: comments | Space: select | ?: help | q: quit" +
+			" | ↑↓/jk: navigate | PgUp/PgDn: scroll detail | s: sort | r: refresh | Enter: comments | Space: select | ?: help | q: quit" +
 			markdownHint + selectedInfo + sortInfo + lastSyncInfo + errorInfo)
 
 	return status
@@ -547,7 +561,7 @@ func (m Model) renderSplitLayout() string {
 	// Render detail panel
 	detailView := ""
 	if m.DetailPanel != nil {
-		detailView = m.DetailPanel.View(m.Theme)
+		detailView = m.DetailPanel.GetScrolledView(m.Theme)
 	} else {
 		detailView = "No issue selected"
 	}

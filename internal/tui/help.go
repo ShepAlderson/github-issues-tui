@@ -133,6 +133,10 @@ func (m HelpModel) View(theme *theme.Theme) string {
 	content.WriteString(descStyle.Render("Toggle markdown rendering"))
 	content.WriteString("\n")
 
+	content.WriteString(keyStyle.Render("Page Up / Page Down"))
+	content.WriteString(descStyle.Render("Scroll detail panel"))
+	content.WriteString("\n")
+
 	content.WriteString(keyStyle.Render("r"))
 	content.WriteString(descStyle.Render("Incremental refresh"))
 	content.WriteString("\n")

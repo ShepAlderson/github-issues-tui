@@ -37,12 +37,10 @@ func (p *DetailPanel) ToggleMarkdown() {
 
 // ScrollDown scrolls the detail panel down by one line
 func (p *DetailPanel) ScrollDown() {
-	// Don't scroll if there's no content
-	if p.Issue.Body == "" && p.Issue.Title == "" {
-		return
+	maxScroll := p.getMaxScrollOffset()
+	if p.ScrollOffset < maxScroll {
+		p.ScrollOffset++
 	}
-	// For now, just increment. We'll limit this later based on content height
-	p.ScrollOffset++
 }
 
 // ScrollUp scrolls the detail panel up by one line
@@ -50,6 +48,39 @@ func (p *DetailPanel) ScrollUp() {
 	if p.ScrollOffset > 0 {
 		p.ScrollOffset--
 	}
+}
+
+// getMaxScrollOffset returns the maximum valid scroll offset
+func (p *DetailPanel) getMaxScrollOffset() int {
+	// Approximate content height based on issue data
+	// This is a rough estimate since we can't know the exact rendered height
+	// without actually rendering the content
+	lineCount := 5 // Base lines for header/metadata
+
+	// Count lines in body
+	if p.Issue.Body != "" {
+		bodyLines := len(strings.Split(p.Issue.Body, "\n"))
+		// Account for markdown rendering adding extra lines
+		if p.RenderMarkdown {
+			lineCount += bodyLines * 2 // Rough estimate for rendered markdown
+		} else {
+			lineCount += bodyLines
+		}
+	}
+
+	// Labels and assignees add lines
+	if p.Issue.Labels != "" {
+		lineCount++ // At least one line for labels
+	}
+	if p.Issue.Assignees != "" {
+		lineCount++ // One line for assignees
+	}
+
+	maxScroll := lineCount - p.ViewportHeight
+	if maxScroll < 0 {
+		return 0
+	}
+	return maxScroll
 }
 
 // SetViewport sets the viewport height
@@ -182,4 +213,22 @@ func (p *DetailPanel) GetVisibleLines(theme *theme.Theme) []string {
 	}
 
 	return lines[start:end]
+}
+
+// GetScrolledView returns the view with scroll offset applied
+func (p *DetailPanel) GetScrolledView(theme *theme.Theme) string {
+	fullView := p.View(theme)
+	lines := strings.Split(fullView, "\n")
+
+	start := p.ScrollOffset
+	if start >= len(lines) {
+		return ""
+	}
+
+	end := start + p.ViewportHeight
+	if end > len(lines) {
+		end = len(lines)
+	}
+
+	return strings.Join(lines[start:end], "\n")
 }
