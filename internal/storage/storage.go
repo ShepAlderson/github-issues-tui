@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -309,4 +310,44 @@ func GetLastSync(db *sql.DB) (time.Time, error) {
 	}
 
 	return parsedTime, nil
+}
+
+// DeleteIssuesNotInList deletes issues whose numbers are not in the provided list
+// Returns the count of deleted issues
+func DeleteIssuesNotInList(db *sql.DB, issueNumbers []int) (int, error) {
+	if len(issueNumbers) == 0 {
+		// Delete all issues
+		result, err := db.Exec("DELETE FROM issues")
+		if err != nil {
+			return 0, fmt.Errorf("failed to delete issues: %w", err)
+		}
+		rowsAffected, _ := result.RowsAffected()
+		return int(rowsAffected), nil
+	}
+
+	// Build query with placeholders for each issue number
+	placeholders := make([]string, len(issueNumbers))
+	args := make([]interface{}, len(issueNumbers))
+	for i, num := range issueNumbers {
+		placeholders[i] = "?"
+		args[i] = num
+	}
+
+	query := "DELETE FROM issues WHERE number NOT IN (" + strings.Join(placeholders, ",") + ")"
+	result, err := db.Exec(query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete issues: %w", err)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	return int(rowsAffected), nil
+}
+
+// DeleteCommentsForIssue deletes all comments for a specific issue
+func DeleteCommentsForIssue(db *sql.DB, issueNumber int) error {
+	_, err := db.Exec("DELETE FROM comments WHERE issue_number = ?", issueNumber)
+	if err != nil {
+		return fmt.Errorf("failed to delete comments for issue %d: %w", issueNumber, err)
+	}
+	return nil
 }

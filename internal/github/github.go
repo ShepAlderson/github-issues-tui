@@ -68,8 +68,25 @@ func NewClient(token, repo, baseURL string) *Client {
 // FetchIssues fetches all open issues for the repository, handling pagination
 // It sends progress updates on the progress channel and can be cancelled via cancelChan
 func (c *Client) FetchIssues(progress chan<- int, cancelChan <-chan struct{}) ([]storage.Issue, error) {
+	return c.fetchIssuesWithSince(time.Time{}, progress, cancelChan)
+}
+
+// FetchIssuesSince fetches issues updated since the given time
+// It sends progress updates on the progress channel and can be cancelled via cancelChan
+func (c *Client) FetchIssuesSince(since time.Time, progress chan<- int, cancelChan <-chan struct{}) ([]storage.Issue, error) {
+	return c.fetchIssuesWithSince(since, progress, cancelChan)
+}
+
+// fetchIssuesWithSince is the internal implementation that optionally filters by since parameter
+func (c *Client) fetchIssuesWithSince(since time.Time, progress chan<- int, cancelChan <-chan struct{}) ([]storage.Issue, error) {
 	var allIssues []storage.Issue
 	url := fmt.Sprintf("%s/repos/%s/issues?state=open&per_page=100", c.baseURL, c.repo)
+
+	// Add since parameter if specified
+	if !since.IsZero() {
+		url += "&since=" + since.Format(time.RFC3339)
+	}
+
 	page := 1
 
 	for url != "" {

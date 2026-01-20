@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -16,6 +17,7 @@ type Model struct {
 	DetailPanel   *DetailPanel
 	CommentsView  *CommentsView // Comments view for drill-down
 	AllComments   map[int][]storage.Comment // Cache comments by issue number
+	Refresh       RefreshModel // Refresh progress state
 	Quitting      bool
 	Width         int
 	Height        int
@@ -28,6 +30,7 @@ func NewModel(issues []storage.Issue, columns []Column) Model {
 		IssueList:   issueList,
 		DetailPanel: nil,
 		AllComments: make(map[int][]storage.Comment),
+		Refresh:     NewRefreshModel(),
 		Quitting:    false,
 	}
 	// Initialize detail panel with first issue if available
@@ -44,6 +47,7 @@ func NewModelWithSort(issues []storage.Issue, columns []Column, sortField string
 		IssueList:   issueList,
 		DetailPanel: nil,
 		AllComments: make(map[int][]storage.Comment),
+		Refresh:     NewRefreshModel(),
 		Quitting:    false,
 	}
 	// Initialize detail panel with first issue if available
@@ -62,6 +66,12 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// If refresh is complete, any key dismisses it
+		if m.Refresh.Complete {
+			m.Refresh.Reset()
+			return m, nil
+		}
+
 		// If in comments view, handle comments-specific keybindings
 		if m.CommentsView != nil {
 			return m.updateCommentsView(msg)
@@ -108,7 +118,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.DetailPanel.ToggleMarkdown()
 			}
 			return m, nil
+
+		case "r", "R":
+			// Trigger refresh - for now just mark as complete
+			// In real implementation, this would trigger a background sync
+			var cmd tea.Cmd
+			if msg.String() == "r" {
+				// Incremental refresh
+				m.Refresh.Reset()
+				m.Refresh.Active = true
+				// Send a tick command to simulate refresh completion
+				cmd = tea.Tick(time.Second*2, func(t time.Time) tea.Msg {
+					return RefreshCompleteMsg{Success: true}
+				})
+			} else {
+				// Full refresh (R)
+				m.Refresh.Reset()
+				m.Refresh.Active = true
+				cmd = tea.Tick(time.Second*2, func(t time.Time) tea.Msg {
+					return RefreshCompleteMsg{Success: true}
+				})
+			}
+			return m, cmd
 		}
+
+	case RefreshProgressMsg:
+		updated, _ := m.Refresh.Update(msg)
+		m.Refresh = updated
+		return m, nil
+
+	case RefreshCompleteMsg:
+		updated, _ := m.Refresh.Update(msg)
+		m.Refresh = updated
+		return m, nil
 
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
@@ -124,6 +166,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.CommentsView != nil {
 			m.CommentsView.SetViewport(m.Height - 3)
 		}
+		updated, _ := m.Refresh.Update(msg)
+		m.Refresh = updated
 		return m, nil
 	}
 
@@ -196,6 +240,11 @@ func (m Model) View() string {
 
 	if m.Width == 0 || m.Height == 0 {
 		return "Loading..."
+	}
+
+	// If refresh is active or just completed, show refresh overlay
+	if m.Refresh.Active || m.Refresh.Complete {
+		return m.renderRefreshView()
 	}
 
 	// If in comments view, render comments view
@@ -328,7 +377,7 @@ func (m Model) renderStatusBar() string {
 	status := lipgloss.NewStyle().
 		Faint(true).
 		Render("Issues: " + formatNumber(issueCount) +
-			" | ↑↓/jk: navigate | s: sort field | S: sort order | Enter: comments | Space: select | q: quit" +
+			" | ↑↓/jk: navigate | s: sort field | S: sort order | r: refresh | R: full refresh | Enter: comments | Space: select | q: quit" +
 			markdownHint + selectedInfo + sortInfo)
 
 	return status
@@ -422,3 +471,45 @@ func (m Model) renderSplitLayout() string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, separator, rightPanel)
 }
 
+// renderRefreshView renders the refresh progress overlay
+func (m Model) renderRefreshView() string {
+	// Build the refresh progress view
+	refreshContent := m.Refresh.View()
+
+	// Center the content
+	lines := strings.Split(refreshContent, "\n")
+	maxWidth := 0
+	for _, line := range lines {
+		if len(line) > maxWidth {
+			maxWidth = len(line)
+		}
+	}
+
+	var centeredLines []string
+	for _, line := range lines {
+		padding := (m.Width - len(line)) / 2
+		if padding > 0 {
+			centeredLines = append(centeredLines, strings.Repeat(" ", padding)+line)
+		} else {
+			centeredLines = append(centeredLines, line)
+		}
+	}
+
+	// Vertical centering
+	verticalPadding := (m.Height - len(lines)) / 2
+	if verticalPadding < 0 {
+		verticalPadding = 0
+	}
+
+	result := strings.Repeat("\n", verticalPadding)
+	result += strings.Join(centeredLines, "\n")
+
+	// Add hint at bottom
+	if m.Refresh.Complete && m.Refresh.Success {
+		result += "\n\nPress any key to continue..."
+	} else if m.Refresh.Complete && !m.Refresh.Success {
+		result += "\n\nPress any key to continue..."
+	}
+
+	return result
+}

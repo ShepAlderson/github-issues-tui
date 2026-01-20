@@ -306,3 +306,102 @@ func TestGetEnvToken(t *testing.T) {
 		t.Errorf("Expected empty token, got '%s'", token)
 	}
 }
+
+func TestFetchIssuesSince(t *testing.T) {
+	// Track requests to verify since parameter is used
+	var receivedSince string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check if since parameter is present
+		receivedSince = r.URL.Query().Get("since")
+		if receivedSince == "" {
+			t.Errorf("Expected 'since' parameter in request")
+		}
+
+		// Check authentication
+		auth := r.Header.Get("Authorization")
+		if auth != "token test-token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		// Return updated issue
+		issues := []map[string]interface{}{
+			{
+				"number":      1,
+				"title":       "Updated Issue",
+				"body":        "Updated issue body",
+				"user":        map[string]interface{}{"login": "user1"},
+				"state":       "open",
+				"created_at":  "2024-01-01T00:00:00Z",
+				"updated_at":  "2024-01-05T00:00:00Z",
+				"comments":    10,
+				"labels":      []map[string]string{{"name": "bug"}},
+				"assignees":   []map[string]string{{"login": "assignee1"}},
+			},
+		}
+		json.NewEncoder(w).Encode(issues)
+	}))
+	defer server.Close()
+
+	client := NewClient("test-token", "owner/repo", server.URL)
+	since := time.Date(2024, 1, 3, 0, 0, 0, 0, time.UTC)
+
+	progress := make(chan int)
+	go func() {
+		for range progress {
+		}
+	}()
+
+	issues, err := client.FetchIssuesSince(since, progress, nil)
+	close(progress)
+
+	if err != nil {
+		t.Fatalf("FetchIssuesSince failed: %v", err)
+	}
+
+	if len(issues) != 1 {
+		t.Errorf("Expected 1 issue, got %d", len(issues))
+	}
+
+	if issues[0].Number != 1 {
+		t.Errorf("Expected issue number 1, got %d", issues[0].Number)
+	}
+
+	if issues[0].Title != "Updated Issue" {
+		t.Errorf("Expected title 'Updated Issue', got '%s'", issues[0].Title)
+	}
+
+	if issues[0].Comments != 10 {
+		t.Errorf("Expected 10 comments (updated), got %d", issues[0].Comments)
+	}
+}
+
+func TestFetchIssuesSinceEmpty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Return empty list (no updates)
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode([]map[string]interface{}{})
+	}))
+	defer server.Close()
+
+	client := NewClient("test-token", "owner/repo", server.URL)
+	since := time.Now()
+
+	progress := make(chan int)
+	go func() {
+		for range progress {
+		}
+	}()
+
+	issues, err := client.FetchIssuesSince(since, progress, nil)
+	close(progress)
+
+	if err != nil {
+		t.Fatalf("FetchIssuesSince failed: %v", err)
+	}
+
+	if len(issues) != 0 {
+		t.Errorf("Expected 0 issues, got %d", len(issues))
+	}
+}

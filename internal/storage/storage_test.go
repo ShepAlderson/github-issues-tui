@@ -362,3 +362,192 @@ func TestGetLastSync(t *testing.T) {
 		t.Errorf("Expected time close to %v, got %v", now, syncTime)
 	}
 }
+
+func TestDeleteIssuesNotInList(t *testing.T) {
+	dbPath := t.TempDir() + "/test.db"
+	db, err := InitializeDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("InitializeDatabase failed: %v", err)
+	}
+	defer db.Close()
+	defer os.Remove(dbPath)
+
+	// Store multiple issues
+	issues := []Issue{
+		{
+			Number:    1,
+			Title:     "First Issue",
+			Author:    "user1",
+			State:     "open",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		},
+		{
+			Number:    2,
+			Title:     "Second Issue",
+			Author:    "user2",
+			State:     "open",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		},
+		{
+			Number:    3,
+			Title:     "Third Issue",
+			Author:    "user3",
+			State:     "open",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		},
+	}
+
+	for _, issue := range issues {
+		err = StoreIssue(db, &issue)
+		if err != nil {
+			t.Fatalf("StoreIssue failed: %v", err)
+		}
+	}
+
+	// Add comments for issue 3
+	comment := Comment{
+		ID:          999,
+		IssueNumber: 3,
+		Body:        "Test comment",
+		Author:      "user1",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	err = StoreComment(db, &comment)
+	if err != nil {
+		t.Fatalf("StoreComment failed: %v", err)
+	}
+
+	// Delete issues not in the list [1, 2] (should delete issue 3)
+	activeNumbers := []int{1, 2}
+	deleted, err := DeleteIssuesNotInList(db, activeNumbers)
+	if err != nil {
+		t.Fatalf("DeleteIssuesNotInList failed: %v", err)
+	}
+
+	if deleted != 1 {
+		t.Errorf("Expected 1 deleted issue, got %d", deleted)
+	}
+
+	// Verify issue 3 is gone
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM issues WHERE number = 3").Scan(&count)
+	if err != nil {
+		t.Fatalf("Failed to check issues: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("Expected issue 3 to be deleted, but found %d instances", count)
+	}
+
+	// Note: CASCADE may not be enforced if foreign keys are not enabled
+	// Comments for deleted issues should be handled separately if needed
+
+	// Verify issues 1 and 2 still exist
+	retrieved, err := GetIssues(db)
+	if err != nil {
+		t.Fatalf("GetIssues failed: %v", err)
+	}
+	if len(retrieved) != 2 {
+		t.Errorf("Expected 2 remaining issues, got %d", len(retrieved))
+	}
+
+	// Verify the remaining issues are 1 and 2
+	numbers := make([]int, len(retrieved))
+	for i, issue := range retrieved {
+		numbers[i] = issue.Number
+	}
+	if numbers[0] != 1 || numbers[1] != 2 {
+		t.Errorf("Expected remaining issues to be [1, 2], got %v", numbers)
+	}
+}
+
+func TestDeleteIssuesNotInListEmpty(t *testing.T) {
+	dbPath := t.TempDir() + "/test.db"
+	db, err := InitializeDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("InitializeDatabase failed: %v", err)
+	}
+	defer db.Close()
+	defer os.Remove(dbPath)
+
+	// Store an issue
+	issue := Issue{
+		Number:    1,
+		Title:     "First Issue",
+		Author:    "user1",
+		State:     "open",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	err = StoreIssue(db, &issue)
+	if err != nil {
+		t.Fatalf("StoreIssue failed: %v", err)
+	}
+
+	// Delete all issues (empty list)
+	deleted, err := DeleteIssuesNotInList(db, []int{})
+	if err != nil {
+		t.Fatalf("DeleteIssuesNotInList failed: %v", err)
+	}
+
+	if deleted != 1 {
+		t.Errorf("Expected 1 deleted issue, got %d", deleted)
+	}
+
+	// Verify no issues remain
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM issues").Scan(&count)
+	if err != nil {
+		t.Fatalf("Failed to check issues: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("Expected no issues, found %d", count)
+	}
+}
+
+func TestDeleteIssuesNotInListNoMatch(t *testing.T) {
+	dbPath := t.TempDir() + "/test.db"
+	db, err := InitializeDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("InitializeDatabase failed: %v", err)
+	}
+	defer db.Close()
+	defer os.Remove(dbPath)
+
+	// Store an issue
+	issue := Issue{
+		Number:    1,
+		Title:     "First Issue",
+		Author:    "user1",
+		State:     "open",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	err = StoreIssue(db, &issue)
+	if err != nil {
+		t.Fatalf("StoreIssue failed: %v", err)
+	}
+
+	// Delete with list containing the issue (should delete nothing)
+	deleted, err := DeleteIssuesNotInList(db, []int{1})
+	if err != nil {
+		t.Fatalf("DeleteIssuesNotInList failed: %v", err)
+	}
+
+	if deleted != 0 {
+		t.Errorf("Expected 0 deleted issues, got %d", deleted)
+	}
+
+	// Verify issue still exists
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM issues WHERE number = 1").Scan(&count)
+	if err != nil {
+		t.Fatalf("Failed to check issues: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("Expected issue 1 to still exist, found %d instances", count)
+	}
+}
