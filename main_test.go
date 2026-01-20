@@ -2,9 +2,13 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/shepbook/git/github-issues-tui/internal/config"
@@ -362,5 +366,141 @@ func TestRunMain_AuthenticationFlow(t *testing.T) {
 				t.Errorf("Expected output to contain %q, got:\n%s", expectedOutput, output.String())
 			}
 		})
+	}
+}
+
+func TestMain_SyncCommand(t *testing.T) {
+	// Create a mock GitHub server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/repos/testuser/testrepo/issues" {
+			// Return mock issues
+			issues := []map[string]interface{}{
+				{
+					"number":     1,
+					"title":      "Test Issue",
+					"body":       "Test body",
+					"state":      "open",
+					"user":       map[string]string{"login": "testuser"},
+					"created_at": "2026-01-20T10:00:00Z",
+					"updated_at": "2026-01-20T10:00:00Z",
+					"comments":   0,
+					"labels":     []map[string]string{{"name": "bug"}},
+					"assignees":  []map[string]string{},
+				},
+			}
+			json.NewEncoder(w).Encode(issues)
+		} else if strings.Contains(r.URL.Path, "/comments") {
+			// Return empty comments
+			json.NewEncoder(w).Encode([]interface{}{})
+		}
+	}))
+	defer server.Close()
+
+	// Create temporary directories
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, ".config", "ghissues")
+	err := os.MkdirAll(configDir, 0755)
+	if err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+
+	// Create config file
+	configPath := filepath.Join(configDir, "config.toml")
+	cfg := &config.Config{
+		Repository: "testuser/testrepo",
+		Token:      "test_token",
+		Database: struct {
+			Path string `toml:"path"`
+		}{
+			Path: filepath.Join(tmpDir, ".ghissues.db"),
+		},
+	}
+
+	err = config.SaveConfig(configPath, cfg)
+	if err != nil {
+		t.Fatalf("Failed to save config: %v", err)
+	}
+
+	// Set environment variable for config path
+	os.Setenv("GHISSUES_CONFIG", configPath)
+	defer os.Unsetenv("GHISSUES_CONFIG")
+
+	// Set environment to use mock GitHub server (this only works in the current process)
+	os.Setenv("GHISSUES_GITHUB_URL", server.URL)
+	defer os.Unsetenv("GHISSUES_GITHUB_URL")
+
+	// Change to temp directory for database creation
+	oldWd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(oldWd)
+
+	// Test sync command
+	args := []string{"ghissues", "sync"}
+	output := &bytes.Buffer{}
+
+	err = runMain(args, configPath, strings.NewReader(""), output)
+	if err != nil {
+		t.Fatalf("runMain failed: %v", err)
+	}
+
+	// Verify output contains success message
+	outputStr := output.String()
+	if !strings.Contains(outputStr, "Sync complete") {
+		t.Errorf("Expected 'Sync complete' in output, got: %s", outputStr)
+	}
+
+	// Verify database file was created
+	dbPath := filepath.Join(tmpDir, ".ghissues.db")
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		t.Error("Database file was not created")
+	}
+}
+
+func TestMain_SyncCommand_InvalidRepository(t *testing.T) {
+	// Test sync command with invalid repository format
+	args := []string{"ghissues", "sync"}
+	output := &bytes.Buffer{}
+
+	err := runMain(args, "/nonexistent/config.toml", strings.NewReader(""), output)
+	if err == nil {
+		t.Error("Expected error for missing config")
+	}
+
+	if !strings.Contains(err.Error(), "configuration not found") {
+		t.Errorf("Expected 'configuration not found' error, got: %v", err)
+	}
+}
+
+func TestMain_AvailableCommands(t *testing.T) {
+	// Create a temporary config
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, ".config", "ghissues")
+	os.MkdirAll(configDir, 0755)
+
+	configPath := filepath.Join(configDir, "config.toml")
+	cfg := &config.Config{
+		Repository: "testuser/testrepo",
+		Token:      "test_token",
+	}
+	config.SaveConfig(configPath, cfg)
+
+	os.Setenv("GHISSUES_CONFIG", configPath)
+	defer os.Unsetenv("GHISSUES_CONFIG")
+
+	// Test that available commands are shown
+	args := []string{"ghissues"}
+	output := &bytes.Buffer{}
+
+	err := runMain(args, configPath, strings.NewReader(""), output)
+	if err != nil {
+		t.Fatalf("runMain failed: %v", err)
+	}
+
+	outputStr := output.String()
+	if !strings.Contains(outputStr, "ghissues config") {
+		t.Error("Expected 'ghissues config' in available commands")
+	}
+	if !strings.Contains(outputStr, "ghissues sync") {
+		t.Error("Expected 'ghissues sync' in available commands")
 	}
 }

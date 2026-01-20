@@ -120,3 +120,72 @@ ion."}],"model":"hf:moonshotai/Kimi-K2-Thinking","stop_reason":null,"stop_sequen
 68→  - Gotchas encountered\n    69→---\n    70→```\n    71→\n    72→If you discovered a **reusable pattern**, also add it to the `## Codebase Patterns` section at the TOP of progress.md.\n    73→\n    74→## Stop Condition\n    75→**IMPORTANT**: If the work is already complete (implemented in a previous iteration or already exists), verify it meets the acceptance criteria and signal completion immediately.\n    76→\n    77→When finished (or if already complete), signal completion with:\n    78→
 
 ---
+
+---
+
+## [2026-01-20] - US-004 - Database Storage Location
+
+**What was implemented:**
+- Flexible database storage location with three-tier priority system:
+  1. Command-line flag (`--db /path/to/db`) - highest priority
+  2. Config file (`database.path` in TOML) - medium priority  
+  3. Default (`.ghissues.db` in current directory) - lowest priority
+- Automatic parent directory creation with proper error handling
+- Path writability validation with clear error messages
+- Database location displayed in startup output for transparency
+
+**Files changed:**
+- Modified `main.go` - Added flag parsing, database path resolution, and validation
+- Modified `main_test.go` - Added comprehensive tests for all priority levels
+
+**Learnings:**
+- **Pattern Discovered:** Priority resolution pattern - when multiple sources can provide a value, establish clear precedence rules (flag > config > default) and test each level independently
+- **Gotcha Encountered:** macOS path resolution differences - `/var/folders` symlinks to `/private/var/folders`, causing path comparison failures in tests. Solution: avoid strict path equality checks when testing file operations that resolve symlinks
+- **Design Decision:** Database file is not created during path validation, only parent directories. This keeps the validation logic focused and avoids side effects before the actual database initialization
+- **Testing Strategy:** Table-driven tests work well for testing priority hierarchies. Each test case should verify one priority level in isolation to ensure the hierarchy works correctly
+
+---
+## ✓ Iteration 3 - US-004: Database Storage Location
+*2026-01-20T21:19:25.245Z (281s)*
+
+**Status:** Completed
+
+---
+
+## [2026-01-20] - US-003 - Initial Issue Sync
+
+**What was implemented:**
+- Full sync command (`ghissues sync`) that fetches all open issues from GitHub
+- Progress bar showing real-time progress of issues fetched and processed
+- Automatic pagination handling for repositories with many issues
+- Local libsql database storage at configured path with proper schema
+- Complete issue data storage including: number, title, body, author, dates, comment count, labels, and assignees
+- Comment fetching and storage for each issue
+- Graceful cancellation support with Ctrl+C signal handling
+- Integration with existing authentication and database path configuration
+
+**Files changed:**
+- Created `internal/db/db.go` - Database operations with libsql driver
+- Created `internal/db/db_test.go` - Comprehensive database tests
+- Created `internal/github/client.go` - GitHub API client with pagination
+- Created `internal/github/client_test.go` - API client tests with mock server
+- Created `internal/cmd/sync.go` - Sync command implementation with progress bar
+- Created `internal/cmd/sync_test.go` - Sync command tests
+- Modified `main.go` - Added sync command routing and integration
+- Modified `main_test.go` - Added integration tests for sync command
+- Updated dependencies: added libsql driver, sqlite3 driver, and progress bar library
+
+**Learnings:**
+- **Pattern Discovered:** Database schema design - store complex data (arrays/objects) as JSON strings in SQLite columns for flexibility. Use foreign keys with CASCADE DELETE for data integrity.
+- **Gotcha Encountered:** libsql driver requires URL scheme prefixes (file:, http:, etc.). Regular file paths need conversion. Also need sqlite3 driver for in-memory databases.
+- **Design Decision:** Clear existing issues before sync to ensure fresh data. This prevents stale issues from accumulating and ensures the database reflects current GitHub state.
+- **Testing Strategy:** Use httptest.NewServer() to mock GitHub API responses. This allows testing sync logic without external dependencies and enables testing error scenarios.
+- **Progress UX:** Progress bars should show both progress and count (e.g., "Processing issues 5/42") for better user feedback during long operations.
+- **Graceful Degradation:** When comment fetching fails for individual issues, log warnings but continue processing other issues. Don't fail the entire sync for one problematic issue.
+
+**New Patterns Added to Codebase:**
+- Database pattern: Store arrays as JSON, use foreign keys with CASCADE DELETE
+- API client pattern: Use httptest.NewServer for mocking external APIs in tests
+- Progress pattern: Use progressbar library with descriptive messages and error handling
+
+---

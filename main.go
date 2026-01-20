@@ -36,8 +36,62 @@ func runMain(args []string, configPath string, input io.Reader, output io.Writer
 	}
 
 	// Check if config command was requested
-	if len(args) == 2 && args[1] == "config" {
+	if len(args) >= 2 && args[1] == "config" {
 		return cmd.RunConfigCommand(configPath, input, output)
+	}
+
+	// Check if sync command was requested
+	if len(args) >= 2 && args[1] == "sync" {
+		// Sync command requires config to be loaded
+		exists, err := config.ConfigExists(configPath)
+		if err != nil {
+			return fmt.Errorf("failed to check config file: %w", err)
+		}
+
+		if !exists {
+			return fmt.Errorf("configuration not found. Please run 'ghissues config' first")
+		}
+
+		cfg, err := config.LoadConfig(configPath)
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+
+		if cfg == nil {
+			return fmt.Errorf("config file exists but could not be loaded")
+		}
+
+		// Get GitHub token
+		token, _, err := auth.GetGitHubToken(cfg)
+		if err != nil {
+			return fmt.Errorf("authentication failed: %w", err)
+		}
+
+		// Validate token
+		valid, err := auth.ValidateToken(token)
+		if err != nil || !valid {
+			return fmt.Errorf("token validation failed: %w", err)
+		}
+
+		// Determine database path
+		dbPath := getDatabasePath(cfg, dbFlag)
+		if err := ensureDatabasePath(dbPath); err != nil {
+			return fmt.Errorf("database path error: %w", err)
+		}
+
+		// Run sync command
+		syncConfig := &cmd.SyncConfig{
+			Token:      token,
+			Repository: cfg.Repository,
+			GitHubURL:  "", // Use default GitHub API or override via env var in tests
+		}
+
+		// Allow GitHub URL override via environment variable (for testing)
+		if testURL := os.Getenv("GHISSUES_GITHUB_URL"); testURL != "" {
+			syncConfig.GitHubURL = testURL
+		}
+
+		return cmd.RunSyncCommand(dbPath, syncConfig, output)
 	}
 
 	// Check if config file exists
@@ -98,6 +152,10 @@ func runMain(args []string, configPath string, input io.Reader, output io.Writer
 	fmt.Fprintf(output, "Repository: %s\n", cfg.Repository)
 	fmt.Fprintf(output, "Database: %s\n", dbPath)
 	fmt.Fprintf(output, "Authentication: %s token (validated)\n", source)
+	fmt.Fprintln(output)
+	fmt.Fprintln(output, "Available commands:")
+	fmt.Fprintln(output, "  ghissues config  - Configure repository and authentication")
+	fmt.Fprintln(output, "  ghissues sync    - Sync issues from GitHub to local database")
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "TUI implementation coming in future stories...")
 

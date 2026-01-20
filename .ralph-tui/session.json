@@ -3,10 +3,10 @@
   "sessionId": "ac2995b6-e341-4f97-ae61-eb13d9b30fbf",
   "status": "running",
   "startedAt": "2026-01-20T20:53:33.081Z",
-  "updatedAt": "2026-01-20T21:14:44.236Z",
-  "currentIteration": 2,
+  "updatedAt": "2026-01-20T21:19:26.263Z",
+  "currentIteration": 3,
   "maxIterations": 10,
-  "tasksCompleted": 2,
+  "tasksCompleted": 3,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -35,8 +35,8 @@
       {
         "id": "US-004",
         "title": "Database Storage Location",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-005",
@@ -120,12 +120,22 @@
       "durationMs": 426878,
       "startedAt": "2026-01-20T21:07:36.316Z",
       "endedAt": "2026-01-20T21:14:43.194Z"
+    },
+    {
+      "iteration": 3,
+      "status": "completed",
+      "taskId": "US-004",
+      "taskTitle": "Database Storage Location",
+      "taskCompleted": true,
+      "durationMs": 281017,
+      "startedAt": "2026-01-20T21:14:44.226Z",
+      "endedAt": "2026-01-20T21:19:25.243Z"
     }
   ],
   "skippedTaskIds": [],
   "cwd": "/Users/shepbook/git/github-issues-tui",
   "activeTaskIds": [
-    "US-004"
+    "US-003"
   ],
   "subagentPanelVisible": true
 }
