@@ -190,7 +190,7 @@ func run() error {
 
 	// Launch TUI
 	model := tui.NewModel(issues, columns, sortBy, sortAscending, store, lastSyncTime, themeName)
-	p := tea.NewProgram(model, tea.WithAltScreen())
+	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithInput(os.Stdin))
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("TUI error: %w", err)
 	}

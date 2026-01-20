@@ -34,7 +34,7 @@ func main() {
 	// Launch TUI with minimal config
 	columns := []string{"number", "title", "state", "author", "created"}
 	model := tui.NewModel(issues, columns, "created", false, store, lastSyncTime, "default")
-	p := tea.NewProgram(model, tea.WithAltScreen())
+	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithInput(os.Stdin))
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
 		os.Exit(1)

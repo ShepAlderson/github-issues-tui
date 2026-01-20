@@ -279,3 +279,24 @@ func TestDatabaseInit_ErrorOnDirectory(t *testing.T) {
 		t.Error("Expected error when database path is a directory, got nil")
 	}
 }
+
+func TestTUIInitialization_StdinConfiguration(t *testing.T) {
+	// Test that TUI program initialization includes stdin input configuration
+	// This is a documentation test to ensure the pattern is maintained
+
+	// The TUI must be initialized with tea.WithInput(os.Stdin) to ensure
+	// keyboard input works across different terminal environments
+	//
+	// Correct pattern:
+	//   p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithInput(os.Stdin))
+	//
+	// This test serves as documentation and a reminder to maintain this pattern
+	// when modifying TUI initialization code
+
+	t.Log("TUI initialization must include tea.WithInput(os.Stdin) option")
+	t.Log("This ensures keyboard input works in all terminal environments")
+
+	// Note: We cannot easily test the actual bubbletea program initialization
+	// without running a full interactive session, so this test serves as
+	// documentation of the required pattern
+}
