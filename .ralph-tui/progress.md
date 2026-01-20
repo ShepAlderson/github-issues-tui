@@ -71,3 +71,43 @@ When working with interactive prompts and `bufio.Reader`:
 - Verified with: `go test ./...`, `golangci-lint run`, `go vet`, `gofmt`
 
 ---
+## ✓ Iteration 1 - US-001: First-Time Setup
+*2026-01-20T21:07:35.307Z (838s)*
+
+**Status:** Completed
+
+**Notes:**
+ion."}],"model":"hf:moonshotai/Kimi-K2-Thinking","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":61157,"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"context_management":null},"parent_tool_use_id":null,"session_id":"6dfd7e38-e6d8-431c-b3a2-2b518c344a20","uuid":"b7718525-087d-4956-b955-80275d682537"}
+{"type":"assistant","message":{"id":"msg_c756af15-8241-43d3-818e-89b2c191e4c3","type":"message","role":"assistant","content":[{"type":"text","text":"
+
+---
+---
+## [2026-01-20] - US-002 - GitHub Authentication
+
+**What was implemented:**
+- GitHub token authentication with proper priority order: GITHUB_TOKEN env -> config file -> gh CLI
+- Token validation on startup with clear error messages
+- New `internal/auth` package for authentication logic
+- Integration tests for authentication flow
+- Updated main.go to use the authentication system
+
+**Files changed:**
+- Created `internal/auth/auth.go` - Authentication logic (GetGitHubToken, ValidateToken)
+- Created `internal/auth/auth_test.go` - Authentication tests
+- Updated `main.go` - Integrate authentication system with token validation
+- Updated `main_test.go` - Added integration tests for authentication flow
+
+**Learnings:**
+- **Pattern Discovered:** Dependency injection for testability - passing config struct to GetGitHubToken() instead of having it read from file internally makes testing easier and more reliable
+- **Gotcha Encountered:** When creating TOML config files in tests, the format must match exactly what the parser expects. Using `[config]` section when token is at root level causes parsing to fail
+- **Design Decision:** Made ValidateToken() a simple non-empty check rather than full API validation to avoid external dependencies during startup. Real API validation would happen on first actual API call
+- **Testing Strategy:** Integration tests can't easily mock internal package variables. Testing gh CLI token fallback requires either exposing test hooks or testing at the unit level in the auth package
+
+**Testing Notes:**
+- All authentication methods tested independently (env, config, gh CLI)
+- Priority order verified with comprehensive table-driven tests
+- Integration tests verify end-to-end authentication flow
+- Clear error message when no authentication found
+- Verified with: `go test ./...`, all tests passing
+
+---

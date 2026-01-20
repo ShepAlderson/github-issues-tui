@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/shepbook/git/github-issues-tui/internal/auth"
 	"github.com/shepbook/git/github-issues-tui/internal/cmd"
 	"github.com/shepbook/git/github-issues-tui/internal/config"
 )
@@ -57,14 +58,25 @@ func runMain(args []string, configPath string, input io.Reader, output io.Writer
 		return fmt.Errorf("config file exists but could not be loaded")
 	}
 
+	// Get GitHub token with proper priority and validation
+	token, source, err := auth.GetGitHubToken(cfg)
+	if err != nil {
+		return fmt.Errorf("authentication failed: %w", err)
+	}
+
+	// Validate the token
+	valid, err := auth.ValidateToken(token)
+	if err != nil {
+		return fmt.Errorf("token validation failed: %w", err)
+	}
+	if !valid {
+		return fmt.Errorf("token validation failed: token is invalid")
+	}
+
 	// TODO: In future stories, we'll launch the TUI here
 	fmt.Fprintf(output, "Configuration loaded successfully!\n")
 	fmt.Fprintf(output, "Repository: %s\n", cfg.Repository)
-	if cfg.Token != "" {
-		fmt.Fprintf(output, "Token: <loaded from config>\n")
-	} else {
-		fmt.Fprintf(output, "Token: <will use gh CLI token>\n")
-	}
+	fmt.Fprintf(output, "Authentication: %s token (validated)\n", source)
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "TUI implementation coming in future stories...")
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -160,5 +161,81 @@ func TestGetConfigFilePath_Default(t *testing.T) {
 	expectedSuffix := ".config/ghissues/config.toml"
 	if len(path) < len(expectedSuffix) || path[len(path)-len(expectedSuffix):] != expectedSuffix {
 		t.Errorf("Config path should end with %q, got %q", expectedSuffix, path)
+	}
+}
+
+func TestRunMain_AuthenticationFlow(t *testing.T) {
+	tests := []struct {
+		name         string
+		envToken     string
+		configToken  string
+		expectSource string
+		expectError  bool
+	}{
+		{
+			name:         "Uses GITHUB_TOKEN environment variable when set",
+			envToken:     "ghp_env_token_123",
+			configToken:  "ghp_config_token_456",
+			expectSource: "environment",
+			expectError:  false,
+		},
+		{
+			name:         "Uses config token when no env token",
+			envToken:     "",
+			configToken:  "ghp_config_token_789",
+			expectSource: "config",
+			expectError:  false,
+		},
+		{
+			name:        "Error when no token available",
+			envToken:    "",
+			configToken: "",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temp config
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "config.toml")
+
+			// Set up config file with token
+			configData := fmt.Sprintf("repository = \"test/repo\"\ntoken = \"%s\"\n", tt.configToken)
+			if err := os.WriteFile(configPath, []byte(configData), 0600); err != nil {
+				t.Fatalf("Failed to create config: %v", err)
+			}
+
+			// Set environment token
+			if tt.envToken != "" {
+				os.Setenv("GITHUB_TOKEN", tt.envToken)
+				defer os.Unsetenv("GITHUB_TOKEN")
+			}
+
+			// Override auth package defaults for testing
+			// This requires exposing internal variables, so we'll test indirectly
+			input := bytes.NewBufferString("")
+			output := &bytes.Buffer{}
+
+			err := runMain([]string{"ghissues"}, configPath, input, output)
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			// Check output contains the expected source
+			expectedOutput := fmt.Sprintf("Authentication: %s token (validated)", tt.expectSource)
+			if !bytes.Contains(output.Bytes(), []byte(expectedOutput)) {
+				t.Errorf("Expected output to contain %q, got:\n%s", expectedOutput, output.String())
+			}
+		})
 	}
 }

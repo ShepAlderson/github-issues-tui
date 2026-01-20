@@ -14,12 +14,13 @@
         "User can re-run setup with ghissues config command"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "dependsOn": [],
       "labels": [
         "setup",
         "config"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-002",
@@ -300,6 +301,6 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-01-20T20:53:37.396Z"
+    "updatedAt": "2026-01-20T21:07:36.316Z"
   }
 }
