@@ -15,16 +15,18 @@ type ViewType int
 const (
 	ListView ViewType = iota
 	DetailView
+	CommentsView
 )
 
 // AppModel represents the main application model that can switch between views
 type AppModel struct {
-	currentView ViewType
-	listModel   *ListModel
-	detailModel *DetailModel
-	config      *config.Config
-	dbPath      string
-	err         error
+	currentView   ViewType
+	listModel     *ListModel
+	detailModel   *DetailModel
+	commentsModel *CommentsModel
+	config        *config.Config
+	dbPath        string
+	err           error
 }
 
 // NewAppModel creates a new application model
@@ -90,6 +92,30 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			updated, cmd := m.detailModel.Update(msg)
 			m.detailModel = updated.(*DetailModel)
 
+			// Check if user wants to view comments
+			if m.detailModel.viewComments {
+				// Get the issue to pass to comments model
+				issue := m.detailModel.issue
+
+				// Close detail model
+				m.detailModel.Close()
+
+				// Create comments model
+				commentsModel, err := NewCommentsModel(m.dbPath, issue)
+				if err != nil {
+					m.err = fmt.Errorf("failed to create comments view: %w", err)
+					m.currentView = ListView
+					m.detailModel = nil
+					return m, nil
+				}
+
+				// Switch to comments view
+				m.currentView = CommentsView
+				m.commentsModel = commentsModel
+				m.detailModel = nil
+				return m, tea.Batch(cmd, commentsModel.Init())
+			}
+
 			// Check if user wants to go back (press 'q' or 'esc')
 			if msg, ok := msg.(tea.KeyMsg); ok {
 				if msg.String() == "q" || msg.String() == "esc" {
@@ -102,6 +128,39 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 					// Return to list view
 					return m, nil
+				}
+			}
+
+			return m, cmd
+		}
+
+	case CommentsView:
+		// Handle comments view
+		if m.commentsModel != nil {
+			updated, cmd := m.commentsModel.Update(msg)
+			m.commentsModel = updated.(*CommentsModel)
+
+			// Check if user wants to go back (press 'q', 'esc', or Ctrl+C)
+			if msg, ok := msg.(tea.KeyMsg); ok {
+				if msg.String() == "q" || msg.String() == "esc" || msg.Type == tea.KeyCtrlC {
+					// Quit comments model
+					m.commentsModel.Close()
+
+					// Switch back to detail view
+					m.currentView = DetailView
+
+					// Recreate detail model for the same issue
+					detailModel, err := NewDetailModel(m.dbPath, m.commentsModel.issue.Number)
+					if err != nil {
+						m.err = fmt.Errorf("failed to recreate detail view: %w", err)
+						m.currentView = ListView
+						m.commentsModel = nil
+						return m, nil
+					}
+
+					m.detailModel = detailModel
+					m.commentsModel = nil
+					return m, tea.Batch(cmd, detailModel.Init())
 				}
 			}
 
@@ -131,6 +190,12 @@ func (m AppModel) View() string {
 		}
 		return "Detail view not initialized\n"
 
+	case CommentsView:
+		if m.commentsModel != nil {
+			return m.commentsModel.View()
+		}
+		return "Comments view not initialized\n"
+
 	default:
 		return "Unknown view\n"
 	}
@@ -138,7 +203,7 @@ func (m AppModel) View() string {
 
 // Close closes all models
 func (m *AppModel) Close() error {
-	var err1, err2 error
+	var err1, err2, err3 error
 
 	if m.listModel != nil {
 		err1 = m.listModel.Close()
@@ -148,10 +213,17 @@ func (m *AppModel) Close() error {
 		err2 = m.detailModel.Close()
 	}
 
+	if m.commentsModel != nil {
+		err3 = m.commentsModel.Close()
+	}
+
 	if err1 != nil {
 		return err1
 	}
-	return err2
+	if err2 != nil {
+		return err2
+	}
+	return err3
 }
 
 // RunAppView runs the main application view

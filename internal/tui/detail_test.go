@@ -408,9 +408,9 @@ func TestDetailModel_RenderMarkdown(t *testing.T) {
 	}
 }
 
-func TestDetailModel_EnterKey(t *testing.T) {
+func TestDetailModel_CommentsKey(t *testing.T) {
 	// Create a test database with an issue
-	dbPath := "/tmp/ghissues_detail_enter.db"
+	dbPath := "/tmp/ghissues_detail_comments.db"
 	database, err := db.NewDB(dbPath)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
@@ -441,16 +441,18 @@ func TestDetailModel_EnterKey(t *testing.T) {
 	}
 	defer model.Close()
 
-	// Test pressing Enter to view comments
-	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	// Test pressing 'c' to view comments
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
 	model = updated.(*DetailModel)
 
-	// For now, we expect it to set an error since comments view is not yet implemented
-	if model.err == nil {
-		t.Error("Expected error when pressing Enter (comments view not implemented)")
+	// Should set viewComments flag and quit
+	if !model.viewComments {
+		t.Error("Expected viewComments to be true after pressing 'c'")
 	}
-
-	if !strings.Contains(model.err.Error(), "comments view") {
-		t.Errorf("Expected 'comments view' error message, got %v", model.err.Error())
+	if !model.quitting {
+		t.Error("Expected model to be quitting after pressing 'c'")
+	}
+	if cmd == nil {
+		t.Error("Expected quit command after pressing 'c'")
 	}
 }

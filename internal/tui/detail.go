@@ -19,6 +19,7 @@ type DetailModel struct {
 	showRendered  bool // Toggle between raw markdown and rendered
 	quitting      bool
 	err           error
+	viewComments  bool // Flag to navigate to comments
 	width         int
 	height        int
 }
@@ -128,9 +129,10 @@ func (m DetailModel) renderHeader() string {
 	}
 	modeStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("240")).
-		Italic(true)
+		Italic(true).
+		MarginLeft(1)
 	header.WriteRune('\n')
-	header.WriteString(modeStyle.Render("View: " + mode + " (press 'm' to toggle)"))
+	header.WriteString(modeStyle.Render("View: " + mode + " (press 'm' to toggle, 'c' for comments)"))
 
 	return header.String()
 }
@@ -198,9 +200,11 @@ func (m *DetailModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.showRendered = !m.showRendered
 			m.viewport.SetContent(m.getContent())
 
-		case "enter":
-			// Open comments view (not implemented yet)
-			m.err = fmt.Errorf("comments view not yet implemented (issue #%d)", m.issue.Number)
+		case "c":
+			// Navigate to comments view
+			m.viewComments = true
+			m.quitting = true
+			return m, tea.Quit
 
 		default:
 			// Pass other keys to viewport for scrolling
