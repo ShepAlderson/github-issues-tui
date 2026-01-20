@@ -9,6 +9,7 @@ import (
 	"github.com/shepbook/git/github-issues-tui/internal/auth"
 	"github.com/shepbook/git/github-issues-tui/internal/cmd"
 	"github.com/shepbook/git/github-issues-tui/internal/config"
+	"github.com/shepbook/git/github-issues-tui/internal/tui"
 )
 
 func main() {
@@ -94,6 +95,48 @@ func runMain(args []string, configPath string, input io.Reader, output io.Writer
 		return cmd.RunSyncCommand(dbPath, syncConfig, output)
 	}
 
+	// Check if list command was requested or no command (default to list)
+	if len(args) == 1 || (len(args) >= 2 && args[1] == "list") {
+		// Check if config exists
+		exists, err := config.ConfigExists(configPath)
+		if err != nil {
+			return fmt.Errorf("failed to check config file: %w", err)
+		}
+
+		if !exists {
+			// First time setup - run interactive configuration
+			fmt.Fprintln(output, "Welcome to ghissues!")
+			fmt.Fprintln(output, "It looks like this is your first time running ghissues.")
+			fmt.Fprintln(output)
+			fmt.Fprintln(output, "Let's set up your configuration...")
+
+			if err := cmd.RunConfigCommand(configPath, input, output); err != nil {
+				return fmt.Errorf("setup failed: %w", err)
+			}
+
+			return nil
+		}
+
+		// Config exists, load it
+		cfg, err := config.LoadConfig(configPath)
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+
+		if cfg == nil {
+			return fmt.Errorf("config file exists but could not be loaded")
+		}
+
+		// Determine database path
+		dbPath := getDatabasePath(cfg, dbFlag)
+		if err := ensureDatabasePath(dbPath); err != nil {
+			return fmt.Errorf("database path error: %w", err)
+		}
+
+		// Run list command (TUI)
+		return tui.RunListView(dbPath, cfg, output)
+	}
+
 	// Check if config file exists
 	exists, err := config.ConfigExists(configPath)
 	if err != nil {
@@ -147,7 +190,6 @@ func runMain(args []string, configPath string, input io.Reader, output io.Writer
 		return fmt.Errorf("token validation failed: token is invalid")
 	}
 
-	// TODO: In future stories, we'll launch the TUI here
 	fmt.Fprintf(output, "Configuration loaded successfully!\n")
 	fmt.Fprintf(output, "Repository: %s\n", cfg.Repository)
 	fmt.Fprintf(output, "Database: %s\n", dbPath)
@@ -156,8 +198,9 @@ func runMain(args []string, configPath string, input io.Reader, output io.Writer
 	fmt.Fprintln(output, "Available commands:")
 	fmt.Fprintln(output, "  ghissues config  - Configure repository and authentication")
 	fmt.Fprintln(output, "  ghissues sync    - Sync issues from GitHub to local database")
+	fmt.Fprintln(output, "  ghissues list    - Show TUI with list of issues (default)")
 	fmt.Fprintln(output)
-	fmt.Fprintln(output, "TUI implementation coming in future stories...")
+	fmt.Fprintln(output, "Run 'ghissues' or 'ghissues list' to launch the TUI")
 
 	return nil
 }

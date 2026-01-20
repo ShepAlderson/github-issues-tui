@@ -14,6 +14,9 @@ type Config struct {
 	Database   struct {
 		Path string `toml:"path"`
 	} `toml:"database"`
+	Display struct {
+		Columns []string `toml:"columns"`
+	} `toml:"display"`
 }
 
 // LoadConfig loads configuration from the specified path
@@ -69,4 +72,9 @@ func ConfigExists(configPath string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// GetDefaultDisplayColumns returns the default display columns
+func GetDefaultDisplayColumns() []string {
+	return []string{"number", "title", "author", "created_at", "comment_count"}
 }

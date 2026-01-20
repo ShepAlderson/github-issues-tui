@@ -24,6 +24,8 @@ func RunConfigCommand(configPath string, input io.Reader, output io.Writer) erro
 		Repository: repository,
 		Token:      token,
 	}
+	// Set default display columns
+	cfg.Display.Columns = config.GetDefaultDisplayColumns()
 
 	// Save configuration
 	if err := config.SaveConfig(configPath, cfg); err != nil {

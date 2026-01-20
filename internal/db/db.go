@@ -277,6 +277,37 @@ func (db *DB) GetAllOpenIssues() ([]*Issue, error) {
 	return issues, nil
 }
 
+// GetIssuesForDisplay retrieves issues with minimal fields for display
+func (db *DB) GetIssuesForDisplay() ([]*Issue, error) {
+	rows, err := db.conn.Query(`
+		SELECT number, title, author, created_at, comment_count
+		FROM issues
+		WHERE state = 'open'
+		ORDER BY created_at ASC
+	`)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get issues for display: %w", err)
+	}
+	defer rows.Close()
+
+	var issues []*Issue
+	for rows.Next() {
+		var issue Issue
+		err := rows.Scan(&issue.Number, &issue.Title, &issue.Author, &issue.CreatedAt, &issue.CommentCount)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan issue: %w", err)
+		}
+		issues = append(issues, &issue)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating issues: %w", err)
+	}
+
+	return issues, nil
+}
+
 // ClearAllIssues removes all issues and comments from the database
 func (db *DB) ClearAllIssues() error {
 	// Delete comments first due to foreign key constraint
