@@ -3,10 +3,10 @@
   "sessionId": "ac2995b6-e341-4f97-ae61-eb13d9b30fbf",
   "status": "running",
   "startedAt": "2026-01-20T20:53:33.081Z",
-  "updatedAt": "2026-01-20T21:28:52.129Z",
-  "currentIteration": 4,
+  "updatedAt": "2026-01-20T22:01:45.660Z",
+  "currentIteration": 8,
   "maxIterations": 10,
-  "tasksCompleted": 4,
+  "tasksCompleted": 8,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -41,26 +41,26 @@
       {
         "id": "US-005",
         "title": "Issue List View",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-006",
         "title": "Issue Sorting",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-007",
         "title": "Issue Detail View",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-008",
         "title": "Comments View",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-009",
@@ -140,12 +140,52 @@
       "durationMs": 564850,
       "startedAt": "2026-01-20T21:19:26.253Z",
       "endedAt": "2026-01-20T21:28:51.103Z"
+    },
+    {
+      "iteration": 5,
+      "status": "completed",
+      "taskId": "US-005",
+      "taskTitle": "Issue List View",
+      "taskCompleted": true,
+      "durationMs": 769227,
+      "startedAt": "2026-01-20T21:28:52.119Z",
+      "endedAt": "2026-01-20T21:41:41.346Z"
+    },
+    {
+      "iteration": 6,
+      "status": "completed",
+      "taskId": "US-006",
+      "taskTitle": "Issue Sorting",
+      "taskCompleted": true,
+      "durationMs": 265086,
+      "startedAt": "2026-01-20T21:41:42.384Z",
+      "endedAt": "2026-01-20T21:46:07.470Z"
+    },
+    {
+      "iteration": 7,
+      "status": "completed",
+      "taskId": "US-007",
+      "taskTitle": "Issue Detail View",
+      "taskCompleted": true,
+      "durationMs": 607216,
+      "startedAt": "2026-01-20T21:46:08.482Z",
+      "endedAt": "2026-01-20T21:56:15.698Z"
+    },
+    {
+      "iteration": 8,
+      "status": "completed",
+      "taskId": "US-008",
+      "taskTitle": "Comments View",
+      "taskCompleted": true,
+      "durationMs": 327909,
+      "startedAt": "2026-01-20T21:56:16.721Z",
+      "endedAt": "2026-01-20T22:01:44.630Z"
     }
   ],
   "skippedTaskIds": [],
   "cwd": "/Users/shepbook/git/github-issues-tui",
   "activeTaskIds": [
-    "US-005"
+    "US-009"
   ],
   "subagentPanelVisible": true
 }

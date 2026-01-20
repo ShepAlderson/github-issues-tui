@@ -368,3 +368,171 @@ func TestDB_GetIssuesForDisplaySorted(t *testing.T) {
 		})
 	}
 }
+
+func TestDB_SyncDateOperations(t *testing.T) {
+	db, err := NewDB(":memory:")
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+	defer db.Close()
+
+	// Test getting last sync date when none exists
+	date, err := db.GetLastSyncDate()
+	if err != nil {
+		t.Fatalf("Failed to get last sync date: %v", err)
+	}
+
+	// Should return default date when no sync has happened
+	expected := "1970-01-01T00:00:00Z"
+	if date != expected {
+		t.Errorf("Expected default date %s, got %s", expected, date)
+	}
+
+	// Test setting last sync date for the first time (full sync needed)
+	testDate := "2026-01-20T15:30:00Z"
+	fullSync, err := db.SetLastSyncDate(testDate)
+	if err != nil {
+		t.Fatalf("Failed to set last sync date: %v", err)
+	}
+
+	if !fullSync {
+		t.Error("Expected full sync to be true on first sync")
+	}
+
+	// Test getting the sync date we just set
+	date, err = db.GetLastSyncDate()
+	if err != nil {
+		t.Fatalf("Failed to get last sync date: %v", err)
+	}
+
+	if date != testDate {
+		t.Errorf("Expected date %s, got %s", testDate, date)
+	}
+
+	// Test updating sync date (incremental sync this time)
+	newTestDate := "2026-01-20T16:45:00Z"
+	fullSync, err = db.SetLastSyncDate(newTestDate)
+	if err != nil {
+		t.Fatalf("Failed to update last sync date: %v", err)
+	}
+
+	if fullSync {
+		t.Error("Expected full sync to be false on subsequent syncs")
+	}
+
+	// Verify the date was updated
+	date, err = db.GetLastSyncDate()
+	if err != nil {
+		t.Fatalf("Failed to get last sync date: %v", err)
+	}
+
+	if date != newTestDate {
+		t.Errorf("Expected updated date %s, got %s", newTestDate, date)
+	}
+}
+
+func TestDB_RemoveIssues(t *testing.T) {
+	db, err := NewDB(":memory:")
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+	defer db.Close()
+
+	// Store some issues
+	issues := []*Issue{
+		{Number: 1, Title: "Issue 1", Body: "Body 1", State: "open", Author: "user1"},
+		{Number: 2, Title: "Issue 2", Body: "Body 2", State: "open", Author: "user2"},
+		{Number: 3, Title: "Issue 3", Body: "Body 3", State: "open", Author: "user3"},
+	}
+
+	for _, issue := range issues {
+		if err := db.StoreIssue(issue); err != nil {
+			t.Fatalf("Failed to store issue: %v", err)
+		}
+	}
+
+	// Remove middle issue
+	err = db.RemoveIssues([]int{2})
+	if err != nil {
+		t.Fatalf("Failed to remove issue: %v", err)
+	}
+
+	// Check that only two issues remain
+	openIssues, err := db.GetAllOpenIssues()
+	if err != nil {
+		t.Fatalf("Failed to get open issues: %v", err)
+	}
+
+	if len(openIssues) != 2 {
+		t.Errorf("Expected 2 issues after removal, got %d", len(openIssues))
+	}
+
+	// Verify the removed issue is gone
+	for _, issue := range openIssues {
+		if issue.Number == 2 {
+			t.Error("Issue 2 should have been removed")
+		}
+	}
+
+	// Remove remaining issues
+	err = db.RemoveIssues([]int{1, 3})
+	if err != nil {
+		t.Fatalf("Failed to remove issues: %v", err)
+	}
+
+	// Check that no issues remain
+	openIssues, err = db.GetAllOpenIssues()
+	if err != nil {
+		t.Fatalf("Failed to get open issues: %v", err)
+	}
+
+	if len(openIssues) != 0 {
+		t.Errorf("Expected 0 issues after removing all, got %d", len(openIssues))
+	}
+
+	// Test removing empty list (should not error)
+	err = db.RemoveIssues([]int{})
+	if err != nil {
+		t.Errorf("Removing empty list should not error: %v", err)
+	}
+}
+
+func TestDB_GetAllIssueNumbers(t *testing.T) {
+	db, err := NewDB(":memory:")
+	if err != nil {
+		t.Fatalf("Failed to create database: %v", err)
+	}
+	defer db.Close()
+
+	// Store some issues with mixed states
+	issues := []*Issue{
+		{Number: 1, Title: "Open Issue 1", Body: "Body 1", State: "open", Author: "user1"},
+		{Number: 2, Title: "Closed Issue", Body: "Body 2", State: "closed", Author: "user2"},
+		{Number: 3, Title: "Open Issue 2", Body: "Body 3", State: "open", Author: "user3"},
+	}
+
+	for _, issue := range issues {
+		if err := db.StoreIssue(issue); err != nil {
+			t.Fatalf("Failed to store issue: %v", err)
+		}
+	}
+
+	// Get all issue numbers
+	numbers, err := db.GetAllIssueNumbers()
+	if err != nil {
+		t.Fatalf("Failed to get issue numbers: %v", err)
+	}
+
+	// Should only return open issues
+	if len(numbers) != 2 {
+		t.Errorf("Expected 2 open issue numbers, got %d", len(numbers))
+	}
+
+	// Verify we got the correct numbers (open issues)
+	expected := map[int]bool{1: true, 3: true}
+	for _, num := range numbers {
+		if !expected[num] {
+			t.Errorf("Unexpected issue number %d returned", num)
+		}
+	}
+}

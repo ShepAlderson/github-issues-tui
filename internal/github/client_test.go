@@ -296,3 +296,130 @@ func TestClient_GetRepo(t *testing.T) {
 		})
 	}
 }
+
+func TestClient_FetchIssuesSince(t *testing.T) {
+	// Verify that since parameter is correctly sent
+	serverCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverCalled = true
+
+		// Verify authentication header
+		authHeader := r.Header.Get("Authorization")
+		if authHeader != "Bearer test_token" {
+			t.Errorf("Expected Authorization header 'Bearer test_token', got %q", authHeader)
+		}
+
+		// Verify query parameters
+		query := r.URL.Query()
+		if query.Get("state") != "open" {
+			t.Errorf("Expected state=open parameter, got %q", query.Get("state"))
+		}
+		if query.Get("per_page") != "100" {
+			t.Errorf("Expected per_page=100 parameter, got %q", query.Get("per_page"))
+		}
+		if query.Get("page") != "1" {
+			t.Errorf("Expected page=1 parameter, got %q", query.Get("page"))
+		}
+		if query.Get("since") != "2026-01-20T10:00:00Z" {
+			t.Errorf("Expected since=2026-01-20T10:00:00Z parameter, got %q", query.Get("since"))
+		}
+
+		// Return mock response - only issues updated since the date
+		issues := []Issue{
+			{
+				Number:    3,
+				Title:     "Updated Issue",
+				Body:      "Body of updated issue",
+				State:     "open",
+				User:      User{Login: "user3"},
+				CreatedAt: "2026-01-20T09:00:00Z",
+				UpdatedAt: "2026-01-20T12:00:00Z", // Updated after since date
+				Comments:  2,
+				Labels:    []Label{{Name: "bug"}},
+				Assignees: []User{{Login: "user3"}},
+			},
+		}
+		json.NewEncoder(w).Encode(issues)
+	}))
+	defer server.Close()
+
+	client := NewClient("test_token", server.URL)
+	issues, err := client.FetchIssuesSince("testowner/testrepo", "2026-01-20T10:00:00Z")
+	if err != nil {
+		t.Fatalf("Failed to fetch issues: %v", err)
+	}
+
+	if !serverCalled {
+		t.Error("Server was not called")
+	}
+
+	// Verify we got the updated issue
+	if len(issues) != 1 {
+		t.Errorf("Expected 1 issue, got %d", len(issues))
+	}
+
+	if issues[0].Number != 3 {
+		t.Errorf("Expected issue #3, got #%d", issues[0].Number)
+	}
+}
+
+func TestClient_FetchIssueCommentsSince(t *testing.T) {
+	// Verify that since parameter is correctly sent for comments
+	serverCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverCalled = true
+
+		// Verify URL path
+		expectedPath := "/repos/testowner/testrepo/issues/1/comments"
+		if r.URL.Path != expectedPath {
+			t.Errorf("Expected path %q, got %q", expectedPath, r.URL.Path)
+		}
+
+		// Verify authentication header
+		authHeader := r.Header.Get("Authorization")
+		if authHeader != "Bearer test_token" {
+			t.Errorf("Expected Authorization header 'Bearer test_token', got %q", authHeader)
+		}
+
+		// Verify since parameter
+		query := r.URL.Query()
+		if query.Get("since") != "2026-01-20T14:30:00Z" {
+			t.Errorf("Expected since=2026-01-20T14:30:00Z parameter, got %q", query.Get("since"))
+		}
+
+		// Return mock comments - only new comments since the date
+		comments := []Comment{
+			{
+				ID:        102,
+				Body:      "New comment since timestamp",
+				User:      User{Login: "commenter3"},
+				CreatedAt: "2026-01-20T15:00:00Z", // Created after since date
+			},
+		}
+		json.NewEncoder(w).Encode(comments)
+	}))
+	defer server.Close()
+
+	client := NewClient("test_token", server.URL)
+	comments, err := client.FetchIssueCommentsSince("testowner/testrepo", 1, "2026-01-20T14:30:00Z")
+	if err != nil {
+		t.Fatalf("Failed to fetch comments: %v", err)
+	}
+
+	if !serverCalled {
+		t.Error("Server was not called")
+	}
+
+	// Verify we got only the new comment
+	if len(comments) != 1 {
+		t.Errorf("Expected 1 comment, got %d", len(comments))
+	}
+
+	if comments[0].ID != 102 {
+		t.Errorf("Expected comment #102, got #%d", comments[0].ID)
+	}
+
+	if comments[0].Body != "New comment since timestamp" {
+		t.Errorf("Expected specific comment body, got %q", comments[0].Body)
+	}
+}

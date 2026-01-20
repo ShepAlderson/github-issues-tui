@@ -133,6 +133,38 @@ func runMain(args []string, configPath string, input io.Reader, output io.Writer
 			return fmt.Errorf("database path error: %w", err)
 		}
 
+		// Get GitHub token
+		token, _, err := auth.GetGitHubToken(cfg)
+		if err != nil {
+			return fmt.Errorf("authentication failed: %w", err)
+		}
+
+		// Validate token
+		valid, err := auth.ValidateToken(token)
+		if err != nil || !valid {
+			return fmt.Errorf("token validation failed: %w", err)
+		}
+
+		// Perform incremental sync on app launch
+		fmt.Fprintln(output, "Checking for updates...")
+		syncConfig := &cmd.SyncConfig{
+			Token:      token,
+			Repository: cfg.Repository,
+			GitHubURL:  "", // Use default GitHub API or override via env var in tests
+		}
+
+		// Allow GitHub URL override via environment variable (for testing)
+		if testURL := os.Getenv("GHISSIES_GITHUB_URL"); testURL != "" {
+			syncConfig.GitHubURL = testURL
+		}
+
+		// Run incremental sync in the background
+		if err := cmd.RunIncrementalSync(dbPath, syncConfig, output); err != nil {
+			// Don't fail the app launch if sync fails, just show warning
+			fmt.Fprintf(output, "Warning: Auto-sync failed: %v\n", err)
+			fmt.Fprintln(output, "You can still view cached issues. Press 'r' to refresh manually.")
+		}
+
 		// Run list command (TUI with list + detail views)
 		return tui.RunAppView(dbPath, cfg, output)
 	}

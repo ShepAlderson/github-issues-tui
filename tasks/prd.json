@@ -179,7 +179,8 @@
       "labels": [
         "tui",
         "comments"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-009",
@@ -307,6 +308,6 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-01-20T21:56:16.722Z"
+    "updatedAt": "2026-01-20T22:01:45.648Z"
   }
 }

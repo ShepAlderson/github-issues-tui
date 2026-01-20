@@ -86,6 +86,11 @@ func (c *Client) FetchOpenIssues(repo string) ([]Issue, error) {
 
 // fetchIssuesPage fetches a single page of issues
 func (c *Client) fetchIssuesPage(repo string, page int) ([]Issue, bool, error) {
+	return c.fetchIssuesPageWithSince(repo, page, "")
+}
+
+// fetchIssuesPageWithSince fetches a single page of issues with optional since parameter
+func (c *Client) fetchIssuesPageWithSince(repo string, page int, since string) ([]Issue, bool, error) {
 	owner, name, err := getRepo(repo)
 	if err != nil {
 		return nil, false, fmt.Errorf("invalid repository format: %w", err)
@@ -103,6 +108,9 @@ func (c *Client) fetchIssuesPage(repo string, page int) ([]Issue, bool, error) {
 	query.Set("state", "open")
 	query.Set("per_page", "100")
 	query.Set("page", fmt.Sprintf("%d", page))
+	if since != "" {
+		query.Set("since", since)
+	}
 	u.RawQuery = query.Encode()
 
 	// Make request
@@ -224,4 +232,82 @@ func getRepo(repo string) (owner, name string, err error) {
 	}
 
 	return owner, name, nil
+}
+
+// FetchIssuesSince fetches issues updated since the given timestamp
+func (c *Client) FetchIssuesSince(repo string, since string) ([]Issue, error) {
+	var allIssues []Issue
+	page := 1
+
+	for {
+		issues, hasNext, err := c.fetchIssuesPageWithSince(repo, page, since)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch issues page %d: %w", page, err)
+		}
+
+		allIssues = append(allIssues, issues...)
+
+		if !hasNext || len(issues) == 0 {
+			break
+		}
+
+		page++
+	}
+
+	return allIssues, nil
+}
+
+// FetchIssueCommentsSince fetches comments created since the given timestamp
+func (c *Client) FetchIssueCommentsSince(repo string, issueNum int, since string) ([]Comment, error) {
+	owner, name, err := getRepo(repo)
+	if err != nil {
+		return nil, fmt.Errorf("invalid repository format: %w", err)
+	}
+
+	// Build URL
+	path := fmt.Sprintf("/repos/%s/%s/issues/%d/comments", owner, name, issueNum)
+	u, err := url.Parse(c.baseURL + path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse URL: %w", err)
+	}
+
+	// Add since parameter if provided
+	query := u.Query()
+	if since != "" {
+		query.Set("since", since)
+	}
+	u.RawQuery = query.Encode()
+
+	// Make request
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+
+	// Execute request
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check status code
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse response
+	var comments []Comment
+	if err := json.NewDecoder(resp.Body).Decode(&comments); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return comments, nil
 }

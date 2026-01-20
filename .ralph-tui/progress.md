@@ -391,6 +391,8 @@ ion:"}],"model":"hf:moonshotai/Kimi-K2-Thinking","stop_reason":null,"stop_sequen
 - Navigation pattern: Parent AppModel coordinates multiple views with clean state management
 - Markdown pattern: Use glamour for automatic markdown rendering with terminal-aware styling
 - Viewport pattern: Use bubbles/viewport for scrollable content with built-in navigation
+- Multi-view navigation pattern: Views trigger navigation by setting flags and quitting, AppModel handles transitions. Scale this pattern for 3+ views by checking navigation flags before processing normal keybindings.
+- View recreation pattern: Recreate views when navigating back to them (rather than caching) ensures fresh data and prevents state staleness issues.
 
 ---
 
@@ -429,5 +431,15 @@ ion:"}],"model":"hf:moonshotai/Kimi-K2-Thinking","stop_reason":null,"stop_sequen
 - No typecheck errors
 - Clean architecture with proper separation of concerns
 
+
+---
+## ✓ Iteration 8 - US-008: Comments View
+*2026-01-20T22:01:44.640Z (328s)*
+
+**Status:** Completed
+
+**Notes:**
+ser."}],"model":"hf:moonshotai/Kimi-K2-Thinking","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":56351,"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"context_management":null},"parent_tool_use_id":null,"session_id":"c46be95b-2db6-4ca0-9114-ae22e69f964a","uuid":"f225322d-7b57-48c4-baef-e13ca2fd9b78"}
+{"type":"assistant","message":{"id":"msg_7c4e7b08-a0f8-4ebe-8f5d-115bca109e8b","type":"message","role":"assistant","content":[{"type":"text","text":"
 
 ---

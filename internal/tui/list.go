@@ -171,6 +171,10 @@ func (m *ListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if err := m.refreshIssues(); err != nil {
 				m.err = fmt.Errorf("failed to refresh issues: %w", err)
 			}
+
+		case "r", "R":
+			// Refresh issues from database (resync from local cache)
+			m.err = m.refreshIssues()
 		}
 	}
 

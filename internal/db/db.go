@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 	_ "github.com/tursodatabase/libsql-client-go/libsql"
@@ -351,4 +352,125 @@ func (db *DB) ClearAllIssues() error {
 	}
 
 	return nil
+}
+
+// GetLastSyncDate retrieves the last sync date from the database
+func (db *DB) GetLastSyncDate() (string, error) {
+	var lastSyncDate string
+	var count int
+
+	// Check if the table has any records
+	err := db.conn.QueryRow(`SELECT COUNT(*) FROM sync_state`).Scan(&count)
+	if err != nil {
+		// Table doesn't exist yet, return zero value
+		return "1970-01-01T00:00:00Z", nil
+	}
+
+	if count == 0 {
+		// No records exist yet, return zero value
+		return "1970-01-01T00:00:00Z", nil
+	}
+
+	err = db.conn.QueryRow(`SELECT last_sync_date FROM sync_state WHERE id = 1`).Scan(&lastSyncDate)
+	if err != nil {
+		if err.Error() == "no such table: sync_state" {
+			// Table doesn't exist yet, return zero value
+			return "1970-01-01T00:00:00Z", nil
+		}
+		return "", fmt.Errorf("failed to get last sync date: %w", err)
+	}
+
+	return lastSyncDate, nil
+}
+
+// SetLastSyncDate sets the last sync date in the database
+// Returns true if the sync should be full, false if it should be incremental
+func (db *DB) SetLastSyncDate(date string) (bool, error) {
+	// Ensure sync_state table exists
+	_, err := db.conn.Exec(`
+		CREATE TABLE IF NOT EXISTS sync_state (
+			id INTEGER PRIMARY KEY,
+			last_sync_date TEXT NOT NULL
+		)
+	`)
+	if err != nil {
+		return false, fmt.Errorf("failed to create sync_state table: %w", err)
+	}
+
+	// Check if this is the first sync by trying to get the existing date
+	var currentDate string
+	firstSync := false
+	err = db.conn.QueryRow(`SELECT last_sync_date FROM sync_state WHERE id = 1`).Scan(&currentDate)
+	if err != nil {
+		firstSync = true
+	}
+
+	// Insert or update the sync date
+	_, err = db.conn.Exec(`
+		INSERT OR REPLACE INTO sync_state (id, last_sync_date) VALUES (1, ?)
+	`, date)
+
+	if err != nil {
+		return false, fmt.Errorf("failed to set last sync date: %w", err)
+	}
+
+	// Return true if this is the first sync (full sync needed)
+	return firstSync, nil
+}
+
+// RemoveIssues removes issues by their numbers
+func (db *DB) RemoveIssues(issueNumbers []int) error {
+	if len(issueNumbers) == 0 {
+		return nil
+	}
+
+	// Create placeholders for the IN clause
+	placeholders := make([]string, len(issueNumbers))
+	for i := range issueNumbers {
+		placeholders[i] = "?"
+	}
+
+	// Delete the issues (comments will be deleted automatically due to ON DELETE CASCADE)
+	query := fmt.Sprintf(`DELETE FROM issues WHERE number IN (%s)`,
+		"?"+strings.Repeat(",?", len(issueNumbers)-1))
+
+	// Convert issueNumbers to []interface{} for Exec
+	args := make([]interface{}, len(issueNumbers))
+	for i, num := range issueNumbers {
+		args[i] = num
+	}
+
+	_, err := db.conn.Exec(query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to remove issues: %w", err)
+	}
+
+	return nil
+}
+
+// GetAllIssueNumbers retrieves all issue numbers from the database
+func (db *DB) GetAllIssueNumbers() ([]int, error) {
+	rows, err := db.conn.Query(`
+		SELECT number FROM issues
+		WHERE state = 'open'
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get issue numbers: %w", err)
+	}
+	defer rows.Close()
+
+	var numbers []int
+	for rows.Next() {
+		var number int
+		if err := rows.Scan(&number); err != nil {
+			return nil, fmt.Errorf("failed to scan issue number: %w", err)
+		}
+		numbers = append(numbers, number)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating issue numbers: %w", err)
+	}
+
+	return numbers, nil
 }
