@@ -99,6 +99,42 @@ after each iteration and included in agent prompts for context.
 - Can pass nil for no progress reporting (silent mode)
 - Update status bar in UI thread using QueueUpdateDraw()
 
+**Error Handling Pattern**: Use a dedicated `internal/errors` package for categorized error handling:
+- `IsMinorError()` identifies network timeouts and rate limits
+- `IsCriticalError()` identifies invalid tokens and database corruption
+- `GetErrorHint()` returns actionable guidance with retry capability
+- Minor errors displayed in status bar, critical errors shown in modal dialog
+- Modal dialogs require user acknowledgment via OK button
+- Press 'r' on minor error to clear and retry
+
+---
+
+## 2026-01-20 - US-013
+- What was implemented:
+  - Created `internal/errors/errors.go` with error classification functions
+  - Added `IsMinorError()` and `IsCriticalError()` for error categorization
+  - Added `GetErrorHint()` with actionable guidance for each error type
+  - Updated TUI status bar to show minor errors (network timeout, rate limit)
+  - Added critical error modal dialog for invalid token, database corruption
+  - Modal requires user acknowledgment (OK button)
+  - Press 'r' to retry after minor error (clears error and retries)
+
+- Files changed:
+  - `internal/errors/errors.go` (new file with error classification)
+  - `internal/errors/errors_test.go` (new file with 12 tests)
+  - `cmd/ghissues/tui.go` (added error state, status bar error display, error modal)
+
+- **Learnings:**
+  - Patterns discovered:
+    - Error Handling Pattern: Categorize errors as minor/critical for appropriate UI display
+    - Error Hint Pattern: Provide actionable guidance for error resolution
+    - Modal Error Pattern: Use tview.Modal with OK button for critical errors
+    - Status Bar Error Pattern: Display error message in status bar for minor errors
+  - Gotchas encountered:
+    - "invalid GitHub token" does not contain "invalid token" as substring (github in between)
+    - Must check critical errors first in IsMinorError to avoid false positives
+    - Error state variables must be declared before updateStatusBar closure
+
 ---
 
 ## 2026-01-20 - US-001
@@ -445,3 +481,12 @@ t\n- Updated help modal with dedicated comments view section\n\n**Files changed:
     - UI updates from goroutine need QueueUpdateDraw for thread safety
     - Prevent concurrent refreshes with isRefreshing flag check
     - Fetch comments for all updated issues to handle new comments
+## ✓ Iteration 9 - US-009: Data Refresh
+*2026-01-20T09:24:14.066Z (350s)*
+
+**Status:** Completed
+
+**Notes:**
+- Added `RunTUIWithRefresh`, refresh state variables, 'r' key handler\n- `cmd/ghissues/main.go` - Updated to use `RunTUIWithRefresh`\n- `.ralph-tui/progress.md` - Added new patterns and US-009 entry\n\n### New Patterns Documented:\n- **Incremental Sync Pattern** - Use GitHub's `since` parameter for efficient syncing\n- **TUI Refresh Pattern** - Goroutine + QueueUpdateDraw for async UI operations\n- **ProgressCallback Pattern** - Callback type for progress reporting in long-running operations\n\n
+
+---

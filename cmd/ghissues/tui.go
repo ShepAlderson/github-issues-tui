@@ -10,6 +10,7 @@ import (
 	"github.com/rivo/tview"
 	"github.com/shepbook/ghissues/internal/config"
 	"github.com/shepbook/ghissues/internal/db"
+	"github.com/shepbook/ghissues/internal/errors"
 )
 
 // runTUIWithRefresh starts the TUI with automatic refresh on launch
@@ -82,6 +83,9 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 	commentsMarkdownRendered := true
 	inCommentsView := false
 
+	// Error state - must be declared before updateStatusBar
+	var minorError string
+
 	// Function to update status bar text
 	updateStatusBar := func() {
 		if inCommentsView {
@@ -94,6 +98,10 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 			}
 			statusBar.SetText(fmt.Sprintf(" ghissues | %s/%s | Comments View%s | q or Esc to return | m for markdown toggle ",
 				owner, repo, markdownText))
+		} else if minorError != "" {
+			// Show minor error in status bar
+			statusBar.SetText(fmt.Sprintf(" ghissues | %s/%s | [ERROR] %s | j/k or arrows to navigate | r to refresh | q to quit ",
+				owner, repo, minorError))
 		} else if isRefreshing {
 			// Show refresh status during refresh
 			statusBar.SetText(fmt.Sprintf(" ghissues | %s/%s | Refreshing... %s | j/k or arrows to navigate | r to refresh | q to quit ",
@@ -356,6 +364,7 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 				// Manual refresh - only if not already refreshing and not in comments view
 				if !isRefreshing && !inCommentsView {
 					isRefreshing = true
+					minorError = "" // Clear previous minor error
 					updateStatusBar()
 
 					// Run refresh in a goroutine
@@ -373,10 +382,49 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 							isRefreshing = false
 							refreshStatus = ""
 							if err != nil {
-								refreshStatus = fmt.Sprintf("(Error: %v)", err)
+								uiErr := errors.NewUIError(err)
+								if uiErr.Category == errors.CategoryCritical {
+									// Show critical error as modal
+									showCriticalErrorModal(app, pages, uiErr)
+								} else {
+									// Show minor error in status bar
+									minorError = uiErr.Hint.Message
+								}
 							}
 							updateStatusBar()
 							// Refresh the issue list
+							displayIssues()
+						})
+					}()
+				} else if minorError != "" {
+					// If there's a minor error, pressing 'r' clears it and retries
+					minorError = ""
+					// Trigger refresh
+					isRefreshing = true
+					updateStatusBar()
+
+					go func() {
+						progress := func(current, total int, status string) {
+							refreshStatus = status
+							app.QueueUpdateDraw(func() {
+								updateStatusBar()
+							})
+						}
+
+						err := RefreshSync(dbPath, cfg, progress)
+
+						app.QueueUpdateDraw(func() {
+							isRefreshing = false
+							refreshStatus = ""
+							if err != nil {
+								uiErr := errors.NewUIError(err)
+								if uiErr.Category == errors.CategoryCritical {
+									showCriticalErrorModal(app, pages, uiErr)
+								} else {
+									minorError = uiErr.Hint.Message
+								}
+							}
+							updateStatusBar()
 							displayIssues()
 						})
 					}()
@@ -386,6 +434,9 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 		case tcell.KeyEscape:
 			// Dismiss modal if visible, or return from comments view
 			if pages.HasPage("help") {
+				pages.SwitchToPage("main")
+				app.SetFocus(app.GetFocus())
+			} else if pages.HasPage("error") {
 				pages.SwitchToPage("main")
 				app.SetFocus(app.GetFocus())
 			} else if pages.HasPage("comments") {
@@ -743,4 +794,27 @@ func formatComments(comments []db.Comment, markdownRendered bool) string {
 	}
 
 	return sb.String()
+}
+
+// showCriticalErrorModal displays a critical error in a modal dialog
+// The modal requires user acknowledgment before continuing
+func showCriticalErrorModal(app *tview.Application, pages *tview.Pages, err *errors.UIError) {
+	// Build error message with hint
+	var errorText string
+	if err.Hint != nil {
+		errorText = fmt.Sprintf("[red]ERROR[white]\n\n%s\n\n%s", err.Hint.Message, err.Hint.Action)
+	} else {
+		errorText = fmt.Sprintf("[red]ERROR[white]\n\n%s", err.Err.Error())
+	}
+
+	modal := tview.NewModal()
+	modal.SetText(errorText)
+	modal.AddButtons([]string{"OK"})
+	modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+		pages.SwitchToPage("main")
+		app.SetFocus(app.GetFocus())
+	})
+
+	pages.AddPage("error", modal, true, true)
+	pages.SwitchToPage("error")
 }
