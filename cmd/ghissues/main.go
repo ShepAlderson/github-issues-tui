@@ -2,15 +2,25 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 
 	"github.com/shepbook/ghissues/internal/auth"
 	"github.com/shepbook/ghissues/internal/config"
+	"github.com/shepbook/ghissues/internal/db"
 	"github.com/shepbook/ghissues/internal/github"
 )
 
+var dbFlag string
+
+func init() {
+	flag.StringVar(&dbFlag, "db", "", "Path to the database file (default: .ghissues.db in current directory)")
+}
+
 func main() {
+	flag.Parse()
+
 	// Check for 'config' subcommand
 	if len(os.Args) > 1 && os.Args[1] == "config" {
 		if err := runSetup(); err != nil {
@@ -30,6 +40,28 @@ func main() {
 			os.Exit(1)
 		}
 	}
+
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Determine database path
+	dbPath, err := db.GetPath(dbFlag, cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Verify database path is writable
+	if err := db.IsWritable(dbPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Database path: %s\n", dbPath)
 
 	// Validate authentication
 	if err := validateAuth(); err != nil {

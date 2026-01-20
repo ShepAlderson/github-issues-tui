@@ -42,6 +42,12 @@ type Config struct {
 	Repository string     `toml:"repository"`
 	AuthMethod AuthMethod `toml:"auth_method"`
 	Token      string     `toml:"token,omitempty"`
+	Database   Database   `toml:"database"`
+}
+
+// Database represents database configuration
+type Database struct {
+	Path string `toml:"path"`
 }
 
 // Load reads the configuration from the config file

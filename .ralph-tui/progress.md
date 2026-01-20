@@ -98,4 +98,12 @@ after each iteration and included in agent prompts for context.
     - HTTP 401 and 403 have different meanings - 401 is invalid token, 403 may be rate limit
     - Import statements must appear at the top of files (not mid-function)
 
+---## ✓ Iteration 2 - US-002: GitHub Authentication
+*2026-01-20T08:44:06.871Z (271s)*
+
+**Status:** Completed
+
+**Notes:**
+5.031Z (218s)*\n\n**Status:** Completed\n\n**Notes:**\n68→  - Gotchas encountered\\n    69→---\\n    70→```\\n\nIf you discovered a **reusable pattern**, also add it to the `## Codebase Patterns` section at the TOP of progress.md.\n\n## Stop Condition\n**IMPORTANT**: If the work is already complete (implemented in a previous iteration or already exists), verify it meets the acceptance criteria and signal completion immediately.\n\nWhen finished (or if already complete), signal completion with:\n
+
 ---
