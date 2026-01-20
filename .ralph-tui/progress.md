@@ -30,6 +30,12 @@ after each iteration and included in agent prompts for context.
 - User-Agent header: `ghissues-tui`
 - Check for 401 (bad credentials) and 403 (rate limit or forbidden)
 
+**Database Path Pattern**: Use a dedicated `internal/db` package that:
+- Provides `DefaultPath()` returning `.ghissues.db` in current directory
+- `GetPath(flag string, cfg *Config)` for priority: flag > config > default
+- `EnsureDir(path string)` creates parent directories with `os.MkdirAll`
+- `IsWritable(path string)` tests writability and returns descriptive error
+
 ---
 
 ## 2026-01-20 - US-001
@@ -98,12 +104,37 @@ after each iteration and included in agent prompts for context.
     - HTTP 401 and 403 have different meanings - 401 is invalid token, 403 may be rate limit
     - Import statements must appear at the top of files (not mid-function)
 
----## ✓ Iteration 2 - US-002: GitHub Authentication
+---
+
+## ✓ Iteration 2 - US-002: GitHub Authentication
 *2026-01-20T08:44:06.871Z (271s)*
 
 **Status:** Completed
 
-**Notes:**
-5.031Z (218s)*\n\n**Status:** Completed\n\n**Notes:**\n68→  - Gotchas encountered\\n    69→---\\n    70→```\\n\nIf you discovered a **reusable pattern**, also add it to the `## Codebase Patterns` section at the TOP of progress.md.\n\n## Stop Condition\n**IMPORTANT**: If the work is already complete (implemented in a previous iteration or already exists), verify it meets the acceptance criteria and signal completion immediately.\n\nWhen finished (or if already complete), signal completion with:\n
-
 ---
+
+## 2026-01-20 - US-004
+- What was implemented:
+  - Added Database struct with Path field to Config struct
+  - Created internal/db package with GetPath, EnsureDir, IsWritable functions
+  - Added --db flag to CLI using standard library flag package
+  - Database path priority: --db flag > config file > default (.ghissues.db)
+  - Parent directories are automatically created with os.MkdirAll
+  - Clear error message if path is not writable using custom PathError type
+
+- Files changed:
+  - internal/config/config.go (added Database struct with Path field)
+  - internal/db/db.go (new file with database path utilities)
+  - internal/db/db_test.go (11 tests for path handling)
+  - cmd/ghissues/main.go (added --db flag and db path validation)
+
+- **Learnings:**
+  - Patterns discovered:
+    - Database Path Pattern: Separate db utilities into internal/db package
+    - Priority-based config: flag > config file > default values
+    - Path writability testing: create temp file in parent directory
+    - Custom error types: PathError implements error interface with Unwrap
+  - Gotchas encountered:
+    - Return statement with error type must return nil, not empty string
+    - `filepath.Dir("test.db")` returns ".", need special handling for current dir
+    - `os.Chmod` required to restore permissions after read-only directory test
