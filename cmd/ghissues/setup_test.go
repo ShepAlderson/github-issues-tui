@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"os"
 	"strings"
 	"testing"
@@ -84,5 +85,53 @@ func TestIsReRun_PreservesArgs(t *testing.T) {
 		if arg != origArgs[i] {
 			t.Errorf("os.Args was modified at index %d: %q -> %q", i, origArgs[i], arg)
 		}
+	}
+}
+
+func TestPromptToken_Valid(t *testing.T) {
+	input := "ghp_testtoken12345678901234567890\n"
+	scanner := bufio.NewScanner(strings.NewReader(input))
+
+	token, err := promptToken(scanner)
+	if err != nil {
+		t.Errorf("promptToken() unexpected error: %v", err)
+	}
+	expected := "ghp_testtoken12345678901234567890"
+	if token != expected {
+		t.Errorf("promptToken() = %q, want %q", token, expected)
+	}
+}
+
+func TestPromptToken_Empty(t *testing.T) {
+	input := "\n"
+	scanner := bufio.NewScanner(strings.NewReader(input))
+
+	_, err := promptToken(scanner)
+	if err == nil {
+		t.Error("promptToken() expected error for empty input, got nil")
+	}
+}
+
+func TestPromptToken_TooShort(t *testing.T) {
+	input := "short\n"
+	scanner := bufio.NewScanner(strings.NewReader(input))
+
+	_, err := promptToken(scanner)
+	if err == nil {
+		t.Error("promptToken() expected error for short token, got nil")
+	}
+}
+
+func TestPromptToken_WithWhitespace(t *testing.T) {
+	input := "  ghp_testtoken12345678901234567890  \n"
+	scanner := bufio.NewScanner(strings.NewReader(input))
+
+	token, err := promptToken(scanner)
+	if err != nil {
+		t.Errorf("promptToken() unexpected error: %v", err)
+	}
+	expected := "ghp_testtoken12345678901234567890"
+	if token != expected {
+		t.Errorf("promptToken() = %q, want %q (whitespace not trimmed)", token, expected)
 	}
 }

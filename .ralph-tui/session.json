@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "sessionId": "c7536d28-63ec-4b84-bac6-3daae3e551e2",
+  "status": "running",
+  "startedAt": "2026-01-20T08:35:53.379Z",
+  "updatedAt": "2026-01-20T08:39:36.056Z",
+  "currentIteration": 1,
+  "maxIterations": 10,
+  "tasksCompleted": 1,
+  "isPaused": false,
+  "agentPlugin": "claude",
+  "trackerState": {
+    "plugin": "json",
+    "prdPath": "./tasks/prd.json",
+    "totalTasks": 14,
+    "tasks": [
+      {
+        "id": "US-001",
+        "title": "First-Time Setup",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-002",
+        "title": "GitHub Authentication",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-003",
+        "title": "Initial Issue Sync",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-004",
+        "title": "Database Storage Location",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-005",
+        "title": "Issue List View",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-006",
+        "title": "Issue Sorting",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-007",
+        "title": "Issue Detail View",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-008",
+        "title": "Comments View",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-009",
+        "title": "Data Refresh",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-010",
+        "title": "Last Synced Indicator",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-011",
+        "title": "Keybinding Help",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-012",
+        "title": "Color Themes",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-013",
+        "title": "Error Handling",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "US-014",
+        "title": "Multi-Repository Configuration",
+        "status": "open",
+        "completedInSession": false
+      }
+    ]
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "status": "completed",
+      "taskId": "US-001",
+      "taskTitle": "First-Time Setup",
+      "taskCompleted": true,
+      "durationMs": 218251,
+      "startedAt": "2026-01-20T08:35:56.769Z",
+      "endedAt": "2026-01-20T08:39:35.020Z"
+    }
+  ],
+  "skippedTaskIds": [],
+  "cwd": "/Users/shepbook/git/github-issues-tui",
+  "activeTaskIds": [
+    "US-002"
+  ],
+  "subagentPanelVisible": false
+}

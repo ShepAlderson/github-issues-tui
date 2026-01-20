@@ -37,11 +37,20 @@ func runSetup() error {
 		return err
 	}
 
+	// Get token if using token auth method
+	var token string
+	if authMethod == config.AuthMethodToken {
+		token, err = promptToken(scanner)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Save configuration
 	cfg := &config.Config{
 		Repository: repository,
 		AuthMethod: authMethod,
-		Token:      "", // Will be prompted separately in auth setup
+		Token:      token,
 	}
 
 	if err := config.Save(cfg); err != nil {
@@ -52,8 +61,13 @@ func runSetup() error {
 	fmt.Println("Configuration saved successfully!")
 	fmt.Printf("Repository: %s\n", repository)
 	fmt.Printf("Auth method: %s\n", authMethod)
-	fmt.Println()
-	fmt.Println("Tip: Set GITHUB_TOKEN environment variable or configure a token later.")
+
+	if authMethod == config.AuthMethodEnv {
+		fmt.Println()
+		fmt.Println("Tip: Make sure to set the GITHUB_TOKEN environment variable.")
+	} else if authMethod == config.AuthMethodToken {
+		fmt.Println("Token has been securely saved.")
+	}
 
 	return nil
 }
@@ -97,7 +111,7 @@ func promptAuthMethod(scanner *bufio.Scanner) (config.AuthMethod, error) {
 	fmt.Println("Authentication method:")
 	fmt.Println("  1. Environment variable (GITHUB_TOKEN)")
 	fmt.Println("  2. GitHub CLI (gh auth token)")
-	fmt.Println("  3. Personal access token (prompted later)")
+	fmt.Println("  3. Personal access token (saved to config)")
 
 	fmt.Print("Choose [1-3]: ")
 
@@ -120,4 +134,32 @@ func promptAuthMethod(scanner *bufio.Scanner) (config.AuthMethod, error) {
 	default:
 		return "", fmt.Errorf("invalid choice: %s. Please enter 1, 2, or 3", choice)
 	}
+}
+
+func promptToken(scanner *bufio.Scanner) (string, error) {
+	fmt.Println()
+	fmt.Println("Personal Access Token:")
+	fmt.Println("  - Create at: https://github.com/settings/tokens")
+	fmt.Println("  - Required scopes: repo (for private repos)")
+
+	fmt.Print("Enter your GitHub personal access token: ")
+
+	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return "", fmt.Errorf("failed to read input: %w", err)
+		}
+		return "", fmt.Errorf("no input received")
+	}
+
+	token := strings.TrimSpace(scanner.Text())
+	if token == "" {
+		return "", fmt.Errorf("token cannot be empty")
+	}
+
+	// Basic validation - GitHub tokens are typically 40+ characters (classic) or variable length (fine-grained)
+	if len(token) < 10 {
+		return "", fmt.Errorf("token appears too short. Please enter a valid GitHub personal access token")
+	}
+
+	return token, nil
 }
