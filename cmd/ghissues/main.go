@@ -30,6 +30,15 @@ func main() {
 		return
 	}
 
+	// Check for 'sync' subcommand
+	if len(os.Args) > 1 && os.Args[1] == "sync" {
+		if err := runSync(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	// Check if config exists, if not run setup
 	if !config.Exists() {
 		fmt.Println("Welcome to ghissues! Let's set up your configuration.")
@@ -69,7 +78,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("Configuration complete. Run 'ghissues' to start the app.")
+	fmt.Println("Configuration complete. Run 'ghissues config' to reconfigure, 'ghissues sync' to fetch issues, or 'ghissues' to start the app.")
 }
 
 // validateAuth attempts to get and validate a GitHub token

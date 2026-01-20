@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // Client is a GitHub API client
@@ -112,4 +115,281 @@ Please check your token and update it:
 2. For config file: run 'ghissues config' to update
 3. For GitHub CLI: run 'gh auth refresh'`,
 	}
+}
+
+// Issue represents a GitHub issue
+type Issue struct {
+	Number      int       `json:"number"`
+	Title       string    `json:"title"`
+	Body        string    `json:"body"`
+	State       string    `json:"state"`
+	Author      User      `json:"user"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	Comments    int       `json:"comments"`
+	Labels      []Label   `json:"labels"`
+	Assignees   []User    `json:"assignees"`
+	HTMLURL     string    `json:"html_url"`
+}
+
+// Comment represents a GitHub issue comment
+type Comment struct {
+	ID        int64     `json:"id"`
+	Body      string    `json:"body"`
+	Author    User      `json:"user"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// Label represents a GitHub label
+type Label struct {
+	ID     int64  `json:"id"`
+	Name   string `json:"name"`
+	Color  string `json:"color"`
+}
+
+// IssuesResponse represents the paginated issues response
+type IssuesResponse struct {
+	Items      []Issue `json:"items"`
+	TotalCount int     `json:"total_count"`
+	NextPage   *int    `json:"next_page,omitempty"`
+}
+
+// CommentsResponse represents the paginated comments response
+type CommentsResponse struct {
+	Items      []Comment `json:"items"`
+	TotalCount int       `json:"total_count"`
+	NextPage   *int      `json:"next_page,omitempty"`
+}
+
+// FetchIssues fetches all open issues from a repository with automatic pagination
+// Returns all issues and total count
+func (c *Client) FetchIssues(ctx context.Context, owner, repo string) ([]Issue, int, error) {
+	var allIssues []Issue
+	totalCount := 0
+	page := 1
+
+	for {
+		select {
+		case <-ctx.Done():
+			return allIssues, totalCount, ctx.Err()
+		default:
+		}
+
+		issues, count, nextPage, err := c.fetchIssuesPage(ctx, owner, repo, page)
+		if err != nil {
+			return allIssues, totalCount, err
+		}
+
+		totalCount = count
+		allIssues = append(allIssues, issues...)
+
+		if nextPage == nil {
+			break
+		}
+		page = *nextPage
+	}
+
+	return allIssues, totalCount, nil
+}
+
+// fetchIssuesPage fetches a single page of issues
+func (c *Client) fetchIssuesPage(ctx context.Context, owner, repo string, page int) ([]Issue, int, *int, error) {
+	reqURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/issues", owner, repo)
+	u, err := url.Parse(reqURL)
+	if err != nil {
+		return nil, 0, nil, fmt.Errorf("failed to parse URL: %w", err)
+	}
+
+	q := u.Query()
+	q.Set("state", "open")
+	q.Set("per_page", "100")
+	q.Set("page", strconv.Itoa(page))
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	if err != nil {
+		return nil, 0, nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	req.Header.Set("User-Agent", "ghissues-tui")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, 0, nil, fmt.Errorf("failed to fetch issues: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, 0, nil, fmt.Errorf("invalid GitHub token")
+	}
+
+	if resp.StatusCode == http.StatusForbidden {
+		remaining := resp.Header.Get("X-RateLimit-Remaining")
+		if remaining == "0" {
+			resetTime := resp.Header.Get("X-RateLimit-Reset")
+			return nil, 0, nil, fmt.Errorf("GitHub API rate limit exceeded, resets at %s", resetTime)
+		}
+		return nil, 0, nil, fmt.Errorf("GitHub API access denied")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, 0, nil, fmt.Errorf("GitHub API error (status %d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var issues []Issue
+	if err := json.NewDecoder(resp.Body).Decode(&issues); err != nil {
+		return nil, 0, nil, fmt.Errorf("failed to parse issues response: %w", err)
+	}
+
+	// Get total count from header
+	totalStr := resp.Header.Get("X-Total-Count")
+	totalCount := 0
+	if totalStr != "" {
+		if n, err := strconv.Atoi(totalStr); err == nil {
+			totalCount = n
+		}
+	}
+
+	// Determine next page
+	var nextPage *int
+	if linkHeader := resp.Header.Get("Link"); linkHeader != "" {
+		if next := parseNextPage(linkHeader); next != nil {
+			nextPage = next
+		}
+	}
+
+	return issues, totalCount, nextPage, nil
+}
+
+// FetchComments fetches all comments for a specific issue with automatic pagination
+func (c *Client) FetchComments(ctx context.Context, owner, repo string, issueNumber int) ([]Comment, error) {
+	var allComments []Comment
+	page := 1
+
+	for {
+		select {
+		case <-ctx.Done():
+			return allComments, ctx.Err()
+		default:
+		}
+
+		comments, nextPage, err := c.fetchCommentsPage(ctx, owner, repo, issueNumber, page)
+		if err != nil {
+			return allComments, err
+		}
+
+		allComments = append(allComments, comments...)
+
+		if nextPage == nil {
+			break
+		}
+		page = *nextPage
+	}
+
+	return allComments, nil
+}
+
+// fetchCommentsPage fetches a single page of comments for an issue
+func (c *Client) fetchCommentsPage(ctx context.Context, owner, repo string, issueNumber int, page int) ([]Comment, *int, error) {
+	reqURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/issues/%d/comments", owner, repo, issueNumber)
+	u, err := url.Parse(reqURL)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse URL: %w", err)
+	}
+
+	q := u.Query()
+	q.Set("per_page", "100")
+	q.Set("page", strconv.Itoa(page))
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	req.Header.Set("User-Agent", "ghissues-tui")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to fetch comments: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, nil, fmt.Errorf("invalid GitHub token")
+	}
+
+	if resp.StatusCode == http.StatusForbidden {
+		remaining := resp.Header.Get("X-RateLimit-Remaining")
+		if remaining == "0" {
+			resetTime := resp.Header.Get("X-RateLimit-Reset")
+			return nil, nil, fmt.Errorf("GitHub API rate limit exceeded, resets at %s", resetTime)
+		}
+		return nil, nil, fmt.Errorf("GitHub API access denied")
+	}
+
+	if resp.StatusCode == http.StatusOK {
+		var comments []Comment
+		if err := json.NewDecoder(resp.Body).Decode(&comments); err != nil {
+			return nil, nil, fmt.Errorf("failed to parse comments response: %w", err)
+		}
+
+		// Determine next page
+		var nextPage *int
+		if linkHeader := resp.Header.Get("Link"); linkHeader != "" {
+			if next := parseNextPage(linkHeader); next != nil {
+				nextPage = next
+			}
+		}
+
+		return comments, nextPage, nil
+	}
+
+	// 404 means comments are disabled or issue doesn't exist
+	body, _ := io.ReadAll(resp.Body)
+	return nil, nil, fmt.Errorf("GitHub API error (status %d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+}
+
+// parseNextPage extracts the next page number from the Link header
+// Link header format: <url>; rel="next", <url>; rel="last"
+func parseNextPage(linkHeader string) *int {
+	links := strings.Split(linkHeader, ",")
+	for _, link := range links {
+		parts := strings.Split(link, ";")
+		if len(parts) != 2 {
+			continue
+		}
+
+		urlStr := strings.TrimSpace(parts[0])
+		rel := strings.TrimSpace(parts[1])
+
+		if !strings.Contains(rel, `rel="next"`) {
+			continue
+		}
+
+		// Extract page from URL
+		urlStr = strings.Trim(urlStr, "<>")
+		u, err := url.Parse(urlStr)
+		if err != nil {
+			continue
+		}
+
+		pageStr := u.Query().Get("page")
+		if pageStr == "" {
+			continue
+		}
+
+		page, err := strconv.Atoi(pageStr)
+		if err != nil {
+			continue
+		}
+
+		return &page
+	}
+	return nil
 }

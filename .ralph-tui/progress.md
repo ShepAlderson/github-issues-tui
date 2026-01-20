@@ -36,6 +36,24 @@ after each iteration and included in agent prompts for context.
 - `EnsureDir(path string)` creates parent directories with `os.MkdirAll`
 - `IsWritable(path string)` tests writability and returns descriptive error
 
+**GitHub API Pagination Pattern**: Fetch paginated data by:
+- Using `per_page=100` to maximize items per request
+- Parsing `Link` header with `rel="next"` for next page URL
+- Extracting page number from `page=N` query parameter
+- Continuing until `rel="next"` is no longer present
+
+**SQLite Database Pattern**: Use `modernc.org/sqlite` driver with:
+- `PRAGMA foreign_keys = ON` to enable foreign key constraints
+- `ON CONFLICT DO UPDATE` for UPSERT operations (idempotent inserts)
+- Separate tables for related entities (labels, assignees, comments)
+- Cascade delete via `ON DELETE CASCADE` foreign key constraint
+
+**Context Cancellation Pattern**: Handle graceful shutdown by:
+- Using `context.WithCancel()` for cancellable operations
+- Checking `ctx.Done()` in loops to detect cancellation
+- Setting up signal handler for SIGINT/SIGTERM
+- Returning early with cleanup message on cancellation
+
 ---
 
 ## 2026-01-20 - US-001
@@ -137,4 +155,52 @@ after each iteration and included in agent prompts for context.
   - Gotchas encountered:
     - Return statement with error type must return nil, not empty string
     - `filepath.Dir("test.db")` returns ".", need special handling for current dir
-    - `os.Chmod` required to restore permissions after read-only directory test
+    - `os.Chmod` required to restore permissions after read-only directory test## ✓ Iteration 3 - US-004: Database Storage Location
+*2026-01-20T08:46:59.333Z (171s)*
+
+**Status:** Completed
+
+## 2026-01-20 - US-003
+- What was implemented:
+  - Added Issue, Comment, Label structs to internal/github package
+  - Created FetchIssues() with automatic pagination (handles Link header)
+  - Created FetchComments() with automatic pagination
+  - Added internal/db/ops.go with Open(), UpsertIssue(), UpsertComment(), InsertLabel(), InsertAssignee()
+  - Created database schema with foreign key constraints and cascade delete
+  - Added `ghissues sync` subcommand to CLI
+  - Implemented progress bar showing issues fetched / total
+  - Added Ctrl+C handling with context cancellation for graceful shutdown
+  - Issues stored with number, title, body, author, created/updated dates, comment count, labels, assignees
+  - Comments fetched and stored for each issue
+
+- Files changed:
+  - internal/github/client.go (added Issue, Comment, Label structs, FetchIssues, FetchComments)
+  - internal/github/issue_test.go (14 tests for issue/comment structures)
+  - internal/github/fetch_test.go (7 tests for fetching with pagination)
+  - internal/db/ops.go (new file with database operations)
+  - internal/db/ops_test.go (14 tests for database operations)
+  - cmd/ghissues/sync.go (new file with sync command and progress bar)
+  - cmd/ghissues/sync_test.go (11 tests for progress bar and sync progress)
+  - cmd/ghissues/main.go (added sync subcommand handler)
+  - go.mod, go.sum (added modernc.org/sqlite dependency)
+
+- **Learnings:**
+  - Patterns discovered:
+    - GitHub API Pagination: Parse Link header for next page URL
+    - SQLite foreign keys disabled by default, need `PRAGMA foreign_keys = ON`
+    - UPSERT with `ON CONFLICT DO UPDATE` for idempotent database operations
+    - Context cancellation allows graceful shutdown of long-running operations
+    - Progress bar updates should handle unknown total count
+  - Gotchas encountered:
+    - SQLite foreign key constraints fail if parent row doesn't exist
+    - Link header format requires parsing URL and extracting page parameter
+    - `X-Total-Count` header provides total, Link header provides pagination
+    - Progress bar needs \r (carriage return) to update in place
+
+---
+
+## ✓ Iteration 4 - US-003: Initial Issue Sync
+**Status:** Completed\n"}],"model":"hf:MiniMaxAI/MiniMax-M2.1","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":41020,"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"context_management":null},"parent_tool_use_id":null,"session_id":"bf326f68-c80a-406a-976b-25076c9bf34e","uuid":"8714aa34-993d-4393-b4b1-2db43025b48b"}
+{"type":"assistant","message":{"id":"msg_ce244bd4-361d-40fc-949c-20e66dd79b6e","type":"message","role":"assistant","content":[{"type":"text","text":"\n\n
+
+---
