@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shepbook/ghissues/internal/config"
 	"github.com/shepbook/ghissues/internal/github"
 )
 
@@ -210,5 +211,342 @@ func TestIssueListStruct(t *testing.T) {
 	}
 	if issue.State != "open" {
 		t.Errorf("Expected State 'open', got '%s'", issue.State)
+	}
+}
+
+func TestListIssuesSortedByNumber(t *testing.T) {
+	// Create a temp database
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	owner := "test-owner"
+	repo := "test-repo"
+
+	// Insert some test issues
+	testIssues := []github.Issue{
+		{
+			Number:    3,
+			Title:     "Third Issue",
+			State:     "open",
+			Author:    github.User{Login: "user1"},
+			Comments:  10,
+			CreatedAt: time.Now().Add(-72 * time.Hour),
+			UpdatedAt: time.Now().Add(-2 * time.Hour),
+		},
+		{
+			Number:    1,
+			Title:     "First Issue",
+			State:     "open",
+			Author:    github.User{Login: "user1"},
+			Comments:  5,
+			CreatedAt: time.Now().Add(-24 * time.Hour),
+			UpdatedAt: time.Now(),
+		},
+		{
+			Number:    2,
+			Title:     "Second Issue",
+			State:     "open",
+			Author:    github.User{Login: "user2"},
+			Comments:  0,
+			CreatedAt: time.Now().Add(-48 * time.Hour),
+			UpdatedAt: time.Now().Add(-1 * time.Hour),
+		},
+	}
+
+	for _, issue := range testIssues {
+		err := UpsertIssue(db, owner, repo, &issue)
+		if err != nil {
+			t.Fatalf("Failed to upsert issue: %v", err)
+		}
+	}
+
+	// List issues sorted by number ascending
+	issues, err := ListIssuesSorted(db, owner, repo, config.SortNumber, config.SortOrderAsc)
+	if err != nil {
+		t.Fatalf("Failed to list issues: %v", err)
+	}
+
+	if len(issues) != 3 {
+		t.Errorf("Expected 3 issues, got %d", len(issues))
+	}
+
+	// Issues should be ordered by number ascending: 1, 2, 3
+	if issues[0].Number != 1 {
+		t.Errorf("Expected first issue to be #1, got #%d", issues[0].Number)
+	}
+	if issues[1].Number != 2 {
+		t.Errorf("Expected second issue to be #2, got #%d", issues[1].Number)
+	}
+	if issues[2].Number != 3 {
+		t.Errorf("Expected third issue to be #3, got #%d", issues[2].Number)
+	}
+}
+
+func TestListIssuesSortedByNumberDesc(t *testing.T) {
+	// Create a temp database
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	owner := "test-owner"
+	repo := "test-repo"
+
+	// Insert some test issues
+	testIssues := []github.Issue{
+		{
+			Number:    3,
+			Title:     "Third Issue",
+			State:     "open",
+			Author:    github.User{Login: "user1"},
+			Comments:  10,
+			CreatedAt: time.Now().Add(-72 * time.Hour),
+			UpdatedAt: time.Now().Add(-2 * time.Hour),
+		},
+		{
+			Number:    1,
+			Title:     "First Issue",
+			State:     "open",
+			Author:    github.User{Login: "user1"},
+			Comments:  5,
+			CreatedAt: time.Now().Add(-24 * time.Hour),
+			UpdatedAt: time.Now(),
+		},
+		{
+			Number:    2,
+			Title:     "Second Issue",
+			State:     "open",
+			Author:    github.User{Login: "user2"},
+			Comments:  0,
+			CreatedAt: time.Now().Add(-48 * time.Hour),
+			UpdatedAt: time.Now().Add(-1 * time.Hour),
+		},
+	}
+
+	for _, issue := range testIssues {
+		err := UpsertIssue(db, owner, repo, &issue)
+		if err != nil {
+			t.Fatalf("Failed to upsert issue: %v", err)
+		}
+	}
+
+	// List issues sorted by number descending
+	issues, err := ListIssuesSorted(db, owner, repo, config.SortNumber, config.SortOrderDesc)
+	if err != nil {
+		t.Fatalf("Failed to list issues: %v", err)
+	}
+
+	if len(issues) != 3 {
+		t.Errorf("Expected 3 issues, got %d", len(issues))
+	}
+
+	// Issues should be ordered by number descending: 3, 2, 1
+	if issues[0].Number != 3 {
+		t.Errorf("Expected first issue to be #3, got #%d", issues[0].Number)
+	}
+	if issues[1].Number != 2 {
+		t.Errorf("Expected second issue to be #2, got #%d", issues[1].Number)
+	}
+	if issues[2].Number != 1 {
+		t.Errorf("Expected third issue to be #1, got #%d", issues[2].Number)
+	}
+}
+
+func TestListIssuesSortedByComments(t *testing.T) {
+	// Create a temp database
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	owner := "test-owner"
+	repo := "test-repo"
+
+	// Insert some test issues with different comment counts
+	testIssues := []github.Issue{
+		{
+			Number:    1,
+			Title:     "First Issue",
+			State:     "open",
+			Author:    github.User{Login: "user1"},
+			Comments:  5,
+			CreatedAt: time.Now().Add(-24 * time.Hour),
+			UpdatedAt: time.Now(),
+		},
+		{
+			Number:    2,
+			Title:     "Second Issue",
+			State:     "open",
+			Author:    github.User{Login: "user2"},
+			Comments:  0,
+			CreatedAt: time.Now().Add(-48 * time.Hour),
+			UpdatedAt: time.Now().Add(-1 * time.Hour),
+		},
+		{
+			Number:    3,
+			Title:     "Third Issue",
+			State:     "closed",
+			Author:    github.User{Login: "user1"},
+			Comments:  10,
+			CreatedAt: time.Now().Add(-72 * time.Hour),
+			UpdatedAt: time.Now().Add(-2 * time.Hour),
+		},
+	}
+
+	for _, issue := range testIssues {
+		err := UpsertIssue(db, owner, repo, &issue)
+		if err != nil {
+			t.Fatalf("Failed to upsert issue: %v", err)
+		}
+	}
+
+	// List issues sorted by comment count descending
+	issues, err := ListIssuesSorted(db, owner, repo, config.SortComments, config.SortOrderDesc)
+	if err != nil {
+		t.Fatalf("Failed to list issues: %v", err)
+	}
+
+	if len(issues) != 3 {
+		t.Errorf("Expected 3 issues, got %d", len(issues))
+	}
+
+	// Issues should be ordered by comment count descending: 10, 5, 0
+	if issues[0].CommentCnt != 10 {
+		t.Errorf("Expected first issue to have 10 comments, got %d", issues[0].CommentCnt)
+	}
+	if issues[1].CommentCnt != 5 {
+		t.Errorf("Expected second issue to have 5 comments, got %d", issues[1].CommentCnt)
+	}
+	if issues[2].CommentCnt != 0 {
+		t.Errorf("Expected third issue to have 0 comments, got %d", issues[2].CommentCnt)
+	}
+}
+
+func TestListIssuesSortedByCreated(t *testing.T) {
+	// Create a temp database
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	owner := "test-owner"
+	repo := "test-repo"
+
+	// Insert some test issues
+	testIssues := []github.Issue{
+		{
+			Number:    1,
+			Title:     "First Issue",
+			State:     "open",
+			Author:    github.User{Login: "user1"},
+			Comments:  5,
+			CreatedAt: time.Now().Add(-72 * time.Hour), // Oldest
+			UpdatedAt: time.Now(),
+		},
+		{
+			Number:    2,
+			Title:     "Second Issue",
+			State:     "open",
+			Author:    github.User{Login: "user2"},
+			Comments:  0,
+			CreatedAt: time.Now().Add(-24 * time.Hour), // Newest
+			UpdatedAt: time.Now().Add(-1 * time.Hour),
+		},
+		{
+			Number:    3,
+			Title:     "Third Issue",
+			State:     "closed",
+			Author:    github.User{Login: "user1"},
+			Comments:  10,
+			CreatedAt: time.Now().Add(-48 * time.Hour), // Middle
+			UpdatedAt: time.Now().Add(-2 * time.Hour),
+		},
+	}
+
+	for _, issue := range testIssues {
+		err := UpsertIssue(db, owner, repo, &issue)
+		if err != nil {
+			t.Fatalf("Failed to upsert issue: %v", err)
+		}
+	}
+
+	// List issues sorted by created_at descending (newest first)
+	issues, err := ListIssuesSorted(db, owner, repo, config.SortCreated, config.SortOrderDesc)
+	if err != nil {
+		t.Fatalf("Failed to list issues: %v", err)
+	}
+
+	if len(issues) != 3 {
+		t.Errorf("Expected 3 issues, got %d", len(issues))
+	}
+
+	// Issues should be ordered by created_at descending: 2 (newest), 3, 1 (oldest)
+	if issues[0].Number != 2 {
+		t.Errorf("Expected first issue to be #2 (newest), got #%d", issues[0].Number)
+	}
+	if issues[1].Number != 3 {
+		t.Errorf("Expected second issue to be #3, got #%d", issues[1].Number)
+	}
+	if issues[2].Number != 1 {
+		t.Errorf("Expected third issue to be #1 (oldest), got #%d", issues[2].Number)
+	}
+}
+
+func TestListIssuesSortedInvalidOption(t *testing.T) {
+	// Create a temp database
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	owner := "test-owner"
+	repo := "test-repo"
+
+	// Insert a test issue
+	issue := &github.Issue{
+		Number:    1,
+		Title:     "Test Issue",
+		State:     "open",
+		Author:    github.User{Login: "testuser"},
+		Comments:  3,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	err = UpsertIssue(db, owner, repo, issue)
+	if err != nil {
+		t.Fatalf("Failed to upsert issue: %v", err)
+	}
+
+	// List issues with an invalid sort option - should default to updated
+	issues, err := ListIssuesSorted(db, owner, repo, "invalid", config.SortOrderDesc)
+	if err != nil {
+		t.Fatalf("Failed to list issues: %v", err)
+	}
+
+	if len(issues) != 1 {
+		t.Errorf("Expected 1 issue, got %d", len(issues))
 	}
 }

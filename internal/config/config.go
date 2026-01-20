@@ -51,9 +51,44 @@ type Database struct {
 	Path string `toml:"path"`
 }
 
+// SortOption represents the sort criteria for issues
+type SortOption string
+
+const (
+	SortUpdated  SortOption = "updated"  // Sort by updated date
+	SortCreated  SortOption = "created"  // Sort by created date
+	SortNumber   SortOption = "number"   // Sort by issue number
+	SortComments SortOption = "comments" // Sort by comment count
+)
+
+// SortOrder represents the sort order direction
+type SortOrder string
+
+const (
+	SortOrderDesc SortOrder = "desc" // Descending (default)
+	SortOrderAsc  SortOrder = "asc"  // Ascending
+)
+
+// DefaultSort returns the default sort option
+func DefaultSort() SortOption {
+	return SortUpdated
+}
+
+// DefaultSortOrder returns the default sort order
+func DefaultSortOrder() SortOrder {
+	return SortOrderDesc
+}
+
+// AllSortOptions returns all available sort options
+func AllSortOptions() []SortOption {
+	return []SortOption{SortUpdated, SortCreated, SortNumber, SortComments}
+}
+
 // Display represents display configuration
 type Display struct {
-	Columns []string `toml:"columns"`
+	Columns    []string   `toml:"columns"`
+	Sort       SortOption `toml:"sort"`
+	SortOrder  SortOrder  `toml:"sort_order"`
 }
 
 // DefaultColumns returns the default columns to display in the issue list
@@ -77,6 +112,12 @@ func Load() (*Config, error) {
 	// Apply defaults
 	if len(cfg.Display.Columns) == 0 {
 		cfg.Display.Columns = DefaultColumns()
+	}
+	if cfg.Display.Sort == "" {
+		cfg.Display.Sort = DefaultSort()
+	}
+	if cfg.Display.SortOrder == "" {
+		cfg.Display.SortOrder = DefaultSortOrder()
 	}
 
 	return &cfg, nil

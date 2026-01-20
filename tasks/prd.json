@@ -56,7 +56,7 @@
         "Sync can be cancelled with Ctrl+C gracefully"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-002",
         "US-004"
@@ -64,7 +64,8 @@
       "labels": [
         "sync",
         "api"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-004",
@@ -78,14 +79,15 @@
         "Clear error if path is not writable"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-001"
       ],
       "labels": [
         "database",
         "config"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-005",
@@ -100,14 +102,15 @@
         "Issue count shown in status area"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-003"
       ],
       "labels": [
         "tui",
         "list"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-006",
@@ -302,6 +305,6 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-01-20T08:44:07.877Z"
+    "updatedAt": "2026-01-20T09:01:25.456Z"
   }
 }

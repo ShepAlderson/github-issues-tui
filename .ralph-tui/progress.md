@@ -254,3 +254,40 @@ Sync can be cancelled with Ctrl+C gracefully\n\n**Files changed:**\n- `internal/
     - tcell.KeyRune, tcell.KeyEscape, tcell.KeyCtrlC for keyboard events
     - Method chaining on tview primitives requires explicit variable declaration
     - ValidateColumns should return false for empty column lists
+## ✓ Iteration 5 - US-005: Issue List View
+*2026-01-20T09:01:24.447Z (396s)*
+
+**Status:** Completed
+
+**Notes:**
+GetIssue\n- `cmd/ghissues/tui.go` - New TUI implementation\n- `cmd/ghissues/tui_test.go` - 10 tests for TUI helpers\n- `cmd/ghissues/main.go` - Added tui subcommand\n- `go.mod` - Added tview and tcell dependencies\n\n**Key patterns discovered:**\n- TUI Pattern with tview: Use explicit type declarations to avoid type inference issues\n- Flex layout with FlexColumn for vertical split panels\n- Pages for modal dialogs (help screens)\n- SetInputCapture with tcell.EventKey for custom key handling\n\n
+
+---
+
+## 2026-01-20 - US-006
+- What was implemented:
+  - Added SortOption and SortOrder types to config Display struct for sortable issues
+  - Available sort options: updated (default), created, number, comments
+  - Sort order: desc (default) and asc
+  - Added ListIssuesSorted function in db/ops.go with dynamic ORDER BY clause
+  - TUI keybindings: 's' to cycle through sort options, 'S' to reverse order
+  - Current sort shown in status bar with format "Sort: <Name> <↑↓>"
+  - Sort preference persisted to config file automatically on change
+
+- Files changed:
+  - internal/config/config.go (added SortOption, SortOrder types, Display struct fields)
+  - internal/config/config_display_test.go (7 new tests for sort options)
+  - internal/db/ops.go (added ListIssuesSorted function, uses config package)
+  - internal/db/ops_list_test.go (6 new tests for sorting)
+  - cmd/ghissues/tui.go (added sort helper functions, keybindings, status bar display)
+  - cmd/ghissues/tui_test.go (4 new tests for sort helpers)
+
+- **Learnings:**
+  - Patterns discovered:
+    - Sort Preference Pattern: Store sort settings in config Display struct with TOML serialization
+    - SQL ORDER BY Pattern: Use dynamic column name and direction for flexible sorting
+    - Status Bar Pattern: Include dynamic sort info in status bar with FormatSortDisplay helper
+  - Gotchas encountered:
+    - tview.List doesn't have GetCurrentIndex - use SetChangedFunc to track selection
+    - Variable scope issues when declaring pages before use in closures
+    - fmt.Sprintf for dynamic SQL needs proper escaping/sanitization of column names

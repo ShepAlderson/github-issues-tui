@@ -252,3 +252,97 @@ func containsHelper(s, substr string) bool {
 	}
 	return false
 }
+
+func TestGetSortOptionInfo(t *testing.T) {
+	tests := []struct {
+		option   config.SortOption
+		expected string
+	}{
+		{config.SortUpdated, "Updated"},
+		{config.SortCreated, "Created"},
+		{config.SortNumber, "Number"},
+		{config.SortComments, "Comments"},
+		{"invalid", "Updated"}, // Default for unknown options
+	}
+
+	for _, tt := range tests {
+		result := GetSortOptionInfo(tt.option)
+		if result.Name != tt.expected {
+			t.Errorf("GetSortOptionInfo(%q).Name = %q, expected %q", tt.option, result.Name, tt.expected)
+		}
+		if result.Option != tt.option && tt.option != "invalid" {
+			t.Errorf("GetSortOptionInfo(%q).Option = %q, expected %q", tt.option, result.Option, tt.option)
+		}
+	}
+}
+
+func TestCycleSortOption(t *testing.T) {
+	// Test cycling through all options
+	options := config.AllSortOptions()
+
+	// Start with the first option and cycle through all
+	current := options[0]
+	for i := 0; i < len(options); i++ {
+		next := CycleSortOption(current)
+		expectedNext := options[(i+1)%len(options)]
+		if next != expectedNext {
+			t.Errorf("CycleSortOption(%q) = %q, expected %q", current, next, expectedNext)
+		}
+		current = next
+	}
+
+	// Test wrapping around
+	lastOption := options[len(options)-1]
+	firstOption := options[0]
+	next := CycleSortOption(lastOption)
+	if next != firstOption {
+		t.Errorf("CycleSortOption(%q) = %q, expected %q (wrap around)", lastOption, next, firstOption)
+	}
+
+	// Test with invalid option - should return first option
+	invalidResult := CycleSortOption("invalid")
+	if invalidResult != firstOption {
+		t.Errorf("CycleSortOption(%q) = %q, expected %q (default)", "invalid", invalidResult, firstOption)
+	}
+}
+
+func TestToggleSortOrder(t *testing.T) {
+	// Test toggling from desc to asc
+	if ToggleSortOrder(config.SortOrderDesc) != config.SortOrderAsc {
+		t.Errorf("ToggleSortOrder(%q) should return %q", config.SortOrderDesc, config.SortOrderAsc)
+	}
+
+	// Test toggling from asc to desc
+	if ToggleSortOrder(config.SortOrderAsc) != config.SortOrderDesc {
+		t.Errorf("ToggleSortOrder(%q) should return %q", config.SortOrderAsc, config.SortOrderDesc)
+	}
+
+	// Test with invalid option - should return desc (anything not desc becomes desc)
+	if ToggleSortOrder("invalid") != config.SortOrderDesc {
+		t.Errorf("ToggleSortOrder(%q) should return %q", "invalid", config.SortOrderDesc)
+	}
+}
+
+func TestFormatSortDisplay(t *testing.T) {
+	tests := []struct {
+		sort     config.SortOption
+		order    config.SortOrder
+		expected string
+	}{
+		{config.SortUpdated, config.SortOrderDesc, "Sort: Updated ↓"},
+		{config.SortUpdated, config.SortOrderAsc, "Sort: Updated ↑"},
+		{config.SortCreated, config.SortOrderDesc, "Sort: Created ↓"},
+		{config.SortCreated, config.SortOrderAsc, "Sort: Created ↑"},
+		{config.SortNumber, config.SortOrderDesc, "Sort: Number ↓"},
+		{config.SortNumber, config.SortOrderAsc, "Sort: Number ↑"},
+		{config.SortComments, config.SortOrderDesc, "Sort: Comments ↓"},
+		{config.SortComments, config.SortOrderAsc, "Sort: Comments ↑"},
+	}
+
+	for _, tt := range tests {
+		result := FormatSortDisplay(tt.sort, tt.order)
+		if result != tt.expected {
+			t.Errorf("FormatSortDisplay(%q, %q) = %q, expected %q", tt.sort, tt.order, result, tt.expected)
+		}
+	}
+}

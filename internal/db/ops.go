@@ -6,6 +6,7 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+	"github.com/shepbook/ghissues/internal/config"
 	"github.com/shepbook/ghissues/internal/github"
 )
 
@@ -271,12 +272,37 @@ type IssueList struct {
 
 // ListIssues returns a list of issues for a repository, ordered by updated time descending
 func ListIssues(db *sql.DB, owner, repo string) ([]IssueList, error) {
-	query := `
+	return ListIssuesSorted(db, owner, repo, config.DefaultSort(), config.DefaultSortOrder())
+}
+
+// ListIssuesSorted returns a list of issues for a repository, sorted by the specified criteria
+func ListIssuesSorted(db *sql.DB, owner, repo string, sort config.SortOption, order config.SortOrder) ([]IssueList, error) {
+	// Map sort option to database column
+	columnMap := map[config.SortOption]string{
+		config.SortUpdated:  "updated_at",
+		config.SortCreated:  "created_at",
+		config.SortNumber:   "number",
+		config.SortComments: "comment_count",
+	}
+
+	column, ok := columnMap[sort]
+	if !ok {
+		column = "updated_at"
+	}
+
+	// Determine sort direction
+	direction := "DESC"
+	if order == config.SortOrderAsc {
+		direction = "ASC"
+	}
+
+	query := fmt.Sprintf(`
 		SELECT number, title, author_login, created_at, comment_count, state
 		FROM issues
 		WHERE owner = ? AND repo = ?
-		ORDER BY updated_at DESC;
-	`
+		ORDER BY %s %s;
+	`, column, direction)
+
 	rows, err := db.Query(query, owner, repo)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list issues: %w", err)

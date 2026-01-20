@@ -3,10 +3,10 @@
   "sessionId": "c7536d28-63ec-4b84-bac6-3daae3e551e2",
   "status": "running",
   "startedAt": "2026-01-20T08:35:53.379Z",
-  "updatedAt": "2026-01-20T08:44:07.891Z",
-  "currentIteration": 2,
+  "updatedAt": "2026-01-20T09:01:25.468Z",
+  "currentIteration": 5,
   "maxIterations": 10,
-  "tasksCompleted": 2,
+  "tasksCompleted": 5,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -29,20 +29,20 @@
       {
         "id": "US-003",
         "title": "Initial Issue Sync",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-004",
         "title": "Database Storage Location",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-005",
         "title": "Issue List View",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-006",
@@ -120,12 +120,42 @@
       "durationMs": 270826,
       "startedAt": "2026-01-20T08:39:36.037Z",
       "endedAt": "2026-01-20T08:44:06.863Z"
+    },
+    {
+      "iteration": 3,
+      "status": "completed",
+      "taskId": "US-004",
+      "taskTitle": "Database Storage Location",
+      "taskCompleted": true,
+      "durationMs": 171449,
+      "startedAt": "2026-01-20T08:44:07.877Z",
+      "endedAt": "2026-01-20T08:46:59.326Z"
+    },
+    {
+      "iteration": 4,
+      "status": "completed",
+      "taskId": "US-003",
+      "taskTitle": "Initial Issue Sync",
+      "taskCompleted": true,
+      "durationMs": 467216,
+      "startedAt": "2026-01-20T08:47:00.339Z",
+      "endedAt": "2026-01-20T08:54:47.555Z"
+    },
+    {
+      "iteration": 5,
+      "status": "completed",
+      "taskId": "US-005",
+      "taskTitle": "Issue List View",
+      "taskCompleted": true,
+      "durationMs": 395857,
+      "startedAt": "2026-01-20T08:54:48.580Z",
+      "endedAt": "2026-01-20T09:01:24.437Z"
     }
   ],
   "skippedTaskIds": [],
   "cwd": "/Users/shepbook/git/github-issues-tui",
   "activeTaskIds": [
-    "US-004"
+    "US-006"
   ],
-  "subagentPanelVisible": false
+  "subagentPanelVisible": true
 }

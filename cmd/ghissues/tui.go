@@ -27,11 +27,9 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 	}
 	owner, repo := parts[0], parts[1]
 
-	// Fetch issues from database
-	issues, err := db.ListIssues(database, owner, repo)
-	if err != nil {
-		return fmt.Errorf("failed to list issues: %w", err)
-	}
+	// Current sort settings (from config)
+	currentSort := cfg.Display.Sort
+	currentOrder := cfg.Display.SortOrder
 
 	// Create the tview application
 	app := tview.NewApplication()
@@ -46,39 +44,61 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 	issueList.SetTitle(" Issues ")
 	issueList.SetBorder(true)
 
-	// Format each issue for display based on configured columns
-	columns := cfg.Display.Columns
-	for _, issue := range issues {
-		text := formatIssueForDisplay(issue, columns)
-		secondary := formatIssueSecondary(issue, columns)
-		issueList.AddItem(text, secondary, rune('0'+issue.Number%10), nil)
-	}
-
-	// Set issue count in status
-	issueCount := len(issues)
-
-	// Create status bar
-	statusBar := tview.NewTextView()
-	statusBar.SetText(fmt.Sprintf(" ghissues | %s/%s | Issues: %d | j/k or arrows to navigate | q to quit | ? for help ",
-		owner, repo, issueCount))
-	statusBar.SetTextAlign(tview.AlignLeft)
-
 	// Create detail placeholder
 	var detailView *tview.TextView
 	detailView = tview.NewTextView()
-	detailView.SetText("Select an issue to view details\n\nPress 'r' to refresh issues from GitHub")
+	detailView.SetText("Select an issue to view details.\n\nPress 'r' to refresh issues from GitHub.")
 	detailView.SetTextAlign(tview.AlignCenter)
 	detailView.SetTitle(" Details ")
 	detailView.SetBorder(true)
 
-	// Create main layout with vertical split
-	flex := tview.NewFlex()
-	flex.SetDirection(tview.FlexColumn)
-	flex.AddItem(issueList, 0, 1, true)
-	flex.AddItem(detailView, 0, 2, false)
+	// Create status bar
+	statusBar := tview.NewTextView()
+	statusBar.SetTextAlign(tview.AlignLeft)
 
+	// Function to update status bar text
+	updateStatusBar := func() {
+		sortText := FormatSortDisplay(currentSort, currentOrder)
+		statusBar.SetText(fmt.Sprintf(" ghissues | %s/%s | %s | j/k or arrows to navigate | q to quit | s to sort | S to reverse | ? for help ",
+			owner, repo, sortText))
+	}
+
+	// Function to fetch and display issues
+	issues := []db.IssueList{}
+	displayIssues := func() {
+		// Fetch issues from database with current sort settings
+		issues, err = db.ListIssuesSorted(database, owner, repo, currentSort, currentOrder)
+		if err != nil {
+			// Just log the error, don't fail
+			_ = fmt.Errorf("failed to list issues: %w", err)
+			issues = []db.IssueList{}
+		}
+
+		// Clear and repopulate the list
+		issueList.Clear()
+		columns := cfg.Display.Columns
+		for _, issue := range issues {
+			text := formatIssueForDisplay(issue, columns)
+			secondary := formatIssueSecondary(issue, columns)
+			issueList.AddItem(text, secondary, rune('0'+issue.Number%10), nil)
+		}
+
+		// Update issue count in status
+		issueCount := len(issues)
+		updateStatusBar()
+
+		// Update detail view for first selection
+		if issueCount > 0 {
+			issue := issues[0]
+			detailText := formatIssueDetail(issue, owner, repo)
+			detailView.SetText(detailText)
+		} else {
+			detailView.SetText("No issues found.\n\nPress 'r' to sync issues from GitHub.")
+		}
+	}
+
+	// Create pages for modals
 	pages := tview.NewPages()
-	pages.AddPage("main", flex, true, true)
 
 	// Set up navigation handlers using tcell events
 	issueList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -91,6 +111,24 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 			case '?':
 				// Show help modal
 				showHelp(app, pages)
+				return nil
+			case 's':
+				// Cycle to next sort option
+				currentSort = CycleSortOption(currentSort)
+				cfg.Display.Sort = currentSort
+				if err := config.Save(cfg); err != nil {
+					_ = fmt.Errorf("failed to save config: %w", err)
+				}
+				displayIssues()
+				return nil
+			case 'S':
+				// Toggle sort order (reverse)
+				currentOrder = ToggleSortOrder(currentOrder)
+				cfg.Display.SortOrder = currentOrder
+				if err := config.Save(cfg); err != nil {
+					_ = fmt.Errorf("failed to save config: %w", err)
+				}
+				displayIssues()
 				return nil
 			}
 		case tcell.KeyEscape:
@@ -106,6 +144,9 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 		}
 		return event
 	})
+
+	// Initial load of issues
+	displayIssues()
 
 	// Update detail view when selection changes
 	issueList.SetChangedFunc(func(index int, mainText, secondaryText string, shortcut rune) {
@@ -129,6 +170,14 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 	header := tview.NewTextView()
 	header.SetText(fmt.Sprintf(" ghissues - %s/%s ", owner, repo))
 	header.SetTextAlign(tview.AlignCenter)
+
+	// Create main layout with vertical split
+	flex := tview.NewFlex()
+	flex.SetDirection(tview.FlexColumn)
+	flex.AddItem(issueList, 0, 1, true)
+	flex.AddItem(detailView, 0, 2, false)
+
+	pages.AddPage("main", flex, true, true)
 
 	// Main layout with header
 	mainFlex := tview.NewFlex()
@@ -236,6 +285,10 @@ func showHelp(app *tview.Application, pages *tview.Pages) {
    r              - Refresh issues from GitHub
    c              - Toggle columns configuration
 
+ Sorting:
+   s              - Cycle sort (updated → created → number → comments)
+   S              - Reverse sort order
+
  Other:
    ?              - Show this help
    q / Esc        - Quit help / Quit application
@@ -323,4 +376,58 @@ func ColumnWidth(columns []string, columnName string, issue db.IssueList) int {
 		return len(strconv.Itoa(issue.CommentCnt))
 	}
 	return 0
+}
+
+// SortOptionInfo contains display information for a sort option
+type SortOptionInfo struct {
+	Option config.SortOption
+	Name   string
+}
+
+// GetSortOptionInfo returns display information for a sort option
+func GetSortOptionInfo(option config.SortOption) SortOptionInfo {
+	switch option {
+	case config.SortUpdated:
+		return SortOptionInfo{Option: config.SortUpdated, Name: "Updated"}
+	case config.SortCreated:
+		return SortOptionInfo{Option: config.SortCreated, Name: "Created"}
+	case config.SortNumber:
+		return SortOptionInfo{Option: config.SortNumber, Name: "Number"}
+	case config.SortComments:
+		return SortOptionInfo{Option: config.SortComments, Name: "Comments"}
+	default:
+		return SortOptionInfo{Option: config.SortUpdated, Name: "Updated"}
+	}
+}
+
+// CycleSortOption returns the next sort option in the cycle
+func CycleSortOption(current config.SortOption) config.SortOption {
+	options := config.AllSortOptions()
+	for i, opt := range options {
+		if opt == current {
+			// Return the next option, wrapping around to the first
+			nextIndex := (i + 1) % len(options)
+			return options[nextIndex]
+		}
+	}
+	// If current is not found, return the first option
+	return options[0]
+}
+
+// ToggleSortOrder returns the opposite sort order
+func ToggleSortOrder(current config.SortOrder) config.SortOrder {
+	if current == config.SortOrderDesc {
+		return config.SortOrderAsc
+	}
+	return config.SortOrderDesc
+}
+
+// FormatSortDisplay returns a formatted string for the status bar
+func FormatSortDisplay(sort config.SortOption, order config.SortOrder) string {
+	info := GetSortOptionInfo(sort)
+	orderStr := "↓"
+	if order == config.SortOrderAsc {
+		orderStr = "↑"
+	}
+	return fmt.Sprintf("Sort: %s %s", info.Name, orderStr)
 }
