@@ -490,3 +490,33 @@ t\n- Updated help modal with dedicated comments view section\n\n**Files changed:
 - Added `RunTUIWithRefresh`, refresh state variables, 'r' key handler\n- `cmd/ghissues/main.go` - Updated to use `RunTUIWithRefresh`\n- `.ralph-tui/progress.md` - Added new patterns and US-009 entry\n\n### New Patterns Documented:\n- **Incremental Sync Pattern** - Use GitHub's `since` parameter for efficient syncing\n- **TUI Refresh Pattern** - Goroutine + QueueUpdateDraw for async UI operations\n- **ProgressCallback Pattern** - Callback type for progress reporting in long-running operations\n\n
 
 ---
+## ✓ Iteration 10 - US-013: Error Handling
+*2026-01-20T09:34:16.207Z (601s)*
+
+**Status:** Completed
+
+**Notes:**
+tance Criteria Met\n1. **Minor errors shown in status bar** - Network timeouts, rate limits display as `[ERROR] <message>`\n2. **Critical errors shown as modal** - Invalid tokens, database corruption use tview.Modal\n3. **Modal requires acknowledgment** - OK button required to dismiss\n4. **Actionable guidance** - Each error type includes specific action (e.g., \"Update your token\", \"Check your connection\")\n5. **Network error suggestions** - \"Check your internet connection and try again\"\n
+
+---
+
+## 2026-01-20 - US-010
+- What was implemented:
+  - Added FormatRelativeTime function to format timestamps as relative time (e.g., "5 minutes ago", "3 days ago")
+  - Added GetLastSyncedDisplay function returning "Last synced: <relative time>"
+  - Updated status bar to show last synced time in issue list view
+  - Added lastSynced state variable that gets updated after each displayIssues call
+  - Timestamp is already stored via synced_at column, GetLastSyncTime function already exists
+
+- Files changed:
+  - `cmd/ghissues/tui.go` (added FormatRelativeTime, GetLastSyncedDisplay functions, updated status bar)
+  - `cmd/ghissues/tui_test.go` (added TestFormatRelativeTime, TestGetLastSyncedDisplay tests)
+
+- **Learnings:**
+  - Patterns discovered:
+    - Relative Time Pattern: Use time.Since() and time.Duration for formatting relative times
+    - State Variable Pattern: Declare state variables before closures that need access
+  - Gotchas encountered:
+    - Future timestamps need to be handled (show as "just now")
+    - Test timestamps using Add() need correct sign (negative for past, positive for future)
+---

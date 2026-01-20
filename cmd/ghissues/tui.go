@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/gdamore/tcell/v2"
@@ -52,6 +53,9 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 	// Refresh state - must be declared before updateStatusBar
 	isRefreshing := false
 	refreshStatus := ""
+
+	// Last synced timestamp - must be declared before updateStatusBar
+	lastSynced := ""
 
 	// Create the tview application
 	app := tview.NewApplication()
@@ -115,8 +119,9 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 			} else {
 				markdownText = " [Raw]"
 			}
-			statusBar.SetText(fmt.Sprintf(" ghissues | %s/%s | %s | %sj/k or arrows to navigate | q to quit | s to sort | S to reverse | ? for help | m for markdown toggle | r to refresh ",
-				owner, repo, sortText, markdownText))
+			lastSyncedText := GetLastSyncedDisplay(lastSynced)
+			statusBar.SetText(fmt.Sprintf(" ghissues | %s/%s | %s | %s | %sj/k or arrows to navigate | q to quit | s to sort | S to reverse | ? for help | m for markdown toggle | r to refresh ",
+				owner, repo, lastSyncedText, sortText, markdownText))
 		}
 	}
 
@@ -199,6 +204,9 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 			_ = fmt.Errorf("failed to list issues: %w", err)
 			issues = []db.IssueList{}
 		}
+
+		// Fetch last sync time for status bar
+		lastSynced, _ = db.GetLastSyncTime(database, owner, repo)
 
 		// Clear and repopulate the list
 		issueList.Clear()
@@ -580,6 +588,65 @@ func formatDate(dateStr string) string {
 		return dateStr[:10]
 	}
 	return dateStr
+}
+
+// FormatRelativeTime formats a timestamp as a relative time string
+// e.g., "5 minutes ago", "2 hours ago", "3 days ago"
+// Returns "never" for empty or invalid timestamps
+func FormatRelativeTime(timestamp string) string {
+	if timestamp == "" {
+		return "never"
+	}
+
+	// Try to parse the timestamp
+	t, err := time.Parse(time.RFC3339, timestamp)
+	if err != nil {
+		return "never"
+	}
+
+	now := time.Now()
+	diff := now.Sub(t)
+
+	// Handle future timestamps (show as "just now")
+	if diff < 0 {
+		return "just now"
+	}
+
+	// Just now (less than 1 minute)
+	if diff < time.Minute {
+		return "just now"
+	}
+
+	// Minutes
+	if diff < time.Hour {
+		mins := int(diff.Minutes())
+		if mins == 1 {
+			return "1 minute ago"
+		}
+		return fmt.Sprintf("%d minutes ago", mins)
+	}
+
+	// Hours
+	if diff < 24*time.Hour {
+		hours := int(diff.Hours())
+		if hours == 1 {
+			return "1 hour ago"
+		}
+		return fmt.Sprintf("%d hours ago", hours)
+	}
+
+	// Days
+	days := int(diff.Hours() / 24)
+	if days == 1 {
+		return "1 day ago"
+	}
+	return fmt.Sprintf("%d days ago", days)
+}
+
+// GetLastSyncedDisplay returns a formatted string for the status bar
+// showing when the data was last synced
+func GetLastSyncedDisplay(timestamp string) string {
+	return fmt.Sprintf("Last synced: %s", FormatRelativeTime(timestamp))
 }
 
 // showHelp shows a help modal

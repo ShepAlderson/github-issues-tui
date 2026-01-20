@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"time"
 
 	"github.com/shepbook/ghissues/internal/config"
 	"github.com/shepbook/ghissues/internal/db"
@@ -397,5 +398,93 @@ func TestFormatCommentsMarkdown(t *testing.T) {
 	rawResult := formatComments(comments, false)
 	if !contains(rawResult, "**bold**") {
 		t.Error("formatComments should show raw markdown when disabled")
+	}
+}
+
+func TestFormatRelativeTime(t *testing.T) {
+	now := time.Now()
+
+	tests := []struct {
+		name     string
+		timestamp string
+		expected string
+	}{
+		{
+			name:     "just now",
+			timestamp: now.Add(-30 * time.Second).Format(time.RFC3339),
+			expected: "just now",
+		},
+		{
+			name:     "one minute ago",
+			timestamp: now.Add(-1 * time.Minute).Format(time.RFC3339),
+			expected: "1 minute ago",
+		},
+		{
+			name:     "few minutes ago",
+			timestamp: now.Add(-5 * time.Minute).Format(time.RFC3339),
+			expected: "5 minutes ago",
+		},
+		{
+			name:     "one hour ago",
+			timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339),
+			expected: "1 hour ago",
+		},
+		{
+			name:     "few hours ago",
+			timestamp: now.Add(-3 * time.Hour).Format(time.RFC3339),
+			expected: "3 hours ago",
+		},
+		{
+			name:     "one day ago",
+			timestamp: now.Add(-24 * time.Hour).Format(time.RFC3339),
+			expected: "1 day ago",
+		},
+		{
+			name:     "few days ago",
+			timestamp: now.Add(-3 * 24 * time.Hour).Format(time.RFC3339),
+			expected: "3 days ago",
+		},
+		{
+			name:     "empty timestamp",
+			timestamp: "",
+			expected: "never",
+		},
+		{
+			name:     "invalid timestamp",
+			timestamp: "not-a-date",
+			expected: "never",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FormatRelativeTime(tt.timestamp)
+			if result != tt.expected {
+				t.Errorf("FormatRelativeTime(%q) = %q, expected %q", tt.timestamp, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetLastSyncedDisplay(t *testing.T) {
+	now := time.Now()
+
+	// Test with recent timestamp
+	timestamp := now.Add(-5 * time.Minute).Format(time.RFC3339)
+	result := GetLastSyncedDisplay(timestamp)
+	if !contains(result, "Last synced:") {
+		t.Errorf("GetLastSyncedDisplay(%q) should contain 'Last synced:', got %q", timestamp, result)
+	}
+	if !contains(result, "5 minutes ago") {
+		t.Errorf("GetLastSyncedDisplay(%q) should contain '5 minutes ago', got %q", timestamp, result)
+	}
+
+	// Test with empty timestamp
+	result = GetLastSyncedDisplay("")
+	if !contains(result, "Last synced:") {
+		t.Errorf("GetLastSyncedDisplay('') should contain 'Last synced:', got %q", result)
+	}
+	if !contains(result, "never") {
+		t.Errorf("GetLastSyncedDisplay('') should contain 'never', got %q", result)
 	}
 }
