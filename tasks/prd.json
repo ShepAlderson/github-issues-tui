@@ -1,319 +1,81 @@
 {
-  "name": "ghissues - GitHub Issues TUI",
-  "branchName": "feature/ghissues-tui",
+  "name": "Bug Fix: Keyboard Input Not Working in TUI",
+  "description": "The ghissues TUI successfully downloads and displays issues, but keyboard input fails to work when the application opens. This document outlines the investigation, diagnosis, and fix for this critical input handling issue.",
+  "branchName": "fix/keyboard-input",
   "userStories": [
     {
-      "id": "US-001",
-      "title": "First-Time Setup",
-      "description": "As a user running ghissues for the first time, I want to be prompted to configure the repository and authentication so that I can quickly get started without manually editing config files",
+      "id": "US-1",
+      "title": "Diagnose Input Capture Failure",
+      "description": "Diagnose Input Capture Failure",
       "acceptanceCriteria": [
-        "Interactive prompt asks for GitHub repository (owner/repo format)",
-        "Interactive prompt asks for authentication method preference",
-        "Configuration is saved to ~/.config/ghissues/config.toml",
-        "User can skip interactive setup if config file already exists",
-        "User can re-run setup with ghissues config command"
+        "Add temporary debug logging to `Update()` method that outputs message types to stderr",
+        "Run the application with `./ghissues --db ./test-db`",
+        "Press various keys (j, k, Ctrl+C) and observe stderr output",
+        "Confirm whether `tea.KeyMsg` events appear in the log",
+        "Try mouse scrolling to confirm other event types are captured",
+        "Debug logging can be easily removed after diagnosis"
       ],
       "priority": 1,
-      "passes": true,
-      "dependsOn": [],
-      "labels": [
-        "setup",
-        "config"
-      ],
-      "completionNotes": "Completed by agent"
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
     },
     {
-      "id": "US-002",
-      "title": "GitHub Authentication",
-      "description": "As a user, I want to authenticate with GitHub using multiple methods so that I can use whichever method fits my workflow",
+      "id": "US-2",
+      "title": "Fix Stdin Input Initialization",
+      "description": "Fix Stdin Input Initialization",
       "acceptanceCriteria": [
-        "Authentication attempts in order: environment variable (GITHUB_TOKEN) -> config file -> gh CLI token",
-        "Clear error message if no valid authentication found",
-        "Token is validated on first API call with helpful error if invalid",
-        "Config file token is stored securely (file permissions 0600)"
-      ],
-      "priority": 1,
-      "passes": true,
-      "dependsOn": [
-        "US-001"
-      ],
-      "labels": [
-        "auth",
-        "security"
-      ],
-      "completionNotes": "Completed by agent"
-    },
-    {
-      "id": "US-003",
-      "title": "Initial Issue Sync",
-      "description": "As a user, I want to fetch all open issues from my configured repository so that I can review them offline",
-      "acceptanceCriteria": [
-        "Progress bar displays during fetch showing issues fetched / total",
-        "All open issues are fetched (handles pagination automatically)",
-        "Issues stored in local libsql database at configured path",
-        "Issue data includes: number, title, body, author, created date, updated date, comment count, labels, assignees",
-        "Comments for each issue are fetched and stored",
-        "Sync can be cancelled with Ctrl+C gracefully"
-      ],
-      "priority": 1,
-      "passes": true,
-      "dependsOn": [
-        "US-002",
-        "US-004"
-      ],
-      "labels": [
-        "sync",
-        "api"
-      ],
-      "completionNotes": "Completed by agent"
-    },
-    {
-      "id": "US-004",
-      "title": "Database Storage Location",
-      "description": "As a user, I want to control where the local database is stored so that I can organize my data as I prefer",
-      "acceptanceCriteria": [
-        "Default location is .ghissues.db in current working directory",
-        "Override via --db flag or database.path in config file",
-        "Flag takes precedence over config file",
-        "Parent directories are created if they don't exist",
-        "Clear error if path is not writable"
-      ],
-      "priority": 1,
-      "passes": true,
-      "dependsOn": [
-        "US-001"
-      ],
-      "labels": [
-        "database",
-        "config"
-      ],
-      "completionNotes": "Completed by agent"
-    },
-    {
-      "id": "US-005",
-      "title": "Issue List View",
-      "description": "As a user, I want to see a list of all synced issues so that I can browse and select issues to review",
-      "acceptanceCriteria": [
-        "Issues displayed in left panel (vertical split layout)",
-        "Configurable columns with defaults: number, title, author, date, comment count",
-        "Column configuration stored in config file under display.columns",
-        "Currently selected issue is highlighted",
-        "Vim keys (j/k) and arrow keys for navigation",
-        "Issue count shown in status area"
+        "Add explicit stdin input configuration to bubbletea program initialization",
+        "All keyboard inputs work: j/k, arrows, Ctrl+C, shortcuts",
+        "Mouse scrolling continues to work (no regression)",
+        "Fix works across different terminal environments (iTerm2, Terminal.app, Ghostty, etc.)",
+        "No performance impact from the change"
       ],
       "priority": 2,
-      "passes": true,
-      "dependsOn": [
-        "US-003"
-      ],
-      "labels": [
-        "tui",
-        "list"
-      ],
-      "completionNotes": "Completed by agent"
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
     },
     {
-      "id": "US-006",
-      "title": "Issue Sorting",
-      "description": "As a user, I want to sort issues by different criteria so that I can prioritize my review",
+      "id": "US-3",
+      "title": "Verify All Keybindings Work",
+      "description": "Verify All Keybindings Work",
       "acceptanceCriteria": [
-        "Default sort: most recently updated first",
-        "Available sort options: updated date, created date, issue number, comment count",
-        "Sort order toggled with keybinding (s to cycle, S to reverse)",
-        "Current sort shown in status bar",
-        "Sort preference persisted to config file"
-      ],
-      "priority": 2,
-      "passes": true,
-      "dependsOn": [
-        "US-005"
-      ],
-      "labels": [
-        "tui",
-        "list"
-      ],
-      "completionNotes": "Completed by agent"
-    },
-    {
-      "id": "US-007",
-      "title": "Issue Detail View",
-      "description": "As a user, I want to view the full details of a selected issue so that I can understand the issue context",
-      "acceptanceCriteria": [
-        "Right panel shows selected issue details",
-        "Header shows: issue number, title, author, status, dates",
-        "Body rendered with glamour (charmbracelet markdown renderer)",
-        "Toggle between raw markdown and rendered with keybinding (m)",
-        "Labels and assignees displayed if present",
-        "Scrollable if content exceeds panel height",
-        "Enter on issue list opens dedicated comments view"
-      ],
-      "priority": 2,
-      "passes": true,
-      "dependsOn": [
-        "US-005"
-      ],
-      "labels": [
-        "tui",
-        "detail"
-      ],
-      "completionNotes": "Completed by agent"
-    },
-    {
-      "id": "US-008",
-      "title": "Comments View",
-      "description": "As a user, I want to view all comments on an issue so that I can follow the discussion",
-      "acceptanceCriteria": [
-        "Drill-down view replaces main interface when activated",
-        "Shows issue title/number as header",
-        "Comments displayed chronologically",
-        "Each comment shows: author, date, body (markdown rendered)",
-        "Toggle markdown rendering with m key",
-        "Scrollable comment list",
-        "Esc or q returns to issue list view"
-      ],
-      "priority": 2,
-      "passes": true,
-      "dependsOn": [
-        "US-007"
-      ],
-      "labels": [
-        "tui",
-        "comments"
-      ],
-      "completionNotes": "Completed by agent"
-    },
-    {
-      "id": "US-009",
-      "title": "Data Refresh",
-      "description": "As a user, I want to update my local issue cache so that I have the latest issue data",
-      "acceptanceCriteria": [
-        "Auto-refresh triggered on app launch",
-        "Manual refresh with keybinding (r or R)",
-        "Progress bar shown during refresh",
-        "Only fetches issues updated since last sync (incremental)",
-        "Handles deleted issues (removes from local db)",
-        "Handles new comments on existing issues"
-      ],
-      "priority": 2,
-      "passes": true,
-      "dependsOn": [
-        "US-003"
-      ],
-      "labels": [
-        "sync",
-        "api"
-      ],
-      "completionNotes": "Completed by agent"
-    },
-    {
-      "id": "US-010",
-      "title": "Last Synced Indicator",
-      "description": "As a user, I want to know when my data was last updated so that I understand how current my offline data is",
-      "acceptanceCriteria": [
-        "Status bar shows Last synced: <relative time> (e.g., 5 minutes ago)",
-        "Timestamp stored in database metadata table",
-        "Updates after each successful sync"
+        "Basic navigation: `j`/`k` keys move cursor up/down in issue list",
+        "Arrow keys: `↓`/`↑` also navigate the list",
+        "Sort controls: `s` cycles sort field, `S` toggles sort order",
+        "View toggles: `m` toggles markdown rendering mode",
+        "Help overlay: `?` opens and closes help screen",
+        "Comments view: `Enter` opens comment view for selected issue",
+        "Return to list: `q` or `Esc` returns from comments/help views",
+        "Quit application: `q` quits from list view, `Ctrl+C` quits from any view",
+        "Detail scrolling: `PgUp`/`PgDn` scroll the detail panel",
+        "Mouse scrolling: Continues to work (no regression)"
       ],
       "priority": 3,
-      "passes": true,
-      "dependsOn": [
-        "US-009"
-      ],
-      "labels": [
-        "tui",
-        "status"
-      ],
-      "completionNotes": "Completed by agent"
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
     },
     {
-      "id": "US-011",
-      "title": "Keybinding Help",
-      "description": "As a user, I want to discover available keybindings so that I can use the app effectively",
+      "id": "US-4",
+      "title": "Alternative Diagnostics (If Primary Fix Fails)",
+      "description": "Alternative Diagnostics (If Primary Fix Fails)",
       "acceptanceCriteria": [
-        "? opens help overlay with all keybindings organized by context",
-        "Persistent footer shows context-sensitive common keys",
-        "Footer updates based on current view (list, detail, comments)",
-        "Help overlay dismissible with ? or Esc"
+        "Terminal capability check added before TUI launch",
+        "Clear error message if stdin is not a terminal",
+        "Option to test with different bubbletea initialization flags",
+        "Documented fallback configurations for edge cases"
       ],
-      "priority": 3,
-      "passes": true,
-      "dependsOn": [
-        "US-005"
-      ],
-      "labels": [
-        "tui",
-        "help"
-      ],
-      "completionNotes": "Completed by agent"
-    },
-    {
-      "id": "US-012",
-      "title": "Color Themes",
-      "description": "As a user, I want to choose a color theme so that the app matches my terminal aesthetic",
-      "acceptanceCriteria": [
-        "Multiple built-in themes: default, dracula, gruvbox, nord, solarized-dark, solarized-light",
-        "Theme selected via config file display.theme",
-        "Theme can be previewed/changed with command ghissues themes",
-        "Themes use lipgloss for consistent styling"
-      ],
-      "priority": 3,
-      "passes": true,
-      "dependsOn": [
-        "US-005"
-      ],
-      "labels": [
-        "tui",
-        "theme"
-      ],
-      "completionNotes": "Completed by agent"
-    },
-    {
-      "id": "US-013",
-      "title": "Error Handling",
-      "description": "As a user, I want to see clear error messages so that I can understand and resolve issues",
-      "acceptanceCriteria": [
-        "Minor errors (network timeout, rate limit) shown in status bar",
-        "Critical errors (invalid token, database corruption) shown as modal",
-        "Modal errors require acknowledgment before continuing",
-        "Errors include actionable guidance where possible",
-        "Network errors suggest checking connectivity and retrying"
-      ],
-      "priority": 2,
-      "passes": true,
-      "dependsOn": [
-        "US-005"
-      ],
-      "labels": [
-        "tui",
-        "errors"
-      ],
-      "completionNotes": "Completed by agent"
-    },
-    {
-      "id": "US-014",
-      "title": "Multi-Repository Configuration",
-      "description": "As a user, I want to configure multiple repositories so that I can review issues from different projects",
-      "acceptanceCriteria": [
-        "Config file supports multiple repository entries",
-        "Each repository has its own database file",
-        "ghissues --repo owner/repo selects which repo to view",
-        "Default repository can be set in config",
-        "ghissues repos lists configured repositories"
-      ],
-      "priority": 3,
-      "passes": true,
-      "dependsOn": [
-        "US-001",
-        "US-004"
-      ],
-      "labels": [
-        "config",
-        "multi-repo"
-      ],
-      "completionNotes": "Completed by agent"
+      "priority": 4,
+      "passes": false,
+      "labels": [],
+      "dependsOn": []
     }
   ],
   "metadata": {
-    "updatedAt": "2026-01-19T23:40:02.386Z"
+    "createdAt": "2026-01-20T03:03:47.480Z",
+    "version": "1.0.0",
+    "updatedAt": "2026-01-20T03:04:24.575Z"
   }
 }

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -77,6 +78,9 @@ func (m Model) Init() tea.Cmd {
 
 // Update handles messages and updates the model
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// DEBUG: Log all incoming messages
+	fmt.Fprintf(os.Stderr, "DEBUG: Received message type: %T\n", msg)
+
 	switch msg := msg.(type) {
 	case StatusErrorMsg:
 		m.statusError = msg.Err
