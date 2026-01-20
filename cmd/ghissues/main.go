@@ -1,13 +1,18 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 
+	"github.com/shepbook/ghissues/internal/auth"
 	"github.com/shepbook/ghissues/internal/config"
 	"github.com/shepbook/ghissues/internal/database"
+	"github.com/shepbook/ghissues/internal/github"
 	"github.com/shepbook/ghissues/internal/setup"
+	"github.com/shepbook/ghissues/internal/storage"
+	"github.com/shepbook/ghissues/internal/sync"
 )
 
 const version = "0.1.0"
@@ -99,10 +104,92 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Get authentication token
+	token, source, err := auth.GetToken(configPath, "")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to get authentication: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Initialize database
+	db, err := storage.InitializeDatabase(dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize database: %v\n", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+
+	// Determine which repository to use
+	repo := cfg.Default.Repository
+	if repoFlag != "" {
+		if err := github.ValidateRepo(repoFlag); err != nil {
+			fmt.Fprintf(os.Stderr, "Invalid repository: %v\n", err)
+			os.Exit(1)
+		}
+		repo = repoFlag
+	} else {
+		// Validate the configured repository
+		if err := github.ValidateRepo(repo); err != nil {
+			fmt.Fprintf(os.Stderr, "Invalid repository in config: %v\n", err)
+			fmt.Fprintln(os.Stderr, "Run 'ghissues config' to reconfigure.")
+			os.Exit(1)
+		}
+	}
+
+	// Create GitHub client
+	ghClient := github.NewClient(token, repo, "")
+
+	// Create syncer
+	syncer := sync.NewSyncer(db, ghClient, repo, false)
+
+	// Handle sync command
+	if command == "sync" {
+		handleSyncCommand(syncer)
+		return
+	}
+
+	// Auto-sync on first run or if database is empty
+	issues, err := storage.GetIssues(db)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to check database: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(issues) == 0 {
+		fmt.Println("No issues found. Running initial sync...")
+		handleSyncCommand(syncer)
+	}
+
 	// TODO: Implement main TUI application
-	fmt.Printf("Configuration loaded for repository: %s\n", cfg.Default.Repository)
+	fmt.Printf("\nConfiguration loaded for repository: %s\n", repo)
 	fmt.Printf("Database path: %s\n", dbPath)
-	fmt.Println("TUI application not yet implemented.")
+	fmt.Printf("Authentication: %s\n", source)
+	fmt.Printf("Issues in database: %d\n", len(issues))
+	fmt.Println("\nTUI application not yet implemented.")
+}
+
+func handleSyncCommand(syncer *sync.Syncer) {
+	fmt.Println("Syncing issues from GitHub...")
+	result, err := syncer.Run(context.Background())
+	if err != nil && !result.Cancelled {
+		fmt.Fprintf(os.Stderr, "\nSync failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	if result.Cancelled {
+		fmt.Println("Sync cancelled.")
+		return
+	}
+
+	fmt.Printf("\n✓ Sync completed in %v\n", result.Duration)
+	fmt.Printf("  Issues stored: %d\n", result.IssuesStored)
+	fmt.Printf("  Comments fetched: %d\n", result.CommentsFetched)
+	if len(result.Errors) > 0 {
+		fmt.Printf("  Errors: %d\n", len(result.Errors))
+		for _, e := range result.Errors {
+			fmt.Fprintf(os.Stderr, "    - %v\n", e)
+		}
+	}
 }
 
 func handleConfigCommand(configPath string) {
@@ -117,8 +204,7 @@ func handleConfigCommand(configPath string) {
 func printHelp() {
 	fmt.Printf("ghissues - A terminal-based GitHub issues viewer\n\n")
 	fmt.Printf("Usage:\n")
-	fmt.Printf("  ghissues [flags]\n")
-	fmt.Printf("  ghissues config\n\n")
+	fmt.Printf("  ghissues [flags] [command]\n\n")
 	fmt.Printf("Flags:\n")
 	fmt.Printf("  --config string   Path to config file (default: ~/.config/ghissues/config.toml)\n")
 	fmt.Printf("  --db string       Path to database file (default: .ghissues.db)\n")
@@ -127,4 +213,5 @@ func printHelp() {
 	fmt.Printf("  --version         Show version information\n\n")
 	fmt.Printf("Commands:\n")
 	fmt.Printf("  config            Run interactive configuration\n")
+	fmt.Printf("  sync              Sync issues from GitHub (also runs automatically on first use)\n")
 }
