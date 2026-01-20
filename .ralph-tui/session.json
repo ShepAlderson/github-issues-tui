@@ -3,10 +3,10 @@
   "sessionId": "ac2995b6-e341-4f97-ae61-eb13d9b30fbf",
   "status": "running",
   "startedAt": "2026-01-20T20:53:33.081Z",
-  "updatedAt": "2026-01-20T21:07:42.991Z",
-  "currentIteration": 1,
+  "updatedAt": "2026-01-20T21:14:44.236Z",
+  "currentIteration": 2,
   "maxIterations": 10,
-  "tasksCompleted": 1,
+  "tasksCompleted": 2,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -23,8 +23,8 @@
       {
         "id": "US-002",
         "title": "GitHub Authentication",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-003",
@@ -110,12 +110,22 @@
       "durationMs": 837893,
       "startedAt": "2026-01-20T20:53:37.396Z",
       "endedAt": "2026-01-20T21:07:35.289Z"
+    },
+    {
+      "iteration": 2,
+      "status": "completed",
+      "taskId": "US-002",
+      "taskTitle": "GitHub Authentication",
+      "taskCompleted": true,
+      "durationMs": 426878,
+      "startedAt": "2026-01-20T21:07:36.316Z",
+      "endedAt": "2026-01-20T21:14:43.194Z"
     }
   ],
   "skippedTaskIds": [],
   "cwd": "/Users/shepbook/git/github-issues-tui",
   "activeTaskIds": [
-    "US-002"
+    "US-004"
   ],
   "subagentPanelVisible": true
 }

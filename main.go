@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/shepbook/git/github-issues-tui/internal/auth"
 	"github.com/shepbook/git/github-issues-tui/internal/cmd"
@@ -18,6 +19,17 @@ func main() {
 }
 
 func runMain(args []string, configPath string, input io.Reader, output io.Writer) error {
+	// Parse flags
+	var dbFlag string
+	if len(args) >= 2 && args[1] == "--db" {
+		if len(args) < 3 {
+			return fmt.Errorf("--db flag requires a path argument")
+		}
+		dbFlag = args[2]
+		// Remove the flag from args for further processing
+		args = append(args[:1], args[3:]...)
+	}
+
 	// Check number of arguments
 	if len(args) > 2 {
 		return fmt.Errorf("too many arguments")
@@ -58,6 +70,14 @@ func runMain(args []string, configPath string, input io.Reader, output io.Writer
 		return fmt.Errorf("config file exists but could not be loaded")
 	}
 
+	// Determine database path with priority: flag > config > default
+	dbPath := getDatabasePath(cfg, dbFlag)
+
+	// Ensure database path is valid and parent directories exist
+	if err := ensureDatabasePath(dbPath); err != nil {
+		return fmt.Errorf("database path error: %w", err)
+	}
+
 	// Get GitHub token with proper priority and validation
 	token, source, err := auth.GetGitHubToken(cfg)
 	if err != nil {
@@ -76,6 +96,7 @@ func runMain(args []string, configPath string, input io.Reader, output io.Writer
 	// TODO: In future stories, we'll launch the TUI here
 	fmt.Fprintf(output, "Configuration loaded successfully!\n")
 	fmt.Fprintf(output, "Repository: %s\n", cfg.Repository)
+	fmt.Fprintf(output, "Database: %s\n", dbPath)
 	fmt.Fprintf(output, "Authentication: %s token (validated)\n", source)
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "TUI implementation coming in future stories...")
@@ -91,4 +112,43 @@ func getConfigFilePath() string {
 
 	// Use default location
 	return config.GetDefaultConfigPath()
+}
+
+// getDatabasePath determines the database path with priority: flag > config > default
+func getDatabasePath(cfg *config.Config, flagPath string) string {
+	// Priority 1: Command line flag
+	if flagPath != "" {
+		return flagPath
+	}
+
+	// Priority 2: Config file
+	if cfg != nil && cfg.Database.Path != "" {
+		return cfg.Database.Path
+	}
+
+	// Priority 3: Default location (.ghissues.db in current directory)
+	cwd, _ := os.Getwd()
+	return filepath.Join(cwd, ".ghissues.db")
+}
+
+// ensureDatabasePath ensures the parent directory for the database path exists and is writable
+func ensureDatabasePath(dbPath string) error {
+	// Get the parent directory
+	dir := filepath.Dir(dbPath)
+
+	// Create parent directories if they don't exist
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create parent directories: %w", err)
+	}
+
+	// Check if the directory is writable by trying to create a temporary file
+	tmpFile := filepath.Join(dir, ".ghissues-write-test")
+	f, err := os.Create(tmpFile)
+	if err != nil {
+		return fmt.Errorf("database path is not writable: %w", err)
+	}
+	f.Close()
+	os.Remove(tmpFile)
+
+	return nil
 }
