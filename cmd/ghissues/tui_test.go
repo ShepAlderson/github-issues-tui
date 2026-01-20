@@ -346,3 +346,56 @@ func TestFormatSortDisplay(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatComments(t *testing.T) {
+	comments := []db.Comment{
+		{ID: 1, Body: "Test comment", Author: "user1", CreatedAt: "2024-01-15T10:30:00Z"},
+		{ID: 2, Body: "Another comment", Author: "user2", CreatedAt: "2024-01-16T14:20:00Z"},
+	}
+
+	result := formatComments(comments, true)
+
+	if !contains(result, "2 Comment(s)") {
+		t.Error("formatComments should show comment count")
+	}
+	if !contains(result, "user1") {
+		t.Error("formatComments should show first comment author")
+	}
+	if !contains(result, "user2") {
+		t.Error("formatComments should show second comment author")
+	}
+	if !contains(result, "2024-01-15") {
+		t.Error("formatComments should show first comment date")
+	}
+	if !contains(result, "Test comment") {
+		t.Error("formatComments should show first comment body")
+	}
+}
+
+func TestFormatCommentsEmpty(t *testing.T) {
+	comments := []db.Comment{}
+
+	result := formatComments(comments, true)
+
+	if result != "No comments yet." {
+		t.Errorf("formatComments with no comments = %q, expected %q", result, "No comments yet.")
+	}
+}
+
+func TestFormatCommentsMarkdown(t *testing.T) {
+	comments := []db.Comment{
+		{ID: 1, Body: "**bold** and *italic*", Author: "user1", CreatedAt: "2024-01-15T10:30:00Z"},
+	}
+
+	// Test with markdown rendered
+	renderedResult := formatComments(comments, true)
+	if !contains(renderedResult, "bold") || !contains(renderedResult, "italic") {
+		t.Error("formatComments should render markdown when enabled")
+	}
+
+	// Test with raw text
+	rawResult := formatComments(comments, false)
+	if !contains(rawResult, "**bold**") {
+		t.Error("formatComments should show raw markdown when disabled")
+	}
+}

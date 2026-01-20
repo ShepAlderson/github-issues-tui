@@ -64,37 +64,34 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 	statusBar := tview.NewTextView()
 	statusBar.SetTextAlign(tview.AlignLeft)
 
+	// Comments view state - must be declared before updateStatusBar
+	commentsMarkdownRendered := true
+	inCommentsView := false
+
 	// Function to update status bar text
 	updateStatusBar := func() {
-		sortText := FormatSortDisplay(currentSort, currentSortOrder)
-		markdownText := ""
-		if markdownRendered {
-			markdownText = " [Markdown]"
+		if inCommentsView {
+			// Comments view status bar
+			markdownText := ""
+			if commentsMarkdownRendered {
+				markdownText = " [Markdown]"
+			} else {
+				markdownText = " [Raw]"
+			}
+			statusBar.SetText(fmt.Sprintf(" ghissues | %s/%s | Comments View%s | q or Esc to return | m for markdown toggle ",
+				owner, repo, markdownText))
 		} else {
-			markdownText = " [Raw]"
+			// Issue list status bar
+			sortText := FormatSortDisplay(currentSort, currentSortOrder)
+			markdownText := ""
+			if markdownRendered {
+				markdownText = " [Markdown]"
+			} else {
+				markdownText = " [Raw]"
+			}
+			statusBar.SetText(fmt.Sprintf(" ghissues | %s/%s | %s | %sj/k or arrows to navigate | q to quit | s to sort | S to reverse | ? for help | m for markdown toggle ",
+				owner, repo, sortText, markdownText))
 		}
-		statusBar.SetText(fmt.Sprintf(" ghissues | %s/%s | %s | %sj/k or arrows to navigate | q to quit | s to sort | S to reverse | ? for help | m for markdown toggle ",
-			owner, repo, sortText, markdownText))
-	}
-
-	// Function to render markdown
-	renderMarkdown := func(body string) string {
-		if body == "" {
-			return "_No description provided._"
-		}
-		// Use glamour to render markdown with terminal styling
-		renderer, err := glamour.NewTermRenderer(
-			glamour.WithAutoStyle(),
-		)
-		if err != nil {
-			// Fall back to raw text if rendering fails
-			return body
-		}
-		rendered, err := renderer.Render(body)
-		if err != nil {
-			return body
-		}
-		return rendered
 	}
 
 	// Function to format issue detail with full information
@@ -166,27 +163,6 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 		return sb.String()
 	}
 
-	// Function to format comments for display
-	formatComments := func(comments []db.Comment) string {
-		if len(comments) == 0 {
-			return "No comments yet."
-		}
-
-		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("%d Comment(s)\n\n", len(comments)))
-
-		for i, comment := range comments {
-			if i > 0 {
-				sb.WriteString("\n")
-			}
-			sb.WriteString(fmt.Sprintf("--- Comment #%d ---\n", i+1))
-			sb.WriteString(fmt.Sprintf("By: %s  |  Date: %s\n\n", comment.Author, formatDate(comment.CreatedAt)))
-			sb.WriteString(comment.Body)
-		}
-
-		return sb.String()
-	}
-
 	// Function to fetch and display issues
 	issues := []db.IssueList{}
 	displayIssues := func() {
@@ -225,40 +201,94 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 	// Create pages for modals
 	pages := tview.NewPages()
 
-	// Show comments modal
+	// Comments view TextView - state variables are declared earlier
+	var commentsView *tview.TextView
+
+	// Return to issue list from comments view
+	returnToIssueList := func() {
+		pages.SwitchToPage("main")
+		inCommentsView = false
+		commentsMarkdownRendered = true // Reset markdown state for next time
+		updateStatusBar()
+		app.SetFocus(issueList)
+	}
+
+	// Show comments view (drill-down)
 	showComments := func(issueNum int) {
+		// Get issue details for header
+		detail, err := db.GetIssueDetail(database, owner, repo, issueNum)
+		if err != nil {
+			detail = nil
+		}
+
 		comments, err := db.GetComments(database, issueNum)
 		if err != nil {
 			commentsText := fmt.Sprintf("Error loading comments: %v", err)
-			modal := tview.NewModal()
-			modal.SetText(commentsText)
-			modal.AddButtons([]string{"Close"})
-			modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-				pages.SwitchToPage("main")
-				app.SetFocus(issueList)
-			})
-			pages.AddPage("comments", modal, true, true)
+			if commentsView == nil {
+				commentsView = tview.NewTextView()
+			}
+			commentsView.SetText(commentsText)
+			commentsView.SetTextAlign(tview.AlignLeft)
+			commentsView.SetScrollable(true)
 			pages.SwitchToPage("comments")
 			return
 		}
 
-		commentsText := formatComments(comments)
+		issueTitle := ""
+		if detail != nil {
+			issueTitle = detail.Title
+		}
 
-		commentsView := tview.NewTextView()
+		// Build comments text with issue header
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf(" #%d %s\n\n", issueNum, issueTitle))
+		sb.WriteString(formatComments(comments, commentsMarkdownRendered))
+		commentsText := sb.String()
+
+		if commentsView == nil {
+			commentsView = tview.NewTextView()
+		}
 		commentsView.SetText(commentsText)
 		commentsView.SetTextAlign(tview.AlignLeft)
 		commentsView.SetScrollable(true)
+		commentsView.SetBorder(true)
+		commentsView.SetTitle(" Comments ")
 
-		modal := tview.NewModal()
-		modal.SetText(commentsText)
-		modal.AddButtons([]string{"Close"})
-		modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-			pages.SwitchToPage("main")
-			app.SetFocus(issueList)
+		// Set up input capture for comments view
+		commentsView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+			switch event.Key() {
+			case tcell.KeyRune:
+				switch event.Rune() {
+				case 'q', 'Q':
+					returnToIssueList()
+					return nil
+				case 'm', 'M':
+					// Toggle markdown rendering in comments
+					commentsMarkdownRendered = !commentsMarkdownRendered
+					updateStatusBar()
+					// Refresh comments view
+					var refreshSb strings.Builder
+					refreshSb.WriteString(fmt.Sprintf(" #%d %s\n\n", issueNum, issueTitle))
+					refreshSb.WriteString(formatComments(comments, commentsMarkdownRendered))
+					commentsView.SetText(refreshSb.String())
+					return nil
+				}
+			case tcell.KeyEscape:
+				returnToIssueList()
+				return nil
+			case tcell.KeyCtrlC:
+				app.Stop()
+				return nil
+			}
+			return event
 		})
 
-		pages.AddPage("comments", modal, true, true)
+		// Add comments page (replaces main view)
+		pages.AddPage("comments", commentsView, true, true)
+		inCommentsView = true
+		updateStatusBar()
 		pages.SwitchToPage("comments")
+		app.SetFocus(commentsView)
 	}
 
 	// Set up navigation handlers using tcell events
@@ -306,10 +336,12 @@ func RunTUI(dbPath string, cfg *config.Config) error {
 				return nil
 			}
 		case tcell.KeyEscape:
-			// Dismiss modal if visible
-			if pages.HasPage("help") || pages.HasPage("comments") {
+			// Dismiss modal if visible, or return from comments view
+			if pages.HasPage("help") {
 				pages.SwitchToPage("main")
-				app.SetFocus(issueList)
+				app.SetFocus(app.GetFocus())
+			} else if pages.HasPage("comments") {
+				returnToIssueList()
 			}
 			return event
 		case tcell.KeyCtrlC:
@@ -469,6 +501,10 @@ func showHelp(app *tview.Application, pages *tview.Pages) {
  View:
    m              - Toggle markdown rendered/raw
 
+ Comments View:
+   m              - Toggle markdown rendered/raw
+   q / Esc        - Return to issue list
+
  Sorting:
    s              - Cycle sort (updated → created → number → comments)
    S              - Reverse sort order
@@ -614,4 +650,49 @@ func FormatSortDisplay(sort config.SortOption, order config.SortOrder) string {
 		orderStr = "↑"
 	}
 	return fmt.Sprintf("Sort: %s %s", info.Name, orderStr)
+}
+
+// renderMarkdown renders markdown text for terminal display
+func renderMarkdown(body string) string {
+	if body == "" {
+		return "_No description provided._"
+	}
+	// Use glamour to render markdown with terminal styling
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+	)
+	if err != nil {
+		// Fall back to raw text if rendering fails
+		return body
+	}
+	rendered, err := renderer.Render(body)
+	if err != nil {
+		return body
+	}
+	return rendered
+}
+
+// formatComments returns a formatted string for displaying comments
+func formatComments(comments []db.Comment, markdownRendered bool) string {
+	if len(comments) == 0 {
+		return "No comments yet."
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("%d Comment(s)\n\n", len(comments)))
+
+	for i, comment := range comments {
+		if i > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString(fmt.Sprintf("--- Comment #%d ---\n", i+1))
+		sb.WriteString(fmt.Sprintf("By: %s  |  Date: %s\n\n", comment.Author, formatDate(comment.CreatedAt)))
+		if markdownRendered {
+			sb.WriteString(renderMarkdown(comment.Body))
+		} else {
+			sb.WriteString(comment.Body)
+		}
+	}
+
+	return sb.String()
 }

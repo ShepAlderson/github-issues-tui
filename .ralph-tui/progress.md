@@ -69,6 +69,17 @@ after each iteration and included in agent prompts for context.
 - Toggle between rendered and raw markdown with state variable
 - Update display when markdown mode changes
 
+**Drill-Down View Pattern**: Replace main page content instead of using modal overlays for primary views:
+- Use pages.SwitchToPage() to switch between view states
+- Set inCommentsView state variable to track current view
+- Update status bar based on current view context
+- Call updateStatusBar() when switching views
+
+**View State Pattern**: Track view context with boolean flags for conditional UI:
+- Declare state variables (inCommentsView, commentsMarkdownRendered) before functions that use them
+- Use closures to access and modify state from event handlers
+- Update UI immediately after state changes
+
 ---
 
 ## 2026-01-20 - US-001
@@ -344,3 +355,30 @@ ruct\n- `internal/config/config_display_test.go` - Added 7 tests for sort config
     - tview.List lacks GetCurrentIndex method - need to track selection index manually
     - SQLite foreign key constraints require parent issue to exist before inserting labels/assignees/comments
     - Config field is SortOrder not Order - match exact field names from config struct
+## ✓ Iteration 7 - US-007: Issue Detail View
+## 2026-01-20 - US-008
+- What was implemented:
+  - Converted comments modal to drill-down view that replaces main interface
+  - Added issue title/number as header in comments view
+  - Each comment now shows: author, date, body with markdown rendering via glamour
+  - Toggle markdown rendering with 'm' key in comments view (independent from issue body toggle)
+  - Comments list is scrollable using SetScrollable(true)
+  - 'Esc' or 'q' returns to issue list view from comments
+  - Dynamic status bar showing current view context (issue list vs comments view)
+  - Updated help modal with dedicated comments view section
+
+- Files changed:
+  - cmd/ghissues/tui.go (221 lines): Full implementation of drill-down comments view
+  - cmd/ghissues/tui_test.go (53 lines): Added TestFormatComments, TestFormatCommentsEmpty, TestFormatCommentsMarkdown
+
+- **Learnings:**
+  - Patterns discovered:
+    - Drill-Down View Pattern: Replace pages content instead of overlaying modal for main views
+    - View State Pattern: Track inCommentsView boolean to switch status bar content
+    - Reusable Package-Level Functions: Move testable functions (formatComments, renderMarkdown) to package level
+    - Closures for State Access: Use closures to access RunTUI state from event handlers
+  - Gotchas encountered:
+    - Variable scope in closures: State variables must be declared before functions that use them
+    - Duplicate variable declarations: Cannot redeclare with := in same scope
+    - Status bar context: Need to call updateStatusBar() when switching views
+    - Package-level vs closure functions: Tests can only access package-level functions
