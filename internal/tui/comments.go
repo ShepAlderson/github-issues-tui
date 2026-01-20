@@ -22,6 +22,7 @@ type CommentsModel struct {
 	err          error
 	width        int
 	height       int
+	showHelp     bool // Flag to show help
 }
 
 // NewCommentsModel creates a new issue comments model
@@ -184,15 +185,21 @@ func (m *CommentsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		// Update viewport size accounting for header
+		// Update viewport size accounting for header and footer
 		headerHeight := m.calculateHeaderHeight()
 		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height - headerHeight - 1
+		m.viewport.Height = msg.Height - headerHeight - 3 // Account for footer
 		m.viewport.SetContent(m.getContent())
 
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c", "esc":
+			m.quitting = true
+			return m, tea.Quit
+
+		case "?":
+			// Toggle help overlay
+			m.showHelp = true
 			m.quitting = true
 			return m, tea.Quit
 
@@ -246,7 +253,22 @@ func (m CommentsModel) View() string {
 	view.WriteRune('\n')
 	view.WriteString(m.viewport.View())
 
+	// Footer with keybindings
+	view.WriteRune('\n')
+	footer := getFooter(CommentsView)
+	view.WriteString(footer)
+
 	return view.String()
+}
+
+// ShouldShowHelp returns whether the help overlay should be displayed
+func (m CommentsModel) ShouldShowHelp() bool {
+	return m.showHelp
+}
+
+// ClearHelpFlag clears the help flag
+func (m *CommentsModel) ClearHelpFlag() {
+	m.showHelp = false
 }
 
 // Close closes the database connection

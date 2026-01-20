@@ -22,6 +22,7 @@ type DetailModel struct {
 	viewComments  bool // Flag to navigate to comments
 	width         int
 	height        int
+	showHelp      bool // Flag to show help
 }
 
 // NewDetailModel creates a new issue detail model
@@ -195,6 +196,12 @@ func (m *DetailModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 
+		case "?":
+			// Toggle help overlay
+			m.showHelp = true
+			m.quitting = true
+			return m, tea.Quit
+
 		case "m":
 			// Toggle between raw and rendered markdown
 			m.showRendered = !m.showRendered
@@ -251,9 +258,23 @@ func (m DetailModel) View() string {
 	view.WriteRune('\n')
 	view.WriteString(m.viewport.View())
 
+	// Footer with keybindings
+	view.WriteRune('\n')
+	footer := getFooter(DetailView)
+	view.WriteString(footer)
+
 	return view.String()
 }
 
+// ShouldShowHelp returns whether the help overlay should be displayed
+func (m DetailModel) ShouldShowHelp() bool {
+	return m.showHelp
+}
+
+// ClearHelpFlag clears the help flag
+func (m *DetailModel) ClearHelpFlag() {
+	m.showHelp = false
+}
 // Close closes the database connection
 func (m *DetailModel) Close() error {
 	if m.db != nil {

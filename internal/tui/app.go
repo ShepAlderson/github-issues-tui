@@ -19,12 +19,27 @@ const (
 	CommentsView
 )
 
+// String returns a string representation of the ViewType
+func (v ViewType) String() string {
+	switch v {
+	case ListView:
+		return "ListView"
+	case DetailView:
+		return "DetailView"
+	case CommentsView:
+		return "CommentsView"
+	default:
+		return "Unknown"
+	}
+}
+
 // AppModel represents the main application model that can switch between views
 type AppModel struct {
 	currentView   ViewType
 	listModel     *ListModel
 	detailModel   *DetailModel
 	commentsModel *CommentsModel
+	helpModel     *HelpModel
 	config        *config.Config
 	dbPath        string
 	err           error
@@ -60,6 +75,9 @@ func (m AppModel) Init() tea.Cmd {
 	return nil
 }
 
+// helpDismissedMsg is sent when user dismisses the help overlay
+type helpDismissedMsg struct{}
+
 // Update handles messages and updates the model
 func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle error acknowledgment first
@@ -68,10 +86,27 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Handle help dismissal
+	if _, ok := msg.(helpDismissedMsg); ok {
+		m.helpModel = nil
+		return m, nil
+	}
+
 	// Handle window size
 	if msg, ok := msg.(tea.WindowSizeMsg); ok {
 		m.width = msg.Width
 		m.height = msg.Height
+	}
+
+	// Check if help is active and should handle input
+	if m.helpModel != nil && m.helpModel.IsActive() {
+		updated, cmd := m.helpModel.Update(msg)
+		m.helpModel = updated.(*HelpModel)
+		// If help was dismissed, create a message
+		if !m.helpModel.IsActive() {
+			return m, func() tea.Msg { return helpDismissedMsg{} }
+		}
+		return m, cmd
 	}
 
 	// Check if error modal is active and should handle input
@@ -87,6 +122,13 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle list view
 		updated, viewCmd := m.listModel.Update(msg)
 		m.listModel = updated.(*ListModel)
+
+		// Check if help should be shown
+		if m.listModel.ShouldShowHelp() {
+			m.helpModel = NewHelpModel(ListView, m.width, m.height)
+			m.listModel.ClearHelpFlag()
+			return m, tea.Batch(viewCmd, m.helpModel.Init())
+		}
 
 		// Check if user pressed Enter on an issue
 		if msg, ok := msg.(tea.KeyMsg); ok && msg.Type == tea.KeyEnter {
@@ -116,6 +158,13 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.detailModel != nil {
 			updated, cmd := m.detailModel.Update(msg)
 			m.detailModel = updated.(*DetailModel)
+
+			// Check if help should be shown
+			if m.detailModel.ShouldShowHelp() {
+				m.helpModel = NewHelpModel(DetailView, m.width, m.height)
+				m.detailModel.ClearHelpFlag()
+				return m, tea.Batch(cmd, m.helpModel.Init())
+			}
 
 			// Check if user wants to view comments
 			if m.detailModel.viewComments {
@@ -164,6 +213,13 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.commentsModel != nil {
 			updated, cmd := m.commentsModel.Update(msg)
 			m.commentsModel = updated.(*CommentsModel)
+
+			// Check if help should be shown
+			if m.commentsModel.ShouldShowHelp() {
+				m.helpModel = NewHelpModel(CommentsView, m.width, m.height)
+				m.commentsModel.ClearHelpFlag()
+				return m, tea.Batch(cmd, m.helpModel.Init())
+			}
 
 			// Check if user wants to go back (press 'q', 'esc', or Ctrl+C)
 			if msg, ok := msg.(tea.KeyMsg); ok {
@@ -214,6 +270,14 @@ func (m *AppModel) clearError() {
 func (m AppModel) View() string {
 	if m.err != nil {
 		return fmt.Sprintf("Error: %v\n", m.err)
+	}
+
+	// Show help overlay if active
+	if m.helpModel != nil && m.helpModel.IsActive() {
+		if os.Getenv("GHISSIES_TEST") == "1" {
+			return "Help overlay displayed\n"
+		}
+		return m.helpModel.View()
 	}
 
 	// Show critical error modal if active

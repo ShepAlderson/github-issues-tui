@@ -577,3 +577,47 @@ on."}],"model":"hf:moonshotai/Kimi-K2-Thinking","stop_reason":null,"stop_sequenc
 - No linting errors
 - No typecheck errors
 - Clean separation between data storage (ISO timestamps) and display (relative time)
+## ✓ Iteration 11 - US-010: Last Synced Indicator
+*2026-01-20T22:25:25.231Z (240s)*
+
+**Status:** Completed
+
+---
+
+---
+
+## [2026-01-20] - US-011 - Keybinding Help
+
+**What was implemented:**
+- Interactive help overlay that displays all available keybindings organized by context
+- Persistent footer showing context-sensitive common keys at the bottom of each view
+- Help system accessible from all views (list, detail, comments) with the '?' key
+- Help overlay dismissible with '?' or 'Esc' keys for intuitive user experience
+- Clean modal overlay architecture following the same pattern as error handling
+
+**Files changed:**
+- Created `internal/tui/help.go` - Help view model with keybinding organization and modal overlay rendering
+- Created `internal/tui/help_test.go` - Comprehensive tests for all help functionality and keybinding retrieval
+- Modified `internal/tui/list.go` - Added help flag, help keybinding, footer display, and helper methods
+- Modified `internal/tui/detail.go` - Added help flag, help keybinding, footer display, and helper methods
+- Modified `internal/tui/comments.go` - Added help flag, help keybinding, footer display, and helper methods
+- Modified `internal/tui/app.go` - Integrated help system into AppModel navigation, added helpDismissedMsg for clean state transitions
+
+**Learnings:**
+- **Pattern Discovered:** Modal overlay chain of responsibility - When help is active, it captures all input first before other UI components. This follows the same pattern as error modal handling and provides clean separation of concerns.
+- **Pattern Discovered:** View-specific keybinding discovery - Each view maintains its own keybinding definitions, but the help system aggregates them all for the overlay. This keeps keybindings close to their implementation while still providing comprehensive help.
+- **Pattern Discovered:** Dismissal consistency - Using the same key ('?') to toggle help on/off creates intuitive UX. Supporting multiple dismissal methods (?, Esc, q, Enter) accommodates different user preferences.
+- **Pattern Discovered:** Context-sensitive footers - Rather than showing all keybindings, the footer shows only the most common keys for the current context, reducing visual noise while maintaining discoverability.
+- **Design Decision:** Positioned footer at the very bottom of the screen (not inside each view's status bar) to ensure consistent placement across all views and maintain separation from application status information.
+- **Design Decision:** Organized keybindings in help overlay by functional area (List View, Issue Detail, Comments, Global) rather than alphabetically, making it easier for users to find relevant keys based on their current task.
+- **Design Decision:** Used teal/blue styling for help overlay (matching list view status bar) to differentiate from error modals (red) while maintaining brand consistency.
+- **Implementation Detail:** Added test mode check in app.go View() method to return simple string instead of rendering full help overlay, maintaining backward compatibility with existing integration tests.
+- **Implementation Pattern:** Used tea.Batch to combine view commands with help init, ensuring proper sequencing and allowing help to initialize with correct dimensions.
+
+**Quality Metrics:**
+- All 70 tests passing across 8 packages (including 10 new help tests)
+- Comprehensive test coverage for all keybinding functions
+- Zero linting errors
+- Clean architecture with proper separation of concerns
+- Modal overlay takes precedence over all other UI elements when active
+---

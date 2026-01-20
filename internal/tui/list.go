@@ -35,6 +35,9 @@ type ListModel struct {
 
 	// Last sync info
 	lastSyncDate time.Time
+
+	// Help state
+	showHelp bool
 }
 
 // NewListModel creates a new issue list model
@@ -151,11 +154,17 @@ func (m *ListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.table.SetHeight(msg.Height - 4) // Leave room for header/status
+		m.table.SetHeight(msg.Height - 6) // Leave room for header/status/footer
 
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c":
+			m.quitting = true
+			return m, tea.Quit
+
+		case "?":
+			// Toggle help overlay
+			m.showHelp = true
 			m.quitting = true
 			return m, tea.Quit
 
@@ -226,6 +235,11 @@ func (m ListModel) View() string {
 	// Status bar
 	status := m.renderStatusBar()
 	b.WriteString(status)
+	b.WriteString("\n")
+
+	// Footer with keybindings
+	footer := getFooter(ListView)
+	b.WriteString(footer)
 
 	return b.String()
 }
@@ -398,6 +412,16 @@ func (m *ListModel) refreshIssues() error {
 	}
 
 	return nil
+}
+
+// ShouldShowHelp returns whether the help overlay should be displayed
+func (m ListModel) ShouldShowHelp() bool {
+	return m.showHelp
+}
+
+// ClearHelpFlag clears the help flag
+func (m *ListModel) ClearHelpFlag() {
+	m.showHelp = false
 }
 
 // formatRelativeTime formats a time as a relative string (e.g., "5 minutes ago")
