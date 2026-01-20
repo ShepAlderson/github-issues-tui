@@ -16,9 +16,10 @@
         "Debug logging can be easily removed after diagnosis"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "labels": [],
-      "dependsOn": []
+      "dependsOn": [],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-2",
@@ -32,9 +33,10 @@
         "No performance impact from the change"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "labels": [],
-      "dependsOn": []
+      "dependsOn": [],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-3",
@@ -53,9 +55,10 @@
         "Mouse scrolling: Continues to work (no regression)"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "labels": [],
-      "dependsOn": []
+      "dependsOn": [],
+      "completionNotes": "Completed by agent - All keybindings verified via comprehensive test suite"
     },
     {
       "id": "US-4",
@@ -76,6 +79,6 @@
   "metadata": {
     "createdAt": "2026-01-20T03:03:47.480Z",
     "version": "1.0.0",
-    "updatedAt": "2026-01-20T03:04:24.575Z"
+    "updatedAt": "2026-01-20T03:12:00.000Z"
   }
 }
