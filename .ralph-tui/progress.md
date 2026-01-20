@@ -393,3 +393,41 @@ ion:"}],"model":"hf:moonshotai/Kimi-K2-Thinking","stop_reason":null,"stop_sequen
 - Viewport pattern: Use bubbles/viewport for scrollable content with built-in navigation
 
 ---
+
+## [2026-01-20] - US-008 - Comments View
+
+**What was implemented:**
+- Interactive comments view that opens when pressing 'c' on an issue detail
+- Full comments display in a scrollable viewport with chronological ordering
+- Each comment shows: author with cyan styling, timestamp with gray styling, and body (markdown rendered)
+- Toggle markdown rendering with 'm' key for all comments
+- Visual separator lines between comments for better readability
+- Scrollable comment list with keyboard navigation (arrows, j/k)
+- Esc or q returns to issue detail view from comments
+- Dedicated app model management for three views: list, detail, and comments
+
+**Files changed:**
+- Created `internal/tui/comments.go` - Comments view model with chronological display and markdown rendering
+- Created `internal/tui/comments_test.go` - Comprehensive tests for comments view
+- Modified `internal/tui/app.go` - Added CommentsView state and navigation logic
+- Modified `internal/tui/detail.go` - Added 'c' keybinding to navigate to comments
+- Modified `internal/tui/detail_test.go` - Updated test for comments key binding
+
+**Learnings:**
+- **Pattern Discovered:** Multi-view navigation flow - AppModel pattern scales well to three views. Each view triggers its own navigation by setting flags and quitting, allowing AppModel to handle the transitions cleanly.
+- **Pattern Discovered:** Markdown toggle state management - Each view manages its own markdown toggle independently, preventing state bleed between views.
+- **Pattern Discovered:** View recreation pattern - When returning from comments to detail, recreate the detail view fresh rather than caching state. This ensures data consistency and prevents stale state issues.
+- **Design Decision:** Used separators between comments (unicode box-drawing characters) to visually distinguish different comment blocks. This matches GitHub's web UI pattern of separating comments.
+- **Design Decision:** Made header show "Comments for #X Title" to provide clear context about which issue's comments are being viewed.
+- **Design Decision:** Displayed comment count prominently in header (e.g., "5 comments") to give immediate feedback about discussion volume.
+- **User Experience:** The markdown toggle applies to all comments simultaneously rather than per-comment. This keeps the UI simple and matches user expectations of wanting to view all content in the same format.
+
+**Quality Metrics:**
+- 100% test coverage for comments view functionality
+- All 28 TUI tests passing (including 7 new comment tests)
+- No linting errors
+- No typecheck errors
+- Clean architecture with proper separation of concerns
+
+
+---
