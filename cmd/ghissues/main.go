@@ -172,8 +172,18 @@ func main() {
 	// Get column configuration
 	columns := tui.GetDefaultColumns(cfg)
 
-	// Create and start TUI
-	model := tui.NewModel(issues, columns)
+	// Get sort configuration from config file
+	sortField := cfg.Sort.Field
+	sortDescending := cfg.Sort.Descending
+
+	// Use defaults if not configured
+	if sortField == "" {
+		sortField = "updated" // Default sort field
+		sortDescending = true // Default to descending (most recent first)
+	}
+
+	// Create and start TUI with sort configuration
+	model := tui.NewModelWithSort(issues, columns, sortField, sortDescending)
 	program := tea.NewProgram(model, tea.WithAltScreen())
 
 	if _, err := program.Run(); err != nil {

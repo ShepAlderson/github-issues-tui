@@ -1,28 +1,63 @@
 package tui
 
 import (
+	"github.com/shepbook/ghissues/internal/sort"
 	"github.com/shepbook/ghissues/internal/storage"
 )
 
 // IssueList represents the state of the issue list view
 type IssueList struct {
 	Issues         []storage.Issue
+	UnsortedIssues []storage.Issue // Keep original unsorted issues
 	Columns        []Column
 	Cursor         int
 	Selected       *storage.Issue
 	ViewportHeight int
 	ViewportOffset int
+	SortField      string
+	SortDescending bool
 }
 
 // NewIssueList creates a new issue list model
 func NewIssueList(issues []storage.Issue, columns []Column) *IssueList {
+	// Apply default sorting
+	sortedIssues := sort.SortIssues(issues, sort.GetDefaultSortField(), sort.GetDefaultSortDescending())
+
 	return &IssueList{
-		Issues:         issues,
+		Issues:         sortedIssues,
+		UnsortedIssues: issues,
 		Columns:        columns,
 		Cursor:         0,
 		Selected:       nil,
 		ViewportHeight: 10,
 		ViewportOffset: 0,
+		SortField:      sort.GetDefaultSortField(),
+		SortDescending: sort.GetDefaultSortDescending(),
+	}
+}
+
+// NewIssueListWithSort creates a new issue list model with specific sort settings
+func NewIssueListWithSort(issues []storage.Issue, columns []Column, sortField string, sortDescending bool) *IssueList {
+	// Validate sort field
+	if err := sort.ValidateSortField(sortField); err != nil {
+		// Fall back to default if invalid
+		sortField = sort.GetDefaultSortField()
+		sortDescending = sort.GetDefaultSortDescending()
+	}
+
+	// Apply specified sorting
+	sortedIssues := sort.SortIssues(issues, sortField, sortDescending)
+
+	return &IssueList{
+		Issues:         sortedIssues,
+		UnsortedIssues: issues,
+		Columns:        columns,
+		Cursor:         0,
+		Selected:       nil,
+		ViewportHeight: 10,
+		ViewportOffset: 0,
+		SortField:      sortField,
+		SortDescending: sortDescending,
 	}
 }
 
@@ -117,5 +152,34 @@ func (m *IssueList) updateViewportOffset() {
 	}
 	if m.ViewportOffset > maxOffset {
 		m.ViewportOffset = maxOffset
+	}
+}
+
+// SetSort sets the sort field and order, re-sorts the issues
+func (m *IssueList) SetSort(field string, descending bool) {
+	m.SortField = field
+	m.SortDescending = descending
+	m.resortIssues()
+}
+
+// CycleSortField cycles to the next sort field
+func (m *IssueList) CycleSortField() {
+	m.SortField = sort.CycleSortField(m.SortField)
+	m.resortIssues()
+}
+
+// ToggleSortOrder toggles between ascending and descending sort order
+func (m *IssueList) ToggleSortOrder() {
+	m.SortDescending = !m.SortDescending
+	m.resortIssues()
+}
+
+// resortIssues re-sorts the issues based on current sort settings
+func (m *IssueList) resortIssues() {
+	m.Issues = sort.SortIssues(m.UnsortedIssues, m.SortField, m.SortDescending)
+	// Reset cursor to avoid out of bounds
+	if m.Cursor >= len(m.Issues) {
+		m.Cursor = 0
+		m.ViewportOffset = 0
 	}
 }

@@ -82,8 +82,8 @@ func TestIssueList_MoveCursor(t *testing.T) {
 func TestIssueList_SelectCurrent(t *testing.T) {
 	now := time.Now()
 	issues := []storage.Issue{
-		{Number: 1, Title: "Issue 1", Author: "user1", CreatedAt: now, Comments: 0},
-		{Number: 2, Title: "Issue 2", Author: "user2", CreatedAt: now, Comments: 0},
+		{Number: 1, Title: "Issue 1", Author: "user1", CreatedAt: now, UpdatedAt: now, Comments: 0},
+		{Number: 2, Title: "Issue 2", Author: "user2", CreatedAt: now, UpdatedAt: now, Comments: 0},
 	}
 
 	columns := []Column{
@@ -93,20 +93,22 @@ func TestIssueList_SelectCurrent(t *testing.T) {
 
 	model := NewIssueList(issues, columns)
 
-	// Select first issue
+	// Select first issue (may be #1 or #2 depending on default sort)
+	firstIssueNumber := model.Issues[0].Number
 	model.SelectCurrent()
 	if model.Selected == nil {
 		t.Fatal("Expected issue to be selected")
 	}
-	if model.Selected.Number != 1 {
-		t.Errorf("Expected selected issue number 1, got %d", model.Selected.Number)
+	if model.Selected.Number != firstIssueNumber {
+		t.Errorf("Expected selected issue number %d, got %d", firstIssueNumber, model.Selected.Number)
 	}
 
 	// Move to second issue and select it
 	model.MoveCursor(1)
+	secondIssueNumber := model.Issues[1].Number
 	model.SelectCurrent()
-	if model.Selected.Number != 2 {
-		t.Errorf("Expected selected issue number 2, got %d", model.Selected.Number)
+	if model.Selected.Number != secondIssueNumber {
+		t.Errorf("Expected selected issue number %d, got %d", secondIssueNumber, model.Selected.Number)
 	}
 }
 
@@ -176,6 +178,7 @@ func TestIssueList_GetVisibleIssues(t *testing.T) {
 			Title:     "Issue Title",
 			Author:    "user",
 			CreatedAt: now,
+			UpdatedAt: now,
 			Comments:  0,
 		}
 	}
@@ -193,8 +196,9 @@ func TestIssueList_GetVisibleIssues(t *testing.T) {
 		t.Errorf("Expected 10 visible issues, got %d", len(visible))
 	}
 
-	if visible[0].Number != 1 {
-		t.Errorf("Expected first visible issue to be #1, got #%d", visible[0].Number)
+	// Just verify we got issues, don't check specific numbers since they're sorted
+	if len(visible) == 0 {
+		t.Error("Expected to get visible issues, got none")
 	}
 }
 
@@ -217,3 +221,156 @@ func TestIssueList_EmptyList(t *testing.T) {
 		t.Errorf("Expected cursor to remain at 0 for empty list, got %d", model.Cursor)
 	}
 }
+
+func TestIssueList_DefaultSort(t *testing.T) {
+	now := time.Now()
+	issues := []storage.Issue{
+		{Number: 1, Title: "Old issue", Author: "user1", CreatedAt: now.Add(-2 * 24 * time.Hour), UpdatedAt: now.Add(-2 * 24 * time.Hour), Comments: 1},
+		{Number: 2, Title: "New issue", Author: "user2", CreatedAt: now, UpdatedAt: now, Comments: 5},
+		{Number: 3, Title: "Medium issue", Author: "user3", CreatedAt: now.Add(-1 * 24 * time.Hour), UpdatedAt: now.Add(-1 * 24 * time.Hour), Comments: 3},
+	}
+
+	columns := []Column{
+		{Name: "number", Width: 7, Title: "#"},
+		{Name: "title", Width: 0, Title: "Title"},
+	}
+
+	model := NewIssueList(issues, columns)
+
+	// Default should be updated descending (most recent first)
+	if model.SortField != "updated" {
+		t.Errorf("Expected default sort field 'updated', got '%s'", model.SortField)
+	}
+
+	if !model.SortDescending {
+		t.Error("Expected default sort order to be descending")
+	}
+
+	// First issue should be #2 (most recently updated)
+	if model.Issues[0].Number != 2 {
+		t.Errorf("Expected first issue to be #2 (most recent), got #%d", model.Issues[0].Number)
+	}
+}
+
+func TestIssueList_SetSort(t *testing.T) {
+	now := time.Now()
+	issues := []storage.Issue{
+		{Number: 3, Title: "Third", Author: "user1", CreatedAt: now, UpdatedAt: now, Comments: 10},
+		{Number: 1, Title: "First", Author: "user2", CreatedAt: now, UpdatedAt: now, Comments: 5},
+		{Number: 2, Title: "Second", Author: "user3", CreatedAt: now, UpdatedAt: now, Comments: 1},
+	}
+
+	columns := []Column{{Name: "number", Width: 7, Title: "#"}}
+	model := NewIssueList(issues, columns)
+
+	// Sort by number ascending
+	model.SetSort("number", false)
+
+	if model.SortField != "number" {
+		t.Errorf("Expected sort field 'number', got '%s'", model.SortField)
+	}
+
+	if model.SortDescending {
+		t.Error("Expected ascending sort order")
+	}
+
+	if model.Issues[0].Number != 1 {
+		t.Errorf("Expected first issue to be #1, got #%d", model.Issues[0].Number)
+	}
+
+	if model.Issues[2].Number != 3 {
+		t.Errorf("Expected last issue to be #3, got #%d", model.Issues[2].Number)
+	}
+}
+
+func TestIssueList_CycleSortField(t *testing.T) {
+	now := time.Now()
+	issues := []storage.Issue{
+		{Number: 1, Title: "Issue", Author: "user", CreatedAt: now, UpdatedAt: now, Comments: 1},
+	}
+
+	columns := []Column{{Name: "number", Width: 7, Title: "#"}}
+	model := NewIssueList(issues, columns)
+
+	// Default is updated
+	if model.SortField != "updated" {
+		t.Errorf("Expected initial sort field 'updated', got '%s'", model.SortField)
+	}
+
+	// Cycle: updated -> created
+	model.CycleSortField()
+	if model.SortField != "created" {
+		t.Errorf("Expected sort field 'created' after first cycle, got '%s'", model.SortField)
+	}
+
+	// Cycle: created -> number
+	model.CycleSortField()
+	if model.SortField != "number" {
+		t.Errorf("Expected sort field 'number' after second cycle, got '%s'", model.SortField)
+	}
+
+	// Cycle: number -> comments
+	model.CycleSortField()
+	if model.SortField != "comments" {
+		t.Errorf("Expected sort field 'comments' after third cycle, got '%s'", model.SortField)
+	}
+
+	// Cycle: comments -> updated (back to start)
+	model.CycleSortField()
+	if model.SortField != "updated" {
+		t.Errorf("Expected sort field 'updated' after fourth cycle, got '%s'", model.SortField)
+	}
+}
+
+func TestIssueList_ToggleSortOrder(t *testing.T) {
+	now := time.Now()
+	issues := []storage.Issue{
+		{Number: 1, Title: "Issue", Author: "user", CreatedAt: now, UpdatedAt: now, Comments: 1},
+	}
+
+	columns := []Column{{Name: "number", Width: 7, Title: "#"}}
+	model := NewIssueList(issues, columns)
+
+	// Default is descending
+	if !model.SortDescending {
+		t.Error("Expected initial sort order to be descending")
+	}
+
+	// Toggle to ascending
+	model.ToggleSortOrder()
+	if model.SortDescending {
+		t.Error("Expected sort order to be ascending after toggle")
+	}
+
+	// Toggle back to descending
+	model.ToggleSortOrder()
+	if !model.SortDescending {
+		t.Error("Expected sort order to be descending after second toggle")
+	}
+}
+
+func TestIssueList_SortPreservesUnsortedIssues(t *testing.T) {
+	now := time.Now()
+	issues := []storage.Issue{
+		{Number: 1, Title: "First", Author: "user1", CreatedAt: now, UpdatedAt: now.Add(-2 * 24 * time.Hour), Comments: 1},
+		{Number: 2, Title: "Second", Author: "user2", CreatedAt: now, UpdatedAt: now, Comments: 5},
+	}
+
+	columns := []Column{{Name: "number", Width: 7, Title: "#"}}
+	model := NewIssueList(issues, columns)
+
+	// UnsortedIssues should preserve original order
+	if len(model.UnsortedIssues) != 2 {
+		t.Fatalf("Expected 2 unsorted issues, got %d", len(model.UnsortedIssues))
+	}
+
+	if model.UnsortedIssues[0].Number != 1 {
+		t.Errorf("Expected first unsorted issue to be #1, got #%d", model.UnsortedIssues[0].Number)
+	}
+
+	// Sorted issues should be in updated descending order
+	if model.Issues[0].Number != 2 {
+		t.Errorf("Expected first sorted issue to be #2 (most recent), got #%d", model.Issues[0].Number)
+	}
+}
+

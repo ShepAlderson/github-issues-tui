@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/shepbook/ghissues/internal/sort"
 	"github.com/shepbook/ghissues/internal/storage"
 )
 
@@ -19,6 +20,15 @@ type Model struct {
 // NewModel creates a new TUI model
 func NewModel(issues []storage.Issue, columns []Column) Model {
 	issueList := NewIssueList(issues, columns)
+	return Model{
+		IssueList: issueList,
+		Quitting:  false,
+	}
+}
+
+// NewModelWithSort creates a new TUI model with specific sort settings
+func NewModelWithSort(issues []storage.Issue, columns []Column, sortField string, sortDescending bool) Model {
+	issueList := NewIssueListWithSort(issues, columns, sortField, sortDescending)
 	return Model{
 		IssueList: issueList,
 		Quitting:  false,
@@ -49,6 +59,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "enter", " ":
 			m.IssueList.SelectCurrent()
+			return m, nil
+
+		case "s":
+			// Cycle to next sort field
+			m.IssueList.CycleSortField()
+			return m, nil
+
+		case "S":
+			// Toggle sort order (shift+s)
+			m.IssueList.ToggleSortOrder()
 			return m, nil
 		}
 
@@ -175,11 +195,22 @@ func (m Model) renderStatusBar() string {
 			Render(" | Selected: #" + formatNumber(m.IssueList.Selected.Number))
 	}
 
+	// Build sort info
+	sortOrder := "▼"
+	if m.IssueList.SortDescending {
+		sortOrder = "▼" // Descending
+	} else {
+		sortOrder = "▲" // Ascending
+	}
+	sortInfo := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("yellow")).
+		Render(" | Sort: " + sort.GetSortFieldLabel(m.IssueList.SortField) + sortOrder)
+
 	status := lipgloss.NewStyle().
 		Faint(true).
 		Render("Issues: " + formatNumber(issueCount) +
-			" | ↑↓/jk: navigate | Enter: select | q: quit" +
-			selectedInfo)
+			" | ↑↓/jk: navigate | s: sort field | S: sort order | Enter: select | q: quit" +
+			selectedInfo + sortInfo)
 
 	return status
 }
