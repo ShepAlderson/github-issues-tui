@@ -27,10 +27,17 @@ func Setup() (*config.Config, error) {
 		return nil, fmt.Errorf("failed to get authentication method: %w", err)
 	}
 
+	// Get database path
+	dbPath, err := promptDatabasePath()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get database path: %w", err)
+	}
+
 	// Create config
 	cfg := config.DefaultConfig()
 	cfg.Repository = repo
 	cfg.Auth.Method = authMethod
+	cfg.Database.Path = dbPath
 
 	return cfg, nil
 }
@@ -97,4 +104,34 @@ func promptAuthMethod() (string, error) {
 	// Map index to method value
 	methods := []string{"gh", "token", "env"}
 	return methods[index], nil
+}
+
+func promptDatabasePath() (string, error) {
+	validate := func(input string) error {
+		// Empty input is allowed - will use default
+		if input == "" {
+			return nil
+		}
+
+		// Basic validation: path shouldn't contain certain characters
+		// We'll do more comprehensive validation in EnsureDatabasePath
+		if strings.Contains(input, "..") {
+			return fmt.Errorf("database path cannot contain '..'")
+		}
+
+		return nil
+	}
+
+	prompt := promptui.Prompt{
+		Label:    "Database path (empty for default: .ghissues.db)",
+		Validate: validate,
+		Default:  "",
+	}
+
+	result, err := prompt.Run()
+	if err != nil {
+		return "", err
+	}
+
+	return result, nil
 }

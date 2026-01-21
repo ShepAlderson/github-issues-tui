@@ -140,3 +140,116 @@ func TestRootCommandWithConfig(t *testing.T) {
 		t.Errorf("Should not show setup message when config exists, got: %s", output)
 	}
 }
+
+func TestDatabaseFlag(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir := t.TempDir()
+
+	// Create a config file first
+	cfgMgr := config.NewTestManager(func() (string, error) {
+		return tempDir, nil
+	})
+
+	cfg := config.DefaultConfig()
+	cfg.Repository = "testowner/testrepo"
+	cfg.Database.Path = "/config/path/db.db" // Set config database path
+	if err := cfgMgr.Save(cfg); err != nil {
+		t.Fatalf("Failed to save test config: %v", err)
+	}
+
+	tests := []struct {
+		name           string
+		dbFlag         string
+		expectedSubstr string
+	}{
+		{
+			name:           "no flag uses config path",
+			dbFlag:         "",
+			expectedSubstr: "/config/path/db.db",
+		},
+		{
+			name:           "flag overrides config path",
+			dbFlag:         "/flag/path/db.db",
+			expectedSubstr: "/flag/path/db.db",
+		},
+		{
+			name:           "relative flag path",
+			dbFlag:         "custom.db",
+			expectedSubstr: "custom.db",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Capture stdout
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			// Create a test command with db flag support
+			var dbPath string
+			rootCmd := &cobra.Command{
+				Use:   "ghissues",
+				Short: "GitHub Issues TUI",
+				RunE: func(cmd *cobra.Command, args []string) error {
+					// Check if config exists using test manager
+					exists, err := cfgMgr.Exists()
+					if err != nil {
+						return err
+					}
+
+					if !exists {
+						fmt.Fprint(cmd.OutOrStdout(), "No configuration found. Running first-time setup...\n")
+						return nil
+					}
+
+					// Load config
+					cfg, err := cfgMgr.Load()
+					if err != nil {
+						return fmt.Errorf("failed to load config: %w", err)
+					}
+
+					// Simulate database path resolution (we'll just print it)
+					finalDbPath := dbPath
+					if finalDbPath == "" && cfg.Database.Path != "" {
+						finalDbPath = cfg.Database.Path
+					}
+					if finalDbPath == "" {
+						finalDbPath = ".ghissues.db"
+					}
+
+					fmt.Fprintf(cmd.OutOrStdout(), "Database path: %s\n", finalDbPath)
+					fmt.Fprint(cmd.OutOrStdout(), "TUI will be launched here (to be implemented)\n")
+					return nil
+				},
+			}
+			rootCmd.Flags().StringVarP(&dbPath, "db", "d", "", "database file path")
+
+			// Set the flag value if provided
+			if tt.dbFlag != "" {
+				if err := rootCmd.Flags().Set("db", tt.dbFlag); err != nil {
+					t.Fatalf("Failed to set db flag: %v", err)
+				}
+			}
+
+			// Execute command
+			err := rootCmd.Execute()
+
+			// Restore stdout and read output
+			w.Close()
+			os.Stdout = oldStdout
+			var buf bytes.Buffer
+			io.Copy(&buf, r)
+			output := buf.String()
+
+			if err != nil {
+				t.Errorf("Command execution failed: %v", err)
+			}
+
+			// Check that database path appears in output
+			if !strings.Contains(output, tt.expectedSubstr) {
+				t.Errorf("Expected database path containing %q, got: %s", tt.expectedSubstr, output)
+			}
+		})
+	}
+}
