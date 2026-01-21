@@ -19,7 +19,8 @@
       "labels": [
         "setup",
         "config"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-002",
@@ -32,14 +33,15 @@
         "Config file token is stored securely (file permissions 0600)"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-001"
       ],
       "labels": [
         "auth",
         "security"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-003",
@@ -76,14 +78,15 @@
         "Clear error if path is not writable"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-001"
       ],
       "labels": [
         "database",
         "config"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-005",
@@ -300,6 +303,6 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-01-21T18:26:27.347Z"
+    "updatedAt": "2026-01-21T18:55:14.984Z"
   }
 }

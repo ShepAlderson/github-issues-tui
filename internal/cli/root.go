@@ -59,6 +59,7 @@ func Execute() error {
 
 	// Add subcommands
 	rootCmd.AddCommand(newConfigCmd())
+	rootCmd.AddCommand(newSyncCmd())
 
 	return rootCmd.Execute()
 }
