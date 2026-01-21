@@ -133,3 +133,51 @@ func TestGetDB(t *testing.T) {
 		t.Fatal("Empty version string returned")
 	}
 }
+
+func TestGetLastSyncTime(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	manager, err := NewDBManager(dbPath)
+	if err != nil {
+		t.Fatalf("NewDBManager failed: %v", err)
+	}
+	defer manager.Close()
+
+	// Initialize schema
+	err = manager.InitializeSchema()
+	if err != nil {
+		t.Fatalf("InitializeSchema failed: %v", err)
+	}
+
+	// Test when no sync time is recorded
+	syncTime, err := manager.GetLastSyncTime()
+	if err != nil {
+		t.Fatalf("GetLastSyncTime failed: %v", err)
+	}
+	if !syncTime.IsZero() {
+		t.Fatalf("Expected zero time for no sync record, got: %v", syncTime)
+	}
+
+	// Insert a sync time
+	insertTime := "2024-01-15T12:30:45Z"
+	_, err = manager.GetDB().Exec("INSERT OR REPLACE INTO metadata (key, value) VALUES ('last_sync', ?)", insertTime)
+	if err != nil {
+		t.Fatalf("Failed to insert sync time: %v", err)
+	}
+
+	// Test retrieving the sync time
+	syncTime, err = manager.GetLastSyncTime()
+	if err != nil {
+		t.Fatalf("GetLastSyncTime failed: %v", err)
+	}
+	if syncTime.IsZero() {
+		t.Fatal("Expected non-zero time after inserting sync record")
+	}
+
+	// Verify the time matches what we inserted
+	expectedTimeStr := syncTime.Format("2006-01-02T15:04:05Z")
+	if expectedTimeStr != insertTime {
+		t.Fatalf("Expected sync time %s, got %s", insertTime, expectedTimeStr)
+	}
+}

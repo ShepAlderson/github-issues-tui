@@ -1,17 +1,22 @@
 package tui
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/shepbook/github-issues-tui/internal/config"
 	"github.com/shepbook/github-issues-tui/internal/database"
+	"github.com/shepbook/github-issues-tui/internal/github"
+	"github.com/shepbook/github-issues-tui/internal/sync"
 )
 
 // App represents the main TUI application
 type App struct {
 	config          *config.Config
+	configManager   *config.Manager
 	dbManager       *database.DBManager
 	issueList       *IssueList
 	issueDetail     *IssueDetailComponent
@@ -20,17 +25,22 @@ type App struct {
 	width           int
 	height          int
 	ready           bool
+	refreshing     bool
+	refreshMessage  string
 }
 
 // NewApp creates a new TUI application instance
 func NewApp(cfg *config.Config, dbManager *database.DBManager, cfgMgr *config.Manager) *App {
 	return &App{
 		config:        cfg,
+		configManager: cfgMgr,
 		dbManager:     dbManager,
 		issueList:     NewIssueList(dbManager, cfg, cfgMgr),
 		issueDetail:   NewIssueDetailComponent(dbManager),
 		comments:      NewCommentsComponent(dbManager),
 		showComments:  false,
+		refreshing:    false,
+		refreshMessage: "",
 	}
 }
 
@@ -90,6 +100,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 				return a, nil
+			}
+		case "r", "R":
+			// Refresh data from GitHub
+			if !a.refreshing {
+				return a, a.startRefresh()
 			}
 		}
 	}
@@ -178,6 +193,14 @@ func (a *App) View() string {
 }
 
 func (a *App) renderRightPanel() string {
+	// Show refresh status when refreshing
+	if a.refreshing {
+		return lipgloss.NewStyle().
+			Padding(1, 2).
+			Foreground(lipgloss.Color("yellow")).
+			Render(fmt.Sprintf("🔄 %s\n\nFetching latest issues from GitHub...", a.refreshMessage))
+	}
+
 	if a.showComments && a.comments != nil {
 		return a.comments.View()
 	} else if a.issueDetail != nil {
@@ -198,4 +221,48 @@ func Run(cfg *config.Config, dbManager *database.DBManager, cfgMgr *config.Manag
 		return fmt.Errorf("failed to run TUI: %w", err)
 	}
 	return nil
+}
+
+// startRefresh initiates a background refresh operation
+func (a *App) startRefresh() tea.Cmd {
+	return func() tea.Msg {
+		a.refreshing = true
+		a.refreshMessage = "Starting refresh..."
+
+		// Create auth manager
+		authManager := github.NewAuthManager(a.configManager)
+
+		// Create sync manager
+		syncManager := sync.NewSyncManager(a.configManager, authManager, a.dbManager)
+
+		// Create context for sync operation
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		// Perform sync
+		a.refreshMessage = "Fetching issues from GitHub..."
+		err := syncManager.Sync(ctx, sync.SyncOptions{
+			ShowProgress: false, // We show progress in TUI instead
+			CancelChan:   ctx.Done(),
+		})
+
+		if err != nil {
+			a.refreshMessage = fmt.Sprintf("Refresh failed: %v", err)
+		} else {
+			a.refreshMessage = "Refresh complete!"
+		}
+
+		// Reload issues from database
+		a.issueList.loadIssues()
+
+		a.refreshing = false
+
+		// Clear message after delay
+		go func() {
+			time.Sleep(3 * time.Second)
+			a.refreshMessage = ""
+		}()
+
+		return nil
+	}
 }

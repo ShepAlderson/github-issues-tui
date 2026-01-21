@@ -118,7 +118,7 @@ type IssueDetail struct {
 
 // Comment represents a comment on an issue
 type Comment struct {
-	ID        int       `json:"id"`
+	ID        int64     `json:"id"`
 	Author    string    `json:"author"`
 	AuthorURL string    `json:"author_url"`
 	Body      string    `json:"body"`
@@ -277,4 +277,101 @@ func (dm *DBManager) GetAllIssues() ([]struct {
 // GetDB returns the underlying database connection
 func (dm *DBManager) GetDB() *sql.DB {
 	return dm.db
+}
+
+// GetLastSyncTime retrieves the last sync timestamp from metadata
+func (dm *DBManager) GetLastSyncTime() (time.Time, error) {
+	query := "SELECT value FROM metadata WHERE key = 'last_sync'"
+	var value string
+	err := dm.db.QueryRow(query).Scan(&value)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// No sync recorded yet, return zero time
+			return time.Time{}, nil
+		}
+		return time.Time{}, fmt.Errorf("failed to query last sync time: %w", err)
+	}
+
+	// Parse the timestamp
+	parsedTime, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to parse sync time %q: %w", value, err)
+	}
+
+	return parsedTime, nil
+}
+
+// UpsertIssue inserts or updates an issue in the database
+func (dm *DBManager) UpsertIssue(issue *IssueDetail) error {
+	// Convert labels and assignees to JSON
+	labelsJSON, err := json.Marshal(issue.Labels)
+	if err != nil {
+		return fmt.Errorf("failed to marshal labels: %w", err)
+	}
+
+	assigneesJSON, err := json.Marshal(issue.Assignees)
+	if err != nil {
+		return fmt.Errorf("failed to marshal assignees: %w", err)
+	}
+
+	query := `
+		INSERT OR REPLACE INTO issues (
+			number, title, body, author, author_url, created_at, updated_at,
+			comment_count, state, labels, assignees
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`
+
+	_, err = dm.db.Exec(query,
+		issue.Number,
+		issue.Title,
+		issue.Body,
+		issue.Author,
+		issue.AuthorURL,
+		issue.CreatedAt,
+		issue.UpdatedAt,
+		issue.CommentCount,
+		issue.State,
+		string(labelsJSON),
+		string(assigneesJSON),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to upsert issue #%d: %w", issue.Number, err)
+	}
+
+	return nil
+}
+
+// UpsertComment inserts or updates a comment in the database
+func (dm *DBManager) UpsertComment(comment *Comment, issueNumber int) error {
+	query := `
+		INSERT OR REPLACE INTO comments (
+			id, issue_number, author, author_url, body, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?)
+	`
+
+	_, err := dm.db.Exec(query,
+		comment.ID,
+		issueNumber,
+		comment.Author,
+		comment.AuthorURL,
+		comment.Body,
+		comment.CreatedAt,
+		comment.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to upsert comment %d for issue #%d: %w", comment.ID, issueNumber, err)
+	}
+
+	return nil
+}
+
+// DeleteIssue removes an issue from the database
+func (dm *DBManager) DeleteIssue(issueNumber int) error {
+	// Comments will be deleted automatically due to ON DELETE CASCADE foreign key
+	query := "DELETE FROM issues WHERE number = ?"
+	_, err := dm.db.Exec(query, issueNumber)
+	if err != nil {
+		return fmt.Errorf("failed to delete issue #%d: %w", issueNumber, err)
+	}
+	return nil
 }

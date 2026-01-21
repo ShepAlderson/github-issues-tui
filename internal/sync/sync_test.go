@@ -1,8 +1,10 @@
 package sync
 
 import (
+	"context"
 	"testing"
 
+	gh "github.com/google/go-github/v62/github"
 	"github.com/shepbook/github-issues-tui/internal/config"
 	"github.com/shepbook/github-issues-tui/internal/database"
 )
@@ -59,4 +61,12 @@ func TestParseRepo(t *testing.T) {
 			}
 		})
 	}
+}
+
+// MockAuthManager is a mock implementation of AuthManager for testing
+type MockAuthManager struct{}
+
+func (m *MockAuthManager) GetAuthenticatedClient(ctx context.Context) (*gh.Client, error) {
+	// Return a nil client for now - in real tests we'd use a proper mock
+	return nil, nil
 }
