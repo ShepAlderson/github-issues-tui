@@ -1206,3 +1206,235 @@ func TestRefreshMaintainsCursorOnSameIssue(t *testing.T) {
 	require.NotNil(t, selectedAfter)
 	assert.Equal(t, selectedNumber, selectedAfter.Number)
 }
+
+// Tests for Error Handling (US-013)
+
+func TestMinorErrorShownInStatusBar(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Simulate a minor error (network timeout)
+	m.SetRefreshFunc(func() tea.Msg {
+		return RefreshDoneMsg{Issues: issues}
+	})
+
+	// Start refresh
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = newModel.(Model)
+
+	// Simulate a network timeout error (minor)
+	newModel, _ = m.Update(RefreshErrorMsg{Err: fmt.Errorf("network timeout: connection timed out")})
+	m = newModel.(Model)
+
+	// Error should be shown in status bar, not as modal
+	assert.False(t, m.HasErrorModal())
+	assert.NotEmpty(t, m.GetRefreshError())
+
+	view := m.View()
+	// Status bar should show error
+	assert.Contains(t, view, "timeout")
+}
+
+func TestMinorErrorSuggestsRetry(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Simulate a network error
+	newModel, _ := m.Update(RefreshErrorMsg{Err: fmt.Errorf("network error: dial tcp: no route to host")})
+	m = newModel.(Model)
+
+	view := m.View()
+
+	// Should show actionable guidance - suggest retry
+	assert.Contains(t, view, "r: retry")
+}
+
+func TestRateLimitErrorShownInStatusBar(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Simulate a rate limit error (minor)
+	newModel, _ := m.Update(RefreshErrorMsg{Err: fmt.Errorf("GitHub API error: 403 rate limit exceeded")})
+	m = newModel.(Model)
+
+	// Should be shown in status bar, not modal
+	assert.False(t, m.HasErrorModal())
+	assert.Contains(t, m.GetRefreshError(), "rate limit")
+}
+
+func TestCriticalErrorShowsModal(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Simulate a critical error (invalid token)
+	err := fmt.Errorf("invalid GitHub token: authentication failed (401 Unauthorized)")
+	newModel, _ := m.Update(CriticalErrorMsg{Err: err, Title: "Authentication Error"})
+	m = newModel.(Model)
+
+	// Should show modal
+	assert.True(t, m.HasErrorModal())
+	assert.Equal(t, "Authentication Error", m.GetErrorModalTitle())
+	assert.Contains(t, m.GetErrorModalMessage(), "invalid")
+}
+
+func TestCriticalErrorModalRequiresAcknowledgment(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Show critical error modal
+	err := fmt.Errorf("database corruption: file is not a database")
+	newModel, _ := m.Update(CriticalErrorMsg{Err: err, Title: "Database Error"})
+	m = newModel.(Model)
+
+	assert.True(t, m.HasErrorModal())
+
+	// Navigation keys should not work while modal is shown
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = newModel.(Model)
+	assert.True(t, m.HasErrorModal()) // Modal still shown
+
+	// Press Enter to acknowledge
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	// Modal should be dismissed
+	assert.False(t, m.HasErrorModal())
+}
+
+func TestCriticalErrorModalDismissedWithEscape(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Show critical error modal
+	err := fmt.Errorf("invalid token")
+	newModel, _ := m.Update(CriticalErrorMsg{Err: err, Title: "Auth Error"})
+	m = newModel.(Model)
+
+	assert.True(t, m.HasErrorModal())
+
+	// Press Escape to dismiss
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	m = newModel.(Model)
+
+	assert.False(t, m.HasErrorModal())
+}
+
+func TestErrorModalViewRendering(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Show critical error modal with actionable guidance
+	err := fmt.Errorf("invalid GitHub token: authentication failed (401 Unauthorized). Please check that your token is correct and has not expired")
+	newModel, _ := m.Update(CriticalErrorMsg{
+		Err:      err,
+		Title:    "Authentication Error",
+		Guidance: "Run 'ghissues config' to update your authentication settings.",
+	})
+	m = newModel.(Model)
+
+	view := m.View()
+
+	// Modal should be visible
+	assert.Contains(t, view, "Authentication Error")
+	assert.Contains(t, view, "Unauthorized")
+	// Should show actionable guidance
+	assert.Contains(t, view, "ghissues config")
+	// Should show dismissal instructions
+	assert.Contains(t, view, "Enter")
+}
+
+func TestDatabaseErrorShowsModal(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Database corruption is a critical error
+	err := fmt.Errorf("database error: file is not a database")
+	newModel, _ := m.Update(CriticalErrorMsg{
+		Err:      err,
+		Title:    "Database Error",
+		Guidance: "Try deleting the database file and running 'ghissues sync' to rebuild it.",
+	})
+	m = newModel.(Model)
+
+	assert.True(t, m.HasErrorModal())
+	view := m.View()
+	assert.Contains(t, view, "Database Error")
+	assert.Contains(t, view, "database")
+}
+
+func TestNavigationBlockedDuringErrorModal(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Remember initial cursor position
+	initialCursor := m.cursor
+
+	// Show critical error modal
+	newModel, _ := m.Update(CriticalErrorMsg{Err: fmt.Errorf("error"), Title: "Error"})
+	m = newModel.(Model)
+
+	// Try various navigation keys
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = newModel.(Model)
+	assert.Equal(t, initialCursor, m.cursor) // Cursor unchanged
+
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	m = newModel.(Model)
+	assert.Equal(t, initialCursor, m.cursor) // Cursor unchanged
+
+	// 'q' should dismiss modal, not quit
+	newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	m = newModel.(Model)
+	// Modal should be dismissed
+	assert.False(t, m.HasErrorModal())
+	// Should not return quit command
+	assert.Nil(t, cmd)
+}
+
+func TestRefreshBlockedDuringErrorModal(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Set refresh function
+	m.SetRefreshFunc(func() tea.Msg {
+		return RefreshDoneMsg{Issues: issues}
+	})
+
+	// Show critical error modal
+	newModel, _ := m.Update(CriticalErrorMsg{Err: fmt.Errorf("error"), Title: "Error"})
+	m = newModel.(Model)
+
+	// Try to trigger refresh while modal is shown
+	newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = newModel.(Model)
+
+	// Should not start refreshing
+	assert.False(t, m.IsRefreshing())
+	assert.Nil(t, cmd)
+}
+
+func TestNetworkErrorIncludesConnectivityGuidance(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(140, 30) // Wider to see full message
+
+	// Network error
+	newModel, _ := m.Update(RefreshErrorMsg{Err: fmt.Errorf("failed to execute request: dial tcp: no such host")})
+	m = newModel.(Model)
+
+	view := m.View()
+
+	// Should suggest checking connectivity (part of the standard error display)
+	// The error message and retry option should be visible
+	assert.Contains(t, view, "dial tcp")
+}

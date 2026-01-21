@@ -43,6 +43,13 @@ type RefreshErrorMsg struct {
 // RefreshStartMsg is sent to initiate a refresh (used by Init for auto-refresh)
 type RefreshStartMsg struct{}
 
+// CriticalErrorMsg is sent when a critical error occurs that requires user acknowledgment
+type CriticalErrorMsg struct {
+	Err      error  // The underlying error
+	Title    string // Title for the error modal (e.g., "Authentication Error")
+	Guidance string // Optional actionable guidance for resolving the error
+}
+
 // Model represents the TUI application state
 type Model struct {
 	issues           []github.Issue
@@ -61,10 +68,16 @@ type Model struct {
 	glamourRenderer  *glamour.TermRenderer
 
 	// Refresh state
-	isRefreshing     bool            // Whether a refresh is in progress
-	refreshProgress  RefreshProgress // Current refresh progress
-	refreshError     string          // Last refresh error message
-	refreshFunc      func() tea.Msg  // Function to call to perform refresh
+	isRefreshing    bool            // Whether a refresh is in progress
+	refreshProgress RefreshProgress // Current refresh progress
+	refreshError    string          // Last refresh error message
+	refreshFunc     func() tea.Msg  // Function to call to perform refresh
+
+	// Error modal state (for critical errors)
+	showErrorModal    bool   // Whether the error modal is visible
+	errorModalTitle   string // Title of the error modal
+	errorModalMessage string // Error message to display
+	errorModalGuidance string // Optional actionable guidance
 }
 
 // NewModel creates a new TUI model with the given issues and columns
@@ -119,6 +132,28 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Handle error modal first - block most keys when modal is shown
+		if m.showErrorModal {
+			switch {
+			case msg.Type == tea.KeyCtrlC:
+				return m, tea.Quit
+			case msg.Type == tea.KeyEscape, msg.Type == tea.KeyEnter:
+				// Dismiss the error modal
+				m.showErrorModal = false
+				m.errorModalTitle = ""
+				m.errorModalMessage = ""
+				m.errorModalGuidance = ""
+			case msg.Type == tea.KeyRunes && len(msg.Runes) > 0 && msg.Runes[0] == 'q':
+				// Dismiss modal with 'q' as well
+				m.showErrorModal = false
+				m.errorModalTitle = ""
+				m.errorModalMessage = ""
+				m.errorModalGuidance = ""
+			}
+			// Block all other keys while modal is shown
+			return m, nil
+		}
+
 		switch {
 		case msg.Type == tea.KeyCtrlC:
 			return m, tea.Quit
@@ -232,6 +267,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err != nil {
 			m.refreshError = msg.Err.Error()
 		}
+	case CriticalErrorMsg:
+		// Show error modal for critical errors
+		m.showErrorModal = true
+		m.errorModalTitle = msg.Title
+		if msg.Err != nil {
+			m.errorModalMessage = msg.Err.Error()
+		}
+		m.errorModalGuidance = msg.Guidance
 	case RefreshStartMsg:
 		// Auto-refresh trigger from Init
 		if !m.isRefreshing {
@@ -252,6 +295,11 @@ func (m Model) View() string {
 		return ""
 	}
 
+	// If error modal is shown, render it over everything
+	if m.showErrorModal {
+		return m.renderErrorModal()
+	}
+
 	// If in comments view, render the drill-down view instead
 	if m.inCommentsView {
 		return m.renderCommentsView()
@@ -262,6 +310,7 @@ func (m Model) View() string {
 	// Styles
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86"))
 	statusStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 
 	// Title
 	title := titleStyle.Render("GitHub Issues")
@@ -321,7 +370,7 @@ func (m Model) View() string {
 		sortIndicator = "↑"
 	}
 
-	// Build status line with refresh indicator
+	// Build status line with refresh indicator or error
 	var status string
 	if m.isRefreshing {
 		if m.refreshProgress.Total > 0 {
@@ -332,11 +381,25 @@ func (m Model) View() string {
 			status = fmt.Sprintf("Refreshing... | %d issues | %s %s | r: refresh | q: quit",
 				len(m.issues), m.sortField.DisplayName(), sortIndicator)
 		}
+		b.WriteString(statusStyle.Render(status))
+	} else if m.refreshError != "" {
+		// Show minor error in status bar with retry hint
+		errMsg := m.refreshError
+		// Truncate if too long for status bar
+		maxErrLen := m.width - 30
+		if maxErrLen < 20 {
+			maxErrLen = 40
+		}
+		if len(errMsg) > maxErrLen {
+			errMsg = errMsg[:maxErrLen-3] + "..."
+		}
+		status = fmt.Sprintf("Error: %s | r: retry | q: quit", errMsg)
+		b.WriteString(errorStyle.Render(status))
 	} else {
 		status = fmt.Sprintf("%d issues | %s %s | s: sort | S: reverse | r: refresh | m: markdown | j/k: nav | h/l: scroll | Enter: comments | q: quit",
 			len(m.issues), m.sortField.DisplayName(), sortIndicator)
+		b.WriteString(statusStyle.Render(status))
 	}
-	b.WriteString(statusStyle.Render(status))
 
 	return b.String()
 }
@@ -577,6 +640,113 @@ func (m Model) renderCommentsView() string {
 	return b.String()
 }
 
+// renderErrorModal renders a modal dialog for critical errors
+func (m Model) renderErrorModal() string {
+	var b strings.Builder
+
+	// Styles for the error modal
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
+	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	messageStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
+	guidanceStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("226")).Italic(true)
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+
+	// Calculate modal dimensions
+	modalWidth := min(m.width-4, 70)
+	if modalWidth < 40 {
+		modalWidth = 40
+	}
+
+	// Calculate padding for centering
+	leftPadding := (m.width - modalWidth) / 2
+	if leftPadding < 0 {
+		leftPadding = 0
+	}
+	pad := strings.Repeat(" ", leftPadding)
+
+	// Top spacing for vertical centering
+	topPadding := (m.height - 12) / 2
+	if topPadding < 2 {
+		topPadding = 2
+	}
+	for i := 0; i < topPadding; i++ {
+		b.WriteString("\n")
+	}
+
+	// Top border
+	topBorder := "╔" + strings.Repeat("═", modalWidth-2) + "╗"
+	b.WriteString(pad + borderStyle.Render(topBorder) + "\n")
+
+	// Title line
+	b.WriteString(pad + borderStyle.Render("║") + " " + titleStyle.Render(m.errorModalTitle) + strings.Repeat(" ", max(0, modalWidth-4-len(m.errorModalTitle))) + " " + borderStyle.Render("║") + "\n")
+
+	// Separator line
+	sepLine := "║" + strings.Repeat("─", modalWidth-2) + "║"
+	b.WriteString(pad + borderStyle.Render(sepLine) + "\n")
+
+	// Message - wrap to fit modal width
+	msgWidth := modalWidth - 4
+	msgLines := wrapText(m.errorModalMessage, msgWidth)
+	for _, line := range msgLines {
+		paddedLine := line + strings.Repeat(" ", max(0, msgWidth-len(line)))
+		b.WriteString(pad + borderStyle.Render("║") + " " + messageStyle.Render(paddedLine) + " " + borderStyle.Render("║") + "\n")
+	}
+
+	// Empty line before guidance
+	emptyLine := strings.Repeat(" ", modalWidth-2)
+	b.WriteString(pad + borderStyle.Render("║") + emptyLine + borderStyle.Render("║") + "\n")
+
+	// Guidance if present
+	if m.errorModalGuidance != "" {
+		guidanceLines := wrapText(m.errorModalGuidance, msgWidth)
+		for _, line := range guidanceLines {
+			paddedLine := line + strings.Repeat(" ", max(0, msgWidth-len(line)))
+			b.WriteString(pad + borderStyle.Render("║") + " " + guidanceStyle.Render(paddedLine) + " " + borderStyle.Render("║") + "\n")
+		}
+		b.WriteString(pad + borderStyle.Render("║") + emptyLine + borderStyle.Render("║") + "\n")
+	}
+
+	// Instructions line
+	instructions := "Press Enter or Esc to dismiss"
+	instrPadLen := modalWidth - 4 - len(instructions)
+	if instrPadLen < 0 {
+		instrPadLen = 0
+	}
+	instrLine := strings.Repeat(" ", instrPadLen/2) + instructions + strings.Repeat(" ", instrPadLen-instrPadLen/2)
+	b.WriteString(pad + borderStyle.Render("║") + " " + dimStyle.Render(instrLine) + " " + borderStyle.Render("║") + "\n")
+
+	// Bottom border
+	bottomBorder := "╚" + strings.Repeat("═", modalWidth-2) + "╝"
+	b.WriteString(pad + borderStyle.Render(bottomBorder) + "\n")
+
+	return b.String()
+}
+
+// wrapText wraps text to fit within a specified width
+func wrapText(text string, width int) []string {
+	if width <= 0 {
+		return []string{text}
+	}
+
+	var lines []string
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return []string{}
+	}
+
+	currentLine := words[0]
+	for _, word := range words[1:] {
+		if len(currentLine)+1+len(word) <= width {
+			currentLine += " " + word
+		} else {
+			lines = append(lines, currentLine)
+			currentLine = word
+		}
+	}
+	lines = append(lines, currentLine)
+	return lines
+}
+
 // padToWidth pads a string to a specific width, accounting for ANSI codes
 func padToWidth(s string, width int) string {
 	// Get visual width (lipgloss handles ANSI codes)
@@ -665,6 +835,26 @@ func (m Model) GetRefreshError() string {
 // SetRefreshFunc sets the function to be called when refresh is triggered
 func (m *Model) SetRefreshFunc(fn func() tea.Msg) {
 	m.refreshFunc = fn
+}
+
+// HasErrorModal returns whether the error modal is visible
+func (m Model) HasErrorModal() bool {
+	return m.showErrorModal
+}
+
+// GetErrorModalTitle returns the title of the error modal
+func (m Model) GetErrorModalTitle() string {
+	return m.errorModalTitle
+}
+
+// GetErrorModalMessage returns the error message in the modal
+func (m Model) GetErrorModalMessage() string {
+	return m.errorModalMessage
+}
+
+// GetErrorModalGuidance returns the guidance text for the error modal
+func (m Model) GetErrorModalGuidance() string {
+	return m.errorModalGuidance
 }
 
 // sortIssues sorts the issues based on the current sort field and order
