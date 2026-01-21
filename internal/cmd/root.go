@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/shepbook/ghissues/internal/auth"
@@ -132,6 +133,13 @@ You can also run 'ghissues config' to reconfigure at any time.`,
 				_, sortOrder = config.DefaultSortConfig()
 			}
 
+			// Load last sync time from database
+			lastSyncTime, err := store.GetLastSyncTime(context.Background())
+			if err != nil {
+				// Non-fatal error - just log and continue with zero time
+				lastSyncTime = time.Time{}
+			}
+
 			// Skip TUI if disabled (for testing)
 			if disableTUI {
 				fmt.Fprintf(cmd.OutOrStdout(), "Ready to browse issues from %s (%d issues)\n", cfg.Repository, len(issues))
@@ -146,6 +154,7 @@ You can also run 'ghissues config' to reconfigure at any time.`,
 
 			// Create and run TUI
 			model := tui.NewModelWithSort(issues, columns, sortField, sortOrder)
+			model.SetLastSyncTime(lastSyncTime)
 
 			// Set up refresh function for manual refresh (r key)
 			// This creates a closure that captures the necessary context
@@ -276,6 +285,13 @@ func createRefreshFunc(cfg *config.Config, store *db.Store, owner, repo string) 
 			return tui.RefreshErrorMsg{Err: fmt.Errorf("failed to load issues after sync: %w", err)}
 		}
 
-		return tui.RefreshDoneMsg{Issues: issues}
+		// Get the updated last sync time from the database
+		lastSyncTime, err := store.GetLastSyncTime(ctx)
+		if err != nil {
+			// Non-fatal - use current time as fallback
+			lastSyncTime = time.Now()
+		}
+
+		return tui.RefreshDoneMsg{Issues: issues, LastSyncTime: lastSyncTime}
 	}
 }

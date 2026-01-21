@@ -32,7 +32,8 @@ type RefreshProgressMsg struct {
 
 // RefreshDoneMsg is sent when refresh completes successfully
 type RefreshDoneMsg struct {
-	Issues []github.Issue
+	Issues       []github.Issue
+	LastSyncTime time.Time
 }
 
 // RefreshErrorMsg is sent when refresh fails
@@ -52,20 +53,20 @@ type CriticalErrorMsg struct {
 
 // Model represents the TUI application state
 type Model struct {
-	issues           []github.Issue
-	comments         []github.Comment
-	columns          []string
-	cursor           int
-	width            int
-	height           int
-	sortField        config.SortField
-	sortOrder        config.SortOrder
-	sortChanged      bool // Track if sort was changed during session
-	rawMarkdown      bool // Toggle between raw and rendered markdown
-	detailScrollY    int  // Scroll offset for detail panel
-	commentsScrollY  int  // Scroll offset for comments view
-	inCommentsView   bool // Whether we're in the comments view
-	glamourRenderer  *glamour.TermRenderer
+	issues          []github.Issue
+	comments        []github.Comment
+	columns         []string
+	cursor          int
+	width           int
+	height          int
+	sortField       config.SortField
+	sortOrder       config.SortOrder
+	sortChanged     bool // Track if sort was changed during session
+	rawMarkdown     bool // Toggle between raw and rendered markdown
+	detailScrollY   int  // Scroll offset for detail panel
+	commentsScrollY int  // Scroll offset for comments view
+	inCommentsView  bool // Whether we're in the comments view
+	glamourRenderer *glamour.TermRenderer
 
 	// Refresh state
 	isRefreshing    bool            // Whether a refresh is in progress
@@ -74,10 +75,13 @@ type Model struct {
 	refreshFunc     func() tea.Msg  // Function to call to perform refresh
 
 	// Error modal state (for critical errors)
-	showErrorModal    bool   // Whether the error modal is visible
-	errorModalTitle   string // Title of the error modal
-	errorModalMessage string // Error message to display
+	showErrorModal     bool   // Whether the error modal is visible
+	errorModalTitle    string // Title of the error modal
+	errorModalMessage  string // Error message to display
 	errorModalGuidance string // Optional actionable guidance
+
+	// Last sync time
+	lastSyncTime time.Time // When data was last synced (zero = never)
 }
 
 // NewModel creates a new TUI model with the given issues and columns
@@ -261,6 +265,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
+		// Update last sync time
+		if !msg.LastSyncTime.IsZero() {
+			m.lastSyncTime = msg.LastSyncTime
+		}
 	case RefreshErrorMsg:
 		m.isRefreshing = false
 		m.refreshProgress = RefreshProgress{}
@@ -370,6 +378,9 @@ func (m Model) View() string {
 		sortIndicator = "↑"
 	}
 
+	// Format last sync time
+	lastSyncedStr := formatRelativeTime(m.lastSyncTime)
+
 	// Build status line with refresh indicator or error
 	var status string
 	if m.isRefreshing {
@@ -396,8 +407,8 @@ func (m Model) View() string {
 		status = fmt.Sprintf("Error: %s | r: retry | q: quit", errMsg)
 		b.WriteString(errorStyle.Render(status))
 	} else {
-		status = fmt.Sprintf("%d issues | %s %s | s: sort | S: reverse | r: refresh | m: markdown | j/k: nav | h/l: scroll | Enter: comments | q: quit",
-			len(m.issues), m.sortField.DisplayName(), sortIndicator)
+		status = fmt.Sprintf("Last synced: %s | %d issues | %s %s | r: refresh | q: quit",
+			lastSyncedStr, len(m.issues), m.sortField.DisplayName(), sortIndicator)
 		b.WriteString(statusStyle.Render(status))
 	}
 
@@ -855,6 +866,39 @@ func (m Model) GetErrorModalMessage() string {
 // GetErrorModalGuidance returns the guidance text for the error modal
 func (m Model) GetErrorModalGuidance() string {
 	return m.errorModalGuidance
+}
+
+// SetLastSyncTime sets the last sync time
+func (m *Model) SetLastSyncTime(t time.Time) {
+	m.lastSyncTime = t
+}
+
+// GetLastSyncTime returns the last sync time (zero value if never synced)
+func (m Model) GetLastSyncTime() time.Time {
+	return m.lastSyncTime
+}
+
+// formatRelativeTime formats a time as a relative duration (e.g., "5m ago")
+func formatRelativeTime(t time.Time) string {
+	if t.IsZero() {
+		return "never"
+	}
+
+	diff := time.Since(t)
+
+	if diff < time.Minute {
+		return "<1m ago"
+	}
+	if diff < time.Hour {
+		minutes := int(diff.Minutes())
+		return fmt.Sprintf("%dm ago", minutes)
+	}
+	if diff < 24*time.Hour {
+		hours := int(diff.Hours())
+		return fmt.Sprintf("%dh ago", hours)
+	}
+	days := int(diff.Hours() / 24)
+	return fmt.Sprintf("%dd ago", days)
 }
 
 // sortIssues sorts the issues based on the current sort field and order

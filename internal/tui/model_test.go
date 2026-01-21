@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/shepbook/ghissues/internal/config"
@@ -1437,4 +1438,187 @@ func TestNetworkErrorIncludesConnectivityGuidance(t *testing.T) {
 	// Should suggest checking connectivity (part of the standard error display)
 	// The error message and retry option should be visible
 	assert.Contains(t, view, "dial tcp")
+}
+
+// Tests for Last Synced Indicator (US-010)
+
+func TestSetLastSyncTime(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+
+	syncTime := time.Date(2024, 1, 20, 14, 30, 0, 0, time.UTC)
+	m.SetLastSyncTime(syncTime)
+
+	assert.Equal(t, syncTime, m.GetLastSyncTime())
+}
+
+func TestLastSyncTimeDefaultIsZero(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+
+	// Default should be zero time (never synced)
+	assert.True(t, m.GetLastSyncTime().IsZero())
+}
+
+func TestStatusBarShowsLastSyncedTime(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(160, 30) // Wide enough to show full status bar
+
+	// Set last sync time to a few minutes ago
+	syncTime := time.Now().Add(-5 * time.Minute)
+	m.SetLastSyncTime(syncTime)
+
+	view := m.View()
+
+	// Status bar should show "Last synced:" indicator
+	assert.Contains(t, view, "Last synced:")
+}
+
+func TestLastSyncedRelativeTimeMinutesAgo(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(160, 30)
+
+	// Set last sync time to 5 minutes ago
+	syncTime := time.Now().Add(-5 * time.Minute)
+	m.SetLastSyncTime(syncTime)
+
+	view := m.View()
+
+	// Should show relative time (e.g., "5 minutes ago")
+	assert.Contains(t, view, "5m ago")
+}
+
+func TestLastSyncedRelativeTimeSecondsAgo(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(160, 30)
+
+	// Set last sync time to 30 seconds ago
+	syncTime := time.Now().Add(-30 * time.Second)
+	m.SetLastSyncTime(syncTime)
+
+	view := m.View()
+
+	// Should show "just now" or "<1m ago"
+	assert.Contains(t, view, "<1m ago")
+}
+
+func TestLastSyncedRelativeTimeHoursAgo(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(160, 30)
+
+	// Set last sync time to 2 hours ago
+	syncTime := time.Now().Add(-2 * time.Hour)
+	m.SetLastSyncTime(syncTime)
+
+	view := m.View()
+
+	// Should show relative time (e.g., "2h ago")
+	assert.Contains(t, view, "2h ago")
+}
+
+func TestLastSyncedRelativeTimeDaysAgo(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(160, 30)
+
+	// Set last sync time to 3 days ago
+	syncTime := time.Now().Add(-3 * 24 * time.Hour)
+	m.SetLastSyncTime(syncTime)
+
+	view := m.View()
+
+	// Should show relative time (e.g., "3d ago")
+	assert.Contains(t, view, "3d ago")
+}
+
+func TestLastSyncedNeverSynced(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(160, 30)
+
+	// Don't set last sync time (zero value = never synced)
+	view := m.View()
+
+	// Should show "never" or similar indicator
+	assert.Contains(t, view, "Last synced: never")
+}
+
+func TestLastSyncTimeUpdatedAfterRefresh(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(160, 30)
+
+	// Initially never synced
+	assert.True(t, m.GetLastSyncTime().IsZero())
+
+	// Start refresh
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = newModel.(Model)
+
+	// Complete refresh - this should include the new sync time
+	newSyncTime := time.Now()
+	newModel, _ = m.Update(RefreshDoneMsg{Issues: createTestIssues(), LastSyncTime: newSyncTime})
+	m = newModel.(Model)
+
+	// Last sync time should be updated
+	assert.False(t, m.GetLastSyncTime().IsZero())
+	// Should be approximately now (within a second)
+	assert.WithinDuration(t, newSyncTime, m.GetLastSyncTime(), time.Second)
+}
+
+func TestLastSyncTimeNotChangedOnRefreshError(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(160, 30)
+
+	// Set initial sync time
+	initialSyncTime := time.Now().Add(-10 * time.Minute)
+	m.SetLastSyncTime(initialSyncTime)
+
+	// Start refresh
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = newModel.(Model)
+
+	// Simulate error
+	newModel, _ = m.Update(RefreshErrorMsg{Err: fmt.Errorf("network error")})
+	m = newModel.(Model)
+
+	// Last sync time should remain unchanged
+	assert.Equal(t, initialSyncTime, m.GetLastSyncTime())
+}
+
+func TestRelativeTimeFormat(t *testing.T) {
+	tests := []struct {
+		name     string
+		duration time.Duration
+		expected string
+	}{
+		{name: "30 seconds", duration: 30 * time.Second, expected: "<1m ago"},
+		{name: "1 minute", duration: 1 * time.Minute, expected: "1m ago"},
+		{name: "5 minutes", duration: 5 * time.Minute, expected: "5m ago"},
+		{name: "59 minutes", duration: 59 * time.Minute, expected: "59m ago"},
+		{name: "1 hour", duration: 1 * time.Hour, expected: "1h ago"},
+		{name: "2 hours", duration: 2 * time.Hour, expected: "2h ago"},
+		{name: "23 hours", duration: 23 * time.Hour, expected: "23h ago"},
+		{name: "1 day", duration: 24 * time.Hour, expected: "1d ago"},
+		{name: "3 days", duration: 3 * 24 * time.Hour, expected: "3d ago"},
+		{name: "7 days", duration: 7 * 24 * time.Hour, expected: "7d ago"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatRelativeTime(time.Now().Add(-tt.duration))
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestRelativeTimeFormatNeverSynced(t *testing.T) {
+	// Zero time should return "never"
+	result := formatRelativeTime(time.Time{})
+	assert.Equal(t, "never", result)
 }
