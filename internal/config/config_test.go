@@ -282,3 +282,102 @@ method = "env"
 	// Database path should be empty (will use default)
 	assert.Empty(t, cfg.Database.Path)
 }
+
+func TestLoadConfigWithDisplayColumns(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Create a config file with display section
+	content := `repository = "myorg/myrepo"
+
+[auth]
+method = "env"
+
+[display]
+columns = ["number", "title", "author"]
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load the config
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"number", "title", "author"}, cfg.Display.Columns)
+}
+
+func TestSaveConfigWithDisplayColumns(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	cfg := &Config{
+		Repository: "owner/repo",
+		Auth: AuthConfig{
+			Method: "env",
+		},
+		Display: DisplayConfig{
+			Columns: []string{"number", "title", "date", "comments"},
+		},
+	}
+
+	err := Save(cfg, configPath)
+	require.NoError(t, err)
+
+	// Verify contents
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `columns = ["number", "title", "date", "comments"]`)
+}
+
+func TestLoadConfigWithoutDisplayColumns(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Create a config file without display section
+	content := `repository = "myorg/myrepo"
+
+[auth]
+method = "env"
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load the config
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	// Display columns should be nil (will use defaults)
+	assert.Nil(t, cfg.Display.Columns)
+}
+
+func TestDefaultDisplayColumns(t *testing.T) {
+	expected := []string{"number", "title", "author", "date", "comments"}
+	assert.Equal(t, expected, DefaultDisplayColumns())
+}
+
+func TestValidateDisplayColumn(t *testing.T) {
+	tests := []struct {
+		name    string
+		column  string
+		wantErr bool
+	}{
+		{name: "number column", column: "number", wantErr: false},
+		{name: "title column", column: "title", wantErr: false},
+		{name: "author column", column: "author", wantErr: false},
+		{name: "date column", column: "date", wantErr: false},
+		{name: "comments column", column: "comments", wantErr: false},
+		{name: "invalid column", column: "invalid", wantErr: true},
+		{name: "empty column", column: "", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateDisplayColumn(tt.column)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

@@ -1,16 +1,25 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/shepbook/ghissues/internal/config"
 	"github.com/shepbook/ghissues/internal/db"
 	"github.com/shepbook/ghissues/internal/setup"
+	"github.com/shepbook/ghissues/internal/tui"
 	"github.com/spf13/cobra"
 )
 
 var configPath string
 var dbPath string
+var disableTUI bool // For testing - skips TUI startup
+
+// SetDisableTUI sets whether to skip TUI startup (for testing)
+func SetDisableTUI(disable bool) {
+	disableTUI = disable
+}
 
 // SetConfigPath sets a custom config path (mainly for testing)
 func SetConfigPath(path string) {
@@ -91,8 +100,37 @@ You can also run 'ghissues config' to reconfigure at any time.`,
 				return err
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Ready to browse issues from %s\n", cfg.Repository)
-			fmt.Fprintln(cmd.OutOrStdout(), "(TUI implementation coming soon)")
+			// Open database and load issues
+			store, err := db.NewStore(resolvedDBPath)
+			if err != nil {
+				return fmt.Errorf("failed to open database: %w", err)
+			}
+			defer store.Close()
+
+			issues, err := store.GetAllIssues(context.Background())
+			if err != nil {
+				return fmt.Errorf("failed to load issues: %w", err)
+			}
+
+			// Get display columns (from config or defaults)
+			columns := cfg.Display.Columns
+			if len(columns) == 0 {
+				columns = config.DefaultDisplayColumns()
+			}
+
+			// Skip TUI if disabled (for testing)
+			if disableTUI {
+				fmt.Fprintf(cmd.OutOrStdout(), "Ready to browse issues from %s (%d issues)\n", cfg.Repository, len(issues))
+				return nil
+			}
+
+			// Create and run TUI
+			model := tui.NewModel(issues, columns)
+			p := tea.NewProgram(model, tea.WithAltScreen())
+
+			if _, err := p.Run(); err != nil {
+				return fmt.Errorf("TUI error: %w", err)
+			}
 
 			return nil
 		},

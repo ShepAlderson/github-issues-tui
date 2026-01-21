@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -15,11 +16,33 @@ type Config struct {
 	Repository string         `toml:"repository"`
 	Auth       AuthConfig     `toml:"auth"`
 	Database   DatabaseConfig `toml:"database"`
+	Display    DisplayConfig  `toml:"display"`
 }
 
 // DatabaseConfig represents database configuration
 type DatabaseConfig struct {
 	Path string `toml:"path,omitempty"`
+}
+
+// DisplayConfig represents display configuration
+type DisplayConfig struct {
+	Columns []string `toml:"columns,omitempty"`
+}
+
+// ValidColumns contains all valid column names for issue display
+var ValidColumns = []string{"number", "title", "author", "date", "comments"}
+
+// DefaultDisplayColumns returns the default columns to display
+func DefaultDisplayColumns() []string {
+	return []string{"number", "title", "author", "date", "comments"}
+}
+
+// ValidateDisplayColumn validates that a column name is valid
+func ValidateDisplayColumn(column string) error {
+	if slices.Contains(ValidColumns, column) {
+		return nil
+	}
+	return fmt.Errorf("invalid display column: %q, must be one of: %v", column, ValidColumns)
 }
 
 // AuthConfig represents authentication configuration

@@ -188,6 +188,8 @@ func TestRootCommandWithExistingConfig(t *testing.T) {
 
 	SetConfigPath(cfgPath)
 	defer SetConfigPath("")
+	SetDisableTUI(true)
+	defer SetDisableTUI(false)
 
 	rootCmd := NewRootCmd()
 	buf := new(bytes.Buffer)
@@ -248,6 +250,8 @@ func TestRootCommandDBFlagSetsPath(t *testing.T) {
 	SetConfigPath(cfgPath)
 	defer SetConfigPath("")
 	defer SetDBPath("") // Reset after test
+	SetDisableTUI(true)
+	defer SetDisableTUI(false)
 
 	rootCmd := NewRootCmd()
 	buf := new(bytes.Buffer)
@@ -283,6 +287,8 @@ func TestRootCommandDBFlagTakesPrecedenceOverConfig(t *testing.T) {
 	SetConfigPath(cfgPath)
 	defer SetConfigPath("")
 	defer SetDBPath("")
+	SetDisableTUI(true)
+	defer SetDisableTUI(false)
 
 	rootCmd := NewRootCmd()
 	buf := new(bytes.Buffer)
