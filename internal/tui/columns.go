@@ -19,10 +19,16 @@ type Column struct {
 type ColumnRenderer struct {
 	columns []Column
 	styles  map[string]lipgloss.Style
+	theme   *Theme
 }
 
 // NewColumnRenderer creates a new column renderer from config
 func NewColumnRenderer(columnKeys []string) *ColumnRenderer {
+	return NewColumnRendererWithTheme(columnKeys, nil)
+}
+
+// NewColumnRendererWithTheme creates a new column renderer with theme support
+func NewColumnRendererWithTheme(columnKeys []string, theme *Theme) *ColumnRenderer {
 	// Define available columns
 	availableColumns := map[string]Column{
 		"number": {
@@ -71,19 +77,27 @@ func NewColumnRenderer(columnKeys []string) *ColumnRenderer {
 		}
 	}
 
-	// Create styles
+	// Create styles - use theme if provided, otherwise use defaults
 	styles := map[string]lipgloss.Style{
-		"header": lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("240")),
+		"header": lipgloss.NewStyle().Bold(true),
 		"cell": lipgloss.NewStyle(),
-		"selected": lipgloss.NewStyle().
-			Foreground(lipgloss.Color("205")),
+		"selected": lipgloss.NewStyle(),
+	}
+
+	// Apply theme colors if theme is provided
+	if theme != nil {
+		styles["header"] = styles["header"].Foreground(theme.Styles.ListHeader)
+		styles["selected"] = styles["selected"].Foreground(theme.Styles.ListSelected)
+	} else {
+		// Default colors
+		styles["header"] = styles["header"].Foreground(lipgloss.Color("240"))
+		styles["selected"] = styles["selected"].Foreground(lipgloss.Color("205"))
 	}
 
 	return &ColumnRenderer{
 		columns: columns,
 		styles:  styles,
+		theme:   theme,
 	}
 }
 
@@ -124,7 +138,7 @@ func (cr *ColumnRenderer) getColumnValue(issue IssueItem, columnKey string) stri
 	case "author":
 		return issue.Author
 	case "date":
-		return issue.Date
+		return FormatDate(issue.Created)
 	case "comments":
 		if issue.CommentCount == 0 {
 			return ""

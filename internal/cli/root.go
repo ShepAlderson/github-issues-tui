@@ -62,7 +62,7 @@ func Execute() error {
 			}
 
 			// Launch TUI
-			return tui.Run(cfg, dbManager)
+			return tui.Run(cfg, dbManager, cfgMgr)
 		},
 	}
 
@@ -72,6 +72,7 @@ func Execute() error {
 	// Add subcommands
 	rootCmd.AddCommand(newConfigCmd())
 	rootCmd.AddCommand(newSyncCmd())
+	rootCmd.AddCommand(newThemesCmd())
 
 	return rootCmd.Execute()
 }

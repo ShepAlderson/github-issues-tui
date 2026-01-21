@@ -47,7 +47,15 @@ func NewIssueList(dbManager *database.DBManager, cfg *config.Config, cfgMgr *con
 		columnKeys = []string{"number", "title", "author", "date", "comments"}
 	}
 
-	columnRenderer := NewColumnRenderer(columnKeys)
+	// Create theme manager and get theme for column renderer
+	tm := NewThemeManager()
+	theme, exists := tm.GetThemeByName(cfg.Display.Theme)
+	if !exists {
+		// Fall back to default theme
+		theme, _ = tm.GetThemeByName("default")
+	}
+
+	columnRenderer := NewColumnRendererWithTheme(columnKeys, &theme)
 
 	// Get sort configuration from config
 	sortField := "updated"
