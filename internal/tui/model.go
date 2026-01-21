@@ -82,6 +82,9 @@ type Model struct {
 
 	// Last sync time
 	lastSyncTime time.Time // When data was last synced (zero = never)
+
+	// Help overlay state
+	showHelpOverlay bool // Whether the help overlay is visible
 }
 
 // NewModel creates a new TUI model with the given issues and columns
@@ -155,6 +158,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.errorModalGuidance = ""
 			}
 			// Block all other keys while modal is shown
+			return m, nil
+		}
+
+		// Handle help overlay - block most keys when help is shown
+		if m.showHelpOverlay {
+			switch {
+			case msg.Type == tea.KeyCtrlC:
+				return m, tea.Quit
+			case msg.Type == tea.KeyEscape:
+				// Dismiss the help overlay
+				m.showHelpOverlay = false
+			case msg.Type == tea.KeyRunes && len(msg.Runes) > 0 && msg.Runes[0] == '?':
+				// Toggle help overlay off
+				m.showHelpOverlay = false
+			}
+			// Block all other keys while help is shown
+			return m, nil
+		}
+
+		// '?' toggles help overlay on (when not already showing)
+		if msg.Type == tea.KeyRunes && len(msg.Runes) > 0 && msg.Runes[0] == '?' {
+			m.showHelpOverlay = true
 			return m, nil
 		}
 
@@ -308,6 +333,11 @@ func (m Model) View() string {
 		return m.renderErrorModal()
 	}
 
+	// If help overlay is shown, render it over everything
+	if m.showHelpOverlay {
+		return m.renderHelpOverlay()
+	}
+
 	// If in comments view, render the drill-down view instead
 	if m.inCommentsView {
 		return m.renderCommentsView()
@@ -385,11 +415,11 @@ func (m Model) View() string {
 	var status string
 	if m.isRefreshing {
 		if m.refreshProgress.Total > 0 {
-			status = fmt.Sprintf("Refreshing %s: %d/%d | %d issues | %s %s | r: refresh | q: quit",
+			status = fmt.Sprintf("Refreshing %s: %d/%d | %d issues | %s %s | j/k: nav | Enter: comments | ?: help",
 				m.refreshProgress.Phase, m.refreshProgress.Current, m.refreshProgress.Total,
 				len(m.issues), m.sortField.DisplayName(), sortIndicator)
 		} else {
-			status = fmt.Sprintf("Refreshing... | %d issues | %s %s | r: refresh | q: quit",
+			status = fmt.Sprintf("Refreshing... | %d issues | %s %s | j/k: nav | Enter: comments | ?: help",
 				len(m.issues), m.sortField.DisplayName(), sortIndicator)
 		}
 		b.WriteString(statusStyle.Render(status))
@@ -397,17 +427,17 @@ func (m Model) View() string {
 		// Show minor error in status bar with retry hint
 		errMsg := m.refreshError
 		// Truncate if too long for status bar
-		maxErrLen := m.width - 30
+		maxErrLen := m.width - 50
 		if maxErrLen < 20 {
 			maxErrLen = 40
 		}
 		if len(errMsg) > maxErrLen {
 			errMsg = errMsg[:maxErrLen-3] + "..."
 		}
-		status = fmt.Sprintf("Error: %s | r: retry | q: quit", errMsg)
+		status = fmt.Sprintf("Error: %s | r: retry | ?: help | q: quit", errMsg)
 		b.WriteString(errorStyle.Render(status))
 	} else {
-		status = fmt.Sprintf("Last synced: %s | %d issues | %s %s | r: refresh | q: quit",
+		status = fmt.Sprintf("Last synced: %s | %d issues | %s %s | j/k: nav | Enter: comments | ?: help | q: quit",
 			lastSyncedStr, len(m.issues), m.sortField.DisplayName(), sortIndicator)
 		b.WriteString(statusStyle.Render(status))
 	}
@@ -644,7 +674,7 @@ func (m Model) renderCommentsView() string {
 
 	// Status bar
 	b.WriteString("\n")
-	status := fmt.Sprintf("%d comments | m: toggle markdown | h/l: scroll | Esc/q: back",
+	status := fmt.Sprintf("%d comments | m: toggle markdown | h/l: scroll | ?: help | Esc/q: back",
 		len(m.comments))
 	b.WriteString(statusStyle.Render(status))
 
@@ -719,6 +749,120 @@ func (m Model) renderErrorModal() string {
 
 	// Instructions line
 	instructions := "Press Enter or Esc to dismiss"
+	instrPadLen := modalWidth - 4 - len(instructions)
+	if instrPadLen < 0 {
+		instrPadLen = 0
+	}
+	instrLine := strings.Repeat(" ", instrPadLen/2) + instructions + strings.Repeat(" ", instrPadLen-instrPadLen/2)
+	b.WriteString(pad + borderStyle.Render("║") + " " + dimStyle.Render(instrLine) + " " + borderStyle.Render("║") + "\n")
+
+	// Bottom border
+	bottomBorder := "╚" + strings.Repeat("═", modalWidth-2) + "╝"
+	b.WriteString(pad + borderStyle.Render(bottomBorder) + "\n")
+
+	return b.String()
+}
+
+// renderHelpOverlay renders the help overlay with all keybindings organized by context
+func (m Model) renderHelpOverlay() string {
+	var b strings.Builder
+
+	// Styles
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86"))
+	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	sectionStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("208"))
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86"))
+	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+
+	// Calculate modal dimensions
+	modalWidth := min(m.width-4, 60)
+	if modalWidth < 40 {
+		modalWidth = 40
+	}
+
+	// Calculate padding for centering
+	leftPadding := (m.width - modalWidth) / 2
+	if leftPadding < 0 {
+		leftPadding = 0
+	}
+	pad := strings.Repeat(" ", leftPadding)
+
+	// Top spacing for vertical centering
+	topPadding := (m.height - 25) / 2
+	if topPadding < 1 {
+		topPadding = 1
+	}
+	for i := 0; i < topPadding; i++ {
+		b.WriteString("\n")
+	}
+
+	// Top border
+	topBorder := "╔" + strings.Repeat("═", modalWidth-2) + "╗"
+	b.WriteString(pad + borderStyle.Render(topBorder) + "\n")
+
+	// Title line
+	title := "Keyboard Shortcuts"
+	titlePad := (modalWidth - 4 - len(title)) / 2
+	titleLine := strings.Repeat(" ", titlePad) + title + strings.Repeat(" ", modalWidth-4-titlePad-len(title))
+	b.WriteString(pad + borderStyle.Render("║") + " " + titleStyle.Render(titleLine) + " " + borderStyle.Render("║") + "\n")
+
+	// Separator line
+	sepLine := "║" + strings.Repeat("─", modalWidth-2) + "║"
+	b.WriteString(pad + borderStyle.Render(sepLine) + "\n")
+
+	// Helper function to render a keybinding line
+	renderLine := func(key, desc string) {
+		keyWidth := 12
+		keyStr := keyStyle.Render(fmt.Sprintf("%-*s", keyWidth, key))
+		descStr := descStyle.Render(desc)
+		padding := strings.Repeat(" ", max(0, modalWidth-4-keyWidth-1-len(desc)))
+		b.WriteString(pad + borderStyle.Render("║") + " " + keyStr + " " + descStr + padding + " " + borderStyle.Render("║") + "\n")
+	}
+
+	// Helper function to render a section header
+	renderSection := func(title string) {
+		b.WriteString(pad + borderStyle.Render("║") + " " + sectionStyle.Render(title) + strings.Repeat(" ", max(0, modalWidth-4-len(title))) + " " + borderStyle.Render("║") + "\n")
+	}
+
+	// Navigation section
+	renderSection("Navigation")
+	renderLine("j/↓", "Move down")
+	renderLine("k/↑", "Move up")
+	renderLine("Enter", "Open comments view")
+	renderLine("Esc", "Go back / Close overlay")
+
+	// Empty line
+	b.WriteString(pad + borderStyle.Render("║") + strings.Repeat(" ", modalWidth-2) + borderStyle.Render("║") + "\n")
+
+	// Sorting section
+	renderSection("Sorting")
+	renderLine("s", "Cycle sort field")
+	renderLine("S", "Toggle sort order")
+
+	// Empty line
+	b.WriteString(pad + borderStyle.Render("║") + strings.Repeat(" ", modalWidth-2) + borderStyle.Render("║") + "\n")
+
+	// Detail Panel / Scrolling section
+	renderSection("Detail Panel / Scrolling")
+	renderLine("h", "Scroll up")
+	renderLine("l", "Scroll down")
+	renderLine("m", "Toggle markdown rendering")
+
+	// Empty line
+	b.WriteString(pad + borderStyle.Render("║") + strings.Repeat(" ", modalWidth-2) + borderStyle.Render("║") + "\n")
+
+	// Actions section
+	renderSection("Actions")
+	renderLine("r", "Refresh issues")
+	renderLine("?", "Toggle help")
+	renderLine("q", "Quit / Close view")
+
+	// Empty line
+	b.WriteString(pad + borderStyle.Render("║") + strings.Repeat(" ", modalWidth-2) + borderStyle.Render("║") + "\n")
+
+	// Instructions line
+	instructions := "Press ? or Esc to close"
 	instrPadLen := modalWidth - 4 - len(instructions)
 	if instrPadLen < 0 {
 		instrPadLen = 0
@@ -876,6 +1020,11 @@ func (m *Model) SetLastSyncTime(t time.Time) {
 // GetLastSyncTime returns the last sync time (zero value if never synced)
 func (m Model) GetLastSyncTime() time.Time {
 	return m.lastSyncTime
+}
+
+// ShowHelpOverlay returns whether the help overlay is visible
+func (m Model) ShowHelpOverlay() bool {
+	return m.showHelpOverlay
 }
 
 // formatRelativeTime formats a time as a relative duration (e.g., "5m ago")

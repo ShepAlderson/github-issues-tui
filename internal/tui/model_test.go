@@ -1622,3 +1622,197 @@ func TestRelativeTimeFormatNeverSynced(t *testing.T) {
 	result := formatRelativeTime(time.Time{})
 	assert.Equal(t, "never", result)
 }
+
+// Tests for Keybinding Help (US-011)
+
+func TestHelpOverlayOpenedWithQuestionMark(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Initially help overlay should not be shown
+	assert.False(t, m.ShowHelpOverlay())
+
+	// Press '?' to open help overlay
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m = newModel.(Model)
+
+	assert.True(t, m.ShowHelpOverlay())
+}
+
+func TestHelpOverlayDismissedWithQuestionMark(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Open help overlay
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m = newModel.(Model)
+	assert.True(t, m.ShowHelpOverlay())
+
+	// Press '?' again to dismiss
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m = newModel.(Model)
+
+	assert.False(t, m.ShowHelpOverlay())
+}
+
+func TestHelpOverlayDismissedWithEscape(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Open help overlay
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m = newModel.(Model)
+	assert.True(t, m.ShowHelpOverlay())
+
+	// Press Escape to dismiss
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	m = newModel.(Model)
+
+	assert.False(t, m.ShowHelpOverlay())
+}
+
+func TestHelpOverlayShowsAllKeybindings(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 40)
+
+	// Open help overlay
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m = newModel.(Model)
+
+	view := m.View()
+
+	// Should show keybindings organized by context
+	// Navigation
+	assert.Contains(t, view, "j/↓")
+	assert.Contains(t, view, "k/↑")
+
+	// Actions
+	assert.Contains(t, view, "Enter")
+	assert.Contains(t, view, "r")
+
+	// Sorting
+	assert.Contains(t, view, "s")
+	assert.Contains(t, view, "S")
+
+	// Detail Panel / Scroll
+	assert.Contains(t, view, "h")
+	assert.Contains(t, view, "l")
+	assert.Contains(t, view, "m")
+
+	// General
+	assert.Contains(t, view, "q")
+	assert.Contains(t, view, "?")
+}
+
+func TestHelpOverlayBlocksOtherKeys(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Remember initial cursor position
+	initialCursor := m.cursor
+
+	// Open help overlay
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m = newModel.(Model)
+
+	// Try navigation key - should be blocked
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = newModel.(Model)
+
+	assert.Equal(t, initialCursor, m.cursor) // Cursor unchanged
+	assert.True(t, m.ShowHelpOverlay()) // Still showing help
+}
+
+func TestHelpOverlayCtrlCStillQuits(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Open help overlay
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m = newModel.(Model)
+
+	// Ctrl+C should still work to quit
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	assert.IsType(t, tea.QuitMsg{}, msg)
+}
+
+func TestFooterShowsContextSensitiveKeysInListView(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	view := m.View()
+
+	// In list view, footer should show common list navigation keys
+	assert.Contains(t, view, "j/k")
+	assert.Contains(t, view, "Enter")
+	assert.Contains(t, view, "?")
+}
+
+func TestFooterShowsContextSensitiveKeysInCommentsView(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+	m.SetComments(createTestComments())
+
+	// Enter comments view
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	view := m.View()
+
+	// In comments view, footer should show relevant keys for that context
+	assert.Contains(t, view, "h/l")
+	assert.Contains(t, view, "Esc")
+	assert.Contains(t, view, "?")
+}
+
+func TestFooterShowsHelpHint(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	view := m.View()
+
+	// Footer should always show ? for help
+	assert.Contains(t, view, "?")
+}
+
+func TestHelpOverlayOrganizedByContext(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 40)
+
+	// Open help overlay
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m = newModel.(Model)
+
+	view := m.View()
+
+	// Should have section headers
+	assert.Contains(t, view, "Navigation")
+	assert.Contains(t, view, "Sorting")
+}
+
+func TestHelpOverlayShowsDismissInstructions(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 40)
+
+	// Open help overlay
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m = newModel.(Model)
+
+	view := m.View()
+
+	// Should show how to dismiss
+	assert.Contains(t, view, "Esc")
+}
