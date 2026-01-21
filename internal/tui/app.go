@@ -11,22 +11,26 @@ import (
 
 // App represents the main TUI application
 type App struct {
-	config        *config.Config
-	dbManager     *database.DBManager
-	issueList     *IssueList
-	issueDetail   *IssueDetailComponent
-	width         int
-	height        int
-	ready         bool
+	config          *config.Config
+	dbManager       *database.DBManager
+	issueList       *IssueList
+	issueDetail     *IssueDetailComponent
+	comments        *CommentsComponent
+	showComments    bool
+	width           int
+	height          int
+	ready           bool
 }
 
 // NewApp creates a new TUI application instance
 func NewApp(cfg *config.Config, dbManager *database.DBManager, cfgMgr *config.Manager) *App {
 	return &App{
-		config:      cfg,
-		dbManager:   dbManager,
-		issueList:   NewIssueList(dbManager, cfg, cfgMgr),
-		issueDetail: NewIssueDetailComponent(dbManager),
+		config:        cfg,
+		dbManager:     dbManager,
+		issueList:     NewIssueList(dbManager, cfg, cfgMgr),
+		issueDetail:   NewIssueDetailComponent(dbManager),
+		comments:      NewCommentsComponent(dbManager),
+		showComments:  false,
 	}
 }
 
@@ -44,7 +48,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.height = msg.Height
 		a.ready = true
 		// Pass size to both components
-		if a.issueDetail != nil {
+		if a.showComments && a.comments != nil {
+			var cmd tea.Cmd
+			a.comments, cmd = a.comments.Update(msg)
+			return a, cmd
+		} else if a.issueDetail != nil {
 			var cmd tea.Cmd
 			a.issueDetail, cmd = a.issueDetail.Update(msg)
 			return a, cmd
@@ -55,15 +63,34 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return a, tea.Quit
-		case "enter":
-			// Handle Enter key for comments view (future US-008)
-			// For now, just pass to issue detail
-			if a.issueDetail != nil {
-				var cmd tea.Cmd
-				a.issueDetail, cmd = a.issueDetail.Update(msg)
-				return a, cmd
+		case "esc":
+			// Escape returns from comments view to issue list view
+			if a.showComments {
+				a.showComments = false
+				return a, nil
 			}
-			return a, nil
+		case "enter":
+			// Enter toggles between issue detail and comments view
+			if a.issueDetail != nil && a.comments != nil {
+				if a.showComments {
+					// If showing comments, switch back to detail view
+					a.showComments = false
+				} else {
+					// If showing detail, switch to comments view
+					selectedIssue := a.issueList.SelectedIssue()
+					if selectedIssue != nil {
+						// Get issue details to pass title to comments component
+						issue, err := a.dbManager.GetIssueByNumber(selectedIssue.Number)
+						if err == nil && issue != nil {
+							if err := a.comments.SetIssue(selectedIssue.Number, issue.Title); err != nil {
+								// Log error but continue
+							}
+							a.showComments = true
+						}
+					}
+				}
+				return a, nil
+			}
 		}
 	}
 
@@ -73,8 +100,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	a.issueList, cmd = a.issueList.Update(msg)
 	currentSelected := a.issueList.SelectedIssue()
 
-	// If selection changed, update issue detail
-	if a.issueDetail != nil && currentSelected != nil &&
+	// If selection changed and we're in detail view, update issue detail
+	if !a.showComments && a.issueDetail != nil && currentSelected != nil &&
 	   (previousSelected == nil || previousSelected.Number != currentSelected.Number) {
 		// Load the selected issue in detail view
 		if err := a.issueDetail.SetIssue(currentSelected.Number); err != nil {
@@ -83,8 +110,21 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Also pass message to issue detail for its own keybindings
-	if a.issueDetail != nil {
+	// Pass message to active component for its own keybindings
+	if a.showComments && a.comments != nil {
+		// In comments view, pass messages to comments component
+		var commentsCmd tea.Cmd
+		a.comments, commentsCmd = a.comments.Update(msg)
+		if commentsCmd != nil {
+			// Combine commands if we have multiple
+			if cmd != nil {
+				cmd = tea.Batch(cmd, commentsCmd)
+			} else {
+				cmd = commentsCmd
+			}
+		}
+	} else if a.issueDetail != nil {
+		// In detail view, pass messages to issue detail component
 		var detailCmd tea.Cmd
 		a.issueDetail, detailCmd = a.issueDetail.Update(msg)
 		if detailCmd != nil {
@@ -138,7 +178,9 @@ func (a *App) View() string {
 }
 
 func (a *App) renderRightPanel() string {
-	if a.issueDetail != nil {
+	if a.showComments && a.comments != nil {
+		return a.comments.View()
+	} else if a.issueDetail != nil {
 		return a.issueDetail.View()
 	}
 
