@@ -141,8 +141,9 @@ func (il *IssueList) View() string {
 		builder.WriteString("\n")
 	}
 
-	// Add status bar with issue count and sort status
-	status := fmt.Sprintf("Issues: %d/%d | Sort: %s", il.selectedIdx+1, len(il.issues), il.sortStatus())
+	// Add status bar with issue count, sort status, and last sync time
+	lastSyncText := il.getLastSyncText()
+	status := fmt.Sprintf("Issues: %d/%d | Sort: %s | Last synced: %s", il.selectedIdx+1, len(il.issues), il.sortStatus(), lastSyncText)
 	builder.WriteString("\n")
 	builder.WriteString(lipgloss.NewStyle().
 		Foreground(lipgloss.Color("240")).
@@ -336,4 +337,19 @@ func (il *IssueList) updateConfigAndSave() {
 		// Ignore error for now - in production we might want to log it
 		_ = il.configManager.Save(il.config)
 	}
+}
+
+// getLastSyncText returns a formatted string for the last sync time
+func (il *IssueList) getLastSyncText() string {
+	if il.dbManager == nil {
+		return "unknown"
+	}
+
+	lastSyncTime, err := il.dbManager.GetLastSyncTime()
+	if err != nil {
+		// Log error but don't crash - return generic message
+		return "unknown"
+	}
+
+	return FormatRelativeTime(lastSyncTime)
 }
