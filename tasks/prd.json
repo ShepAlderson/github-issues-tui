@@ -102,14 +102,15 @@
         "Issue count shown in status area"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-003"
       ],
       "labels": [
         "tui",
         "list"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-006",
@@ -123,14 +124,15 @@
         "Sort preference persisted to config file"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-005"
       ],
       "labels": [
         "tui",
         "list"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-007",
@@ -146,14 +148,15 @@
         "Enter on issue list opens dedicated comments view"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-005"
       ],
       "labels": [
         "tui",
         "detail"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-008",
@@ -169,14 +172,15 @@
         "Esc or q returns to issue list view"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-007"
       ],
       "labels": [
         "tui",
         "comments"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-009",
@@ -191,14 +195,15 @@
         "Handles new comments on existing issues"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-003"
       ],
       "labels": [
         "sync",
         "api"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-010",
@@ -304,6 +309,6 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-01-21T19:05:02.868Z"
+    "updatedAt": "2026-01-21T19:35:04.953Z"
   }
 }
