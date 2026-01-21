@@ -381,3 +381,199 @@ func TestValidateDisplayColumn(t *testing.T) {
 		})
 	}
 }
+
+func TestSortFieldValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		field   SortField
+		wantErr bool
+	}{
+		{name: "updated", field: SortByUpdated, wantErr: false},
+		{name: "created", field: SortByCreated, wantErr: false},
+		{name: "number", field: SortByNumber, wantErr: false},
+		{name: "comments", field: SortByComments, wantErr: false},
+		{name: "invalid", field: "invalid", wantErr: true},
+		{name: "empty", field: "", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateSortField(tt.field)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestSortOrderValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		order   SortOrder
+		wantErr bool
+	}{
+		{name: "desc", order: SortDesc, wantErr: false},
+		{name: "asc", order: SortAsc, wantErr: false},
+		{name: "invalid", order: "invalid", wantErr: true},
+		{name: "empty", order: "", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateSortOrder(tt.order)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestDefaultSortConfig(t *testing.T) {
+	sortField, sortOrder := DefaultSortConfig()
+
+	// Default should be updated descending (most recently updated first)
+	assert.Equal(t, SortByUpdated, sortField)
+	assert.Equal(t, SortDesc, sortOrder)
+}
+
+func TestAllSortFields(t *testing.T) {
+	fields := AllSortFields()
+
+	expected := []SortField{SortByUpdated, SortByCreated, SortByNumber, SortByComments}
+	assert.Equal(t, expected, fields)
+}
+
+func TestLoadConfigWithSortSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Create a config file with sort settings
+	content := `repository = "myorg/myrepo"
+
+[auth]
+method = "env"
+
+[display]
+sort_field = "created"
+sort_order = "asc"
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load the config
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	assert.Equal(t, SortByCreated, cfg.Display.SortField)
+	assert.Equal(t, SortAsc, cfg.Display.SortOrder)
+}
+
+func TestSaveConfigWithSortSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	cfg := &Config{
+		Repository: "owner/repo",
+		Auth: AuthConfig{
+			Method: "env",
+		},
+		Display: DisplayConfig{
+			SortField: SortByNumber,
+			SortOrder: SortDesc,
+		},
+	}
+
+	err := Save(cfg, configPath)
+	require.NoError(t, err)
+
+	// Verify contents
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `sort_field = "number"`)
+	assert.Contains(t, string(data), `sort_order = "desc"`)
+}
+
+func TestLoadConfigWithoutSortSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Create a config file without sort settings
+	content := `repository = "myorg/myrepo"
+
+[auth]
+method = "env"
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load the config
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	// Sort settings should be empty (will use defaults)
+	assert.Empty(t, cfg.Display.SortField)
+	assert.Empty(t, cfg.Display.SortOrder)
+}
+
+func TestNextSortField(t *testing.T) {
+	tests := []struct {
+		name     string
+		current  SortField
+		expected SortField
+	}{
+		{name: "updated to created", current: SortByUpdated, expected: SortByCreated},
+		{name: "created to number", current: SortByCreated, expected: SortByNumber},
+		{name: "number to comments", current: SortByNumber, expected: SortByComments},
+		{name: "comments wraps to updated", current: SortByComments, expected: SortByUpdated},
+		{name: "empty defaults to updated then created", current: "", expected: SortByCreated},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := NextSortField(tt.current)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestToggleSortOrder(t *testing.T) {
+	tests := []struct {
+		name     string
+		current  SortOrder
+		expected SortOrder
+	}{
+		{name: "desc to asc", current: SortDesc, expected: SortAsc},
+		{name: "asc to desc", current: SortAsc, expected: SortDesc},
+		{name: "empty defaults to desc then asc", current: "", expected: SortAsc},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ToggleSortOrder(tt.current)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestSortFieldDisplayName(t *testing.T) {
+	tests := []struct {
+		field    SortField
+		expected string
+	}{
+		{SortByUpdated, "Updated"},
+		{SortByCreated, "Created"},
+		{SortByNumber, "Number"},
+		{SortByComments, "Comments"},
+		{"unknown", "Updated"}, // default
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.field), func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.field.DisplayName())
+		})
+	}
+}

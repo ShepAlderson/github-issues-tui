@@ -2,11 +2,13 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/shepbook/ghissues/internal/config"
 	"github.com/shepbook/ghissues/internal/github"
 )
 
@@ -17,23 +19,50 @@ func DefaultColumns() []string {
 
 // Model represents the TUI application state
 type Model struct {
-	issues  []github.Issue
-	columns []string
-	cursor  int
-	width   int
-	height  int
+	issues      []github.Issue
+	columns     []string
+	cursor      int
+	width       int
+	height      int
+	sortField   config.SortField
+	sortOrder   config.SortOrder
+	sortChanged bool // Track if sort was changed during session
 }
 
 // NewModel creates a new TUI model with the given issues and columns
+// Uses default sort: most recently updated first (updated descending)
 func NewModel(issues []github.Issue, columns []string) Model {
+	sortField, sortOrder := config.DefaultSortConfig()
+	return NewModelWithSort(issues, columns, sortField, sortOrder)
+}
+
+// NewModelWithSort creates a new TUI model with the given issues, columns, and sort options
+func NewModelWithSort(issues []github.Issue, columns []string, sortField config.SortField, sortOrder config.SortOrder) Model {
 	if columns == nil {
 		columns = DefaultColumns()
 	}
-	return Model{
-		issues:  issues,
-		columns: columns,
-		cursor:  0,
+	if sortField == "" {
+		sortField, _ = config.DefaultSortConfig()
 	}
+	if sortOrder == "" {
+		_, sortOrder = config.DefaultSortConfig()
+	}
+
+	m := Model{
+		issues:    make([]github.Issue, len(issues)),
+		columns:   columns,
+		cursor:    0,
+		sortField: sortField,
+		sortOrder: sortOrder,
+	}
+
+	// Copy issues to avoid modifying the original slice
+	copy(m.issues, issues)
+
+	// Apply initial sort
+	m.sortIssues()
+
+	return m
 }
 
 // Init initializes the model
@@ -58,6 +87,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case msg.Type == tea.KeyRunes && len(msg.Runes) > 0 && msg.Runes[0] == 'q':
 			return m, tea.Quit
+		case msg.Type == tea.KeyRunes && len(msg.Runes) > 0 && msg.Runes[0] == 's':
+			// Cycle sort field
+			m.sortField = config.NextSortField(m.sortField)
+			m.sortIssues()
+			m.cursor = 0 // Reset cursor after sort change
+			m.sortChanged = true
+		case msg.Type == tea.KeyRunes && len(msg.Runes) > 0 && msg.Runes[0] == 'S':
+			// Toggle sort order
+			m.sortOrder = config.ToggleSortOrder(m.sortOrder)
+			m.sortIssues()
+			m.cursor = 0 // Reset cursor after sort change
+			m.sortChanged = true
 		}
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -131,7 +172,12 @@ func (m Model) View() string {
 
 	// Status bar
 	b.WriteString("\n")
-	status := fmt.Sprintf("%d issues | j/k: navigate | q: quit", len(m.issues))
+	sortIndicator := "↓"
+	if m.sortOrder == config.SortAsc {
+		sortIndicator = "↑"
+	}
+	status := fmt.Sprintf("%d issues | %s %s | s: sort | S: reverse | j/k: navigate | q: quit",
+		len(m.issues), m.sortField.DisplayName(), sortIndicator)
 	b.WriteString(statusStyle.Render(status))
 
 	return b.String()
@@ -253,4 +299,51 @@ func (m Model) IssueCount() int {
 func (m *Model) SetWindowSize(width, height int) {
 	m.width = width
 	m.height = height
+}
+
+// GetSortConfig returns the current sort field and order
+func (m Model) GetSortConfig() (config.SortField, config.SortOrder) {
+	return m.sortField, m.sortOrder
+}
+
+// SortChanged returns true if the sort settings were changed during the session
+func (m Model) SortChanged() bool {
+	return m.sortChanged
+}
+
+// sortIssues sorts the issues based on the current sort field and order
+func (m *Model) sortIssues() {
+	if len(m.issues) == 0 {
+		return
+	}
+
+	sort.Slice(m.issues, func(i, j int) bool {
+		var less bool
+
+		switch m.sortField {
+		case config.SortByUpdated:
+			ti, _ := m.issues[i].UpdatedAtTime()
+			tj, _ := m.issues[j].UpdatedAtTime()
+			less = ti.Before(tj)
+		case config.SortByCreated:
+			ti, _ := m.issues[i].CreatedAtTime()
+			tj, _ := m.issues[j].CreatedAtTime()
+			less = ti.Before(tj)
+		case config.SortByNumber:
+			less = m.issues[i].Number < m.issues[j].Number
+		case config.SortByComments:
+			less = m.issues[i].CommentCount < m.issues[j].CommentCount
+		default:
+			// Default to updated date
+			ti, _ := m.issues[i].UpdatedAtTime()
+			tj, _ := m.issues[j].UpdatedAtTime()
+			less = ti.Before(tj)
+		}
+
+		// Descending order reverses the comparison
+		if m.sortOrder == config.SortDesc {
+			return !less
+		}
+		return less
+	})
 }

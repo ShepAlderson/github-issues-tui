@@ -26,11 +26,36 @@ type DatabaseConfig struct {
 
 // DisplayConfig represents display configuration
 type DisplayConfig struct {
-	Columns []string `toml:"columns,omitempty"`
+	Columns   []string  `toml:"columns,omitempty"`
+	SortField SortField `toml:"sort_field,omitempty"`
+	SortOrder SortOrder `toml:"sort_order,omitempty"`
 }
 
 // ValidColumns contains all valid column names for issue display
 var ValidColumns = []string{"number", "title", "author", "date", "comments"}
+
+// SortField represents the field to sort issues by
+type SortField string
+
+// Sort field constants
+const (
+	SortByUpdated  SortField = "updated"
+	SortByCreated  SortField = "created"
+	SortByNumber   SortField = "number"
+	SortByComments SortField = "comments"
+)
+
+// ValidSortFields contains all valid sort fields
+var ValidSortFields = []SortField{SortByUpdated, SortByCreated, SortByNumber, SortByComments}
+
+// SortOrder represents the sort order (ascending or descending)
+type SortOrder string
+
+// Sort order constants
+const (
+	SortDesc SortOrder = "desc"
+	SortAsc  SortOrder = "asc"
+)
 
 // DefaultDisplayColumns returns the default columns to display
 func DefaultDisplayColumns() []string {
@@ -139,5 +164,73 @@ func ValidateAuthMethod(method string) error {
 		return nil
 	default:
 		return fmt.Errorf("invalid auth method: %q, must be one of: env, token, gh", method)
+	}
+}
+
+// ValidateSortField validates that a sort field is valid
+func ValidateSortField(field SortField) error {
+	if slices.Contains(ValidSortFields, field) {
+		return nil
+	}
+	return fmt.Errorf("invalid sort field: %q, must be one of: %v", field, ValidSortFields)
+}
+
+// ValidateSortOrder validates that a sort order is valid
+func ValidateSortOrder(order SortOrder) error {
+	if order == SortDesc || order == SortAsc {
+		return nil
+	}
+	return fmt.Errorf("invalid sort order: %q, must be one of: desc, asc", order)
+}
+
+// DefaultSortConfig returns the default sort field and order
+// Default: most recently updated first
+func DefaultSortConfig() (SortField, SortOrder) {
+	return SortByUpdated, SortDesc
+}
+
+// AllSortFields returns all available sort fields
+func AllSortFields() []SortField {
+	return []SortField{SortByUpdated, SortByCreated, SortByNumber, SortByComments}
+}
+
+// NextSortField returns the next sort field in the cycle
+func NextSortField(current SortField) SortField {
+	fields := AllSortFields()
+	if current == "" {
+		current = SortByUpdated
+	}
+	for i, f := range fields {
+		if f == current {
+			return fields[(i+1)%len(fields)]
+		}
+	}
+	return SortByUpdated
+}
+
+// ToggleSortOrder toggles the sort order between ascending and descending
+func ToggleSortOrder(current SortOrder) SortOrder {
+	if current == "" {
+		current = SortDesc
+	}
+	if current == SortDesc {
+		return SortAsc
+	}
+	return SortDesc
+}
+
+// DisplayName returns a human-readable name for the sort field
+func (f SortField) DisplayName() string {
+	switch f {
+	case SortByUpdated:
+		return "Updated"
+	case SortByCreated:
+		return "Created"
+	case SortByNumber:
+		return "Number"
+	case SortByComments:
+		return "Comments"
+	default:
+		return "Updated"
 	}
 }

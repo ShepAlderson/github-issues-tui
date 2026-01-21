@@ -118,6 +118,16 @@ You can also run 'ghissues config' to reconfigure at any time.`,
 				columns = config.DefaultDisplayColumns()
 			}
 
+			// Get sort settings (from config or defaults)
+			sortField := cfg.Display.SortField
+			sortOrder := cfg.Display.SortOrder
+			if sortField == "" {
+				sortField, _ = config.DefaultSortConfig()
+			}
+			if sortOrder == "" {
+				_, sortOrder = config.DefaultSortConfig()
+			}
+
 			// Skip TUI if disabled (for testing)
 			if disableTUI {
 				fmt.Fprintf(cmd.OutOrStdout(), "Ready to browse issues from %s (%d issues)\n", cfg.Repository, len(issues))
@@ -125,11 +135,23 @@ You can also run 'ghissues config' to reconfigure at any time.`,
 			}
 
 			// Create and run TUI
-			model := tui.NewModel(issues, columns)
+			model := tui.NewModelWithSort(issues, columns, sortField, sortOrder)
 			p := tea.NewProgram(model, tea.WithAltScreen())
 
-			if _, err := p.Run(); err != nil {
+			finalModel, err := p.Run()
+			if err != nil {
 				return fmt.Errorf("TUI error: %w", err)
+			}
+
+			// Save sort preferences if they changed
+			if m, ok := finalModel.(tui.Model); ok && m.SortChanged() {
+				newSortField, newSortOrder := m.GetSortConfig()
+				cfg.Display.SortField = newSortField
+				cfg.Display.SortOrder = newSortOrder
+				if err := config.Save(cfg, path); err != nil {
+					// Don't fail, just warn - the main operation succeeded
+					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to save sort preferences: %v\n", err)
+				}
 			}
 
 			return nil
