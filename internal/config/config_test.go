@@ -714,3 +714,265 @@ func TestAllThemes(t *testing.T) {
 	expected := []Theme{ThemeDefault, ThemeDracula, ThemeGruvbox, ThemeNord, ThemeSolarizedDark, ThemeSolarizedLight}
 	assert.Equal(t, expected, themes)
 }
+
+// Multi-repository configuration tests
+
+func TestLoadConfigWithMultipleRepositories(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Create a config file with multiple repositories
+	content := `default_repository = "myorg/primary"
+
+[auth]
+method = "env"
+
+[[repositories]]
+name = "myorg/primary"
+database_path = "/path/to/primary.db"
+
+[[repositories]]
+name = "myorg/secondary"
+database_path = "/path/to/secondary.db"
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load the config
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	assert.Equal(t, "myorg/primary", cfg.DefaultRepository)
+	require.Len(t, cfg.Repositories, 2)
+	assert.Equal(t, "myorg/primary", cfg.Repositories[0].Name)
+	assert.Equal(t, "/path/to/primary.db", cfg.Repositories[0].DatabasePath)
+	assert.Equal(t, "myorg/secondary", cfg.Repositories[1].Name)
+	assert.Equal(t, "/path/to/secondary.db", cfg.Repositories[1].DatabasePath)
+}
+
+func TestSaveConfigWithMultipleRepositories(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	cfg := &Config{
+		DefaultRepository: "owner/default",
+		Auth: AuthConfig{
+			Method: "env",
+		},
+		Repositories: []RepositoryConfig{
+			{Name: "owner/repo1", DatabasePath: "/db/repo1.db"},
+			{Name: "owner/repo2", DatabasePath: "/db/repo2.db"},
+		},
+	}
+
+	err := Save(cfg, configPath)
+	require.NoError(t, err)
+
+	// Verify contents
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `default_repository = "owner/default"`)
+	assert.Contains(t, string(data), `name = "owner/repo1"`)
+	assert.Contains(t, string(data), `name = "owner/repo2"`)
+}
+
+func TestGetRepositoryConfig_Found(t *testing.T) {
+	cfg := &Config{
+		Repositories: []RepositoryConfig{
+			{Name: "owner/repo1", DatabasePath: "/db/repo1.db"},
+			{Name: "owner/repo2", DatabasePath: "/db/repo2.db"},
+		},
+	}
+
+	repo, err := cfg.GetRepositoryConfig("owner/repo1")
+	require.NoError(t, err)
+	assert.Equal(t, "owner/repo1", repo.Name)
+	assert.Equal(t, "/db/repo1.db", repo.DatabasePath)
+}
+
+func TestGetRepositoryConfig_NotFound(t *testing.T) {
+	cfg := &Config{
+		Repositories: []RepositoryConfig{
+			{Name: "owner/repo1", DatabasePath: "/db/repo1.db"},
+		},
+	}
+
+	_, err := cfg.GetRepositoryConfig("owner/nonexistent")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestGetActiveRepository_WithFlag(t *testing.T) {
+	cfg := &Config{
+		DefaultRepository: "owner/default",
+		Repositories: []RepositoryConfig{
+			{Name: "owner/default", DatabasePath: "/db/default.db"},
+			{Name: "owner/selected", DatabasePath: "/db/selected.db"},
+		},
+	}
+
+	// When flag is provided, it takes precedence
+	repo, err := cfg.GetActiveRepository("owner/selected")
+	require.NoError(t, err)
+	assert.Equal(t, "owner/selected", repo.Name)
+}
+
+func TestGetActiveRepository_UsesDefault(t *testing.T) {
+	cfg := &Config{
+		DefaultRepository: "owner/default",
+		Repositories: []RepositoryConfig{
+			{Name: "owner/default", DatabasePath: "/db/default.db"},
+			{Name: "owner/other", DatabasePath: "/db/other.db"},
+		},
+	}
+
+	// When no flag provided, uses default
+	repo, err := cfg.GetActiveRepository("")
+	require.NoError(t, err)
+	assert.Equal(t, "owner/default", repo.Name)
+}
+
+func TestGetActiveRepository_FallbackToSingleRepo(t *testing.T) {
+	cfg := &Config{
+		Repositories: []RepositoryConfig{
+			{Name: "owner/only", DatabasePath: "/db/only.db"},
+		},
+	}
+
+	// When no default and only one repo, use that one
+	repo, err := cfg.GetActiveRepository("")
+	require.NoError(t, err)
+	assert.Equal(t, "owner/only", repo.Name)
+}
+
+func TestGetActiveRepository_ErrorWhenNoReposConfigured(t *testing.T) {
+	cfg := &Config{
+		Repositories: []RepositoryConfig{},
+	}
+
+	_, err := cfg.GetActiveRepository("")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no repositories configured")
+}
+
+func TestGetActiveRepository_ErrorWhenAmbiguous(t *testing.T) {
+	cfg := &Config{
+		// No default set
+		Repositories: []RepositoryConfig{
+			{Name: "owner/repo1", DatabasePath: "/db/repo1.db"},
+			{Name: "owner/repo2", DatabasePath: "/db/repo2.db"},
+		},
+	}
+
+	// Multiple repos but no default and no flag - should error
+	_, err := cfg.GetActiveRepository("")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "multiple repositories")
+}
+
+func TestAddRepository(t *testing.T) {
+	cfg := &Config{
+		Repositories: []RepositoryConfig{
+			{Name: "owner/existing", DatabasePath: "/db/existing.db"},
+		},
+	}
+
+	err := cfg.AddRepository("owner/new", "/db/new.db")
+	require.NoError(t, err)
+
+	require.Len(t, cfg.Repositories, 2)
+	assert.Equal(t, "owner/new", cfg.Repositories[1].Name)
+}
+
+func TestAddRepository_Duplicate(t *testing.T) {
+	cfg := &Config{
+		Repositories: []RepositoryConfig{
+			{Name: "owner/existing", DatabasePath: "/db/existing.db"},
+		},
+	}
+
+	err := cfg.AddRepository("owner/existing", "/db/new.db")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "already exists")
+}
+
+func TestListRepositories(t *testing.T) {
+	cfg := &Config{
+		DefaultRepository: "owner/default",
+		Repositories: []RepositoryConfig{
+			{Name: "owner/default", DatabasePath: "/db/default.db"},
+			{Name: "owner/other", DatabasePath: "/db/other.db"},
+		},
+	}
+
+	repos := cfg.ListRepositories()
+	require.Len(t, repos, 2)
+	assert.Equal(t, "owner/default", repos[0].Name)
+	assert.Equal(t, "owner/other", repos[1].Name)
+}
+
+func TestSetDefaultRepository(t *testing.T) {
+	cfg := &Config{
+		Repositories: []RepositoryConfig{
+			{Name: "owner/repo1", DatabasePath: "/db/repo1.db"},
+			{Name: "owner/repo2", DatabasePath: "/db/repo2.db"},
+		},
+	}
+
+	err := cfg.SetDefaultRepository("owner/repo2")
+	require.NoError(t, err)
+	assert.Equal(t, "owner/repo2", cfg.DefaultRepository)
+}
+
+func TestSetDefaultRepository_NotConfigured(t *testing.T) {
+	cfg := &Config{
+		Repositories: []RepositoryConfig{
+			{Name: "owner/repo1", DatabasePath: "/db/repo1.db"},
+		},
+	}
+
+	err := cfg.SetDefaultRepository("owner/nonexistent")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestRepositoryConfigDefaultDatabasePath(t *testing.T) {
+	// When no database path specified, should generate one based on repo name
+	cfg := &Config{
+		Repositories: []RepositoryConfig{
+			{Name: "owner/myrepo"},
+		},
+	}
+
+	dbPath := cfg.Repositories[0].GetDatabasePath()
+	assert.Contains(t, dbPath, "owner-myrepo")
+	assert.Contains(t, dbPath, ".db")
+}
+
+func TestMigrateFromSingleRepo(t *testing.T) {
+	// Test migration from old single-repo format to new multi-repo format
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Old format config
+	content := `repository = "myorg/myrepo"
+
+[auth]
+method = "env"
+
+[database]
+path = "/old/path/issues.db"
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load and migrate
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	// Should have migrated the single repo to the new format
+	require.Len(t, cfg.Repositories, 1)
+	assert.Equal(t, "myorg/myrepo", cfg.Repositories[0].Name)
+	assert.Equal(t, "/old/path/issues.db", cfg.Repositories[0].DatabasePath)
+	assert.Equal(t, "myorg/myrepo", cfg.DefaultRepository)
+}

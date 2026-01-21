@@ -19,6 +19,7 @@ import (
 
 var configPath string
 var dbPath string
+var repoFlag string
 var disableTUI bool // For testing - skips TUI startup
 
 // SetDisableTUI sets whether to skip TUI startup (for testing)
@@ -49,6 +50,16 @@ func GetDBPath() string {
 	return dbPath
 }
 
+// SetRepoFlag sets the repository flag value (mainly for testing)
+func SetRepoFlag(repo string) {
+	repoFlag = repo
+}
+
+// GetRepoFlag returns the current repository flag value
+func GetRepoFlag() string {
+	return repoFlag
+}
+
 // ShouldRunSetup returns true if the interactive setup should be run
 // (i.e., when config file doesn't exist)
 func ShouldRunSetup(path string) bool {
@@ -58,6 +69,7 @@ func ShouldRunSetup(path string) bool {
 // NewRootCmd creates the root command for ghissues
 func NewRootCmd() *cobra.Command {
 	var dbFlagPath string
+	var repoFlagPath string
 
 	rootCmd := &cobra.Command{
 		Use:   "ghissues",
@@ -66,11 +78,17 @@ func NewRootCmd() *cobra.Command {
 It syncs issues from a GitHub repository to a local database for offline access.
 
 On first run, you'll be prompted to configure your repository and authentication.
-You can also run 'ghissues config' to reconfigure at any time.`,
+You can also run 'ghissues config' to reconfigure at any time.
+
+When multiple repositories are configured, use --repo to select which one to view.`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// Set the dbPath global if flag was provided
 			if dbFlagPath != "" {
 				SetDBPath(dbFlagPath)
+			}
+			// Set the repoFlag global if flag was provided
+			if repoFlagPath != "" {
+				SetRepoFlag(repoFlagPath)
 			}
 			return nil
 		},
@@ -95,10 +113,16 @@ You can also run 'ghissues config' to reconfigure at any time.`,
 				return fmt.Errorf("failed to load config: %w", err)
 			}
 
-			// Resolve and validate database path
-			resolvedDBPath, err := db.ResolveDBPath(GetDBPath(), cfg)
+			// Determine which repository to use
+			activeRepo, err := cfg.GetActiveRepository(GetRepoFlag())
 			if err != nil {
-				return fmt.Errorf("failed to resolve database path: %w", err)
+				return fmt.Errorf("failed to determine repository: %w", err)
+			}
+
+			// Resolve database path: flag > repo config > legacy config > default
+			resolvedDBPath := GetDBPath()
+			if resolvedDBPath == "" {
+				resolvedDBPath = activeRepo.GetDatabasePath()
 			}
 
 			if err := db.EnsureDBPath(resolvedDBPath); err != nil {
@@ -142,12 +166,12 @@ You can also run 'ghissues config' to reconfigure at any time.`,
 
 			// Skip TUI if disabled (for testing)
 			if disableTUI {
-				fmt.Fprintf(cmd.OutOrStdout(), "Ready to browse issues from %s (%d issues)\n", cfg.Repository, len(issues))
+				fmt.Fprintf(cmd.OutOrStdout(), "Ready to browse issues from %s (%d issues)\n", activeRepo.Name, len(issues))
 				return nil
 			}
 
 			// Parse repository for sync
-			owner, repo, err := parseRepo(cfg.Repository)
+			owner, repo, err := parseRepo(activeRepo.Name)
 			if err != nil {
 				return fmt.Errorf("invalid repository format: %w", err)
 			}
@@ -192,11 +216,13 @@ You can also run 'ghissues config' to reconfigure at any time.`,
 
 	// Add persistent flags (available to all subcommands)
 	rootCmd.PersistentFlags().StringVar(&dbFlagPath, "db", "", "Path to local database file (default: .ghissues.db)")
+	rootCmd.PersistentFlags().StringVar(&repoFlagPath, "repo", "", "Repository to view (format: owner/repo)")
 
 	// Add subcommands
 	rootCmd.AddCommand(newConfigCmd())
 	rootCmd.AddCommand(newSyncCmd())
 	rootCmd.AddCommand(newThemesCmd())
+	rootCmd.AddCommand(newReposCmd())
 
 	return rootCmd
 }
