@@ -215,3 +215,70 @@ func TestValidateAuthMethod(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadConfigWithDatabasePath(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Create a config file with database section
+	content := `repository = "myorg/myrepo"
+
+[auth]
+method = "env"
+
+[database]
+path = "/custom/path/issues.db"
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load the config
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	assert.Equal(t, "/custom/path/issues.db", cfg.Database.Path)
+}
+
+func TestSaveConfigWithDatabasePath(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	cfg := &Config{
+		Repository: "owner/repo",
+		Auth: AuthConfig{
+			Method: "env",
+		},
+		Database: DatabaseConfig{
+			Path: "/my/custom/db.db",
+		},
+	}
+
+	err := Save(cfg, configPath)
+	require.NoError(t, err)
+
+	// Verify contents
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `path = "/my/custom/db.db"`)
+}
+
+func TestLoadConfigWithoutDatabasePath(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Create a config file without database section
+	content := `repository = "myorg/myrepo"
+
+[auth]
+method = "env"
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load the config
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	// Database path should be empty (will use default)
+	assert.Empty(t, cfg.Database.Path)
+}

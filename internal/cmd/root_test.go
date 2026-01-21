@@ -202,3 +202,132 @@ func TestRootCommandWithExistingConfig(t *testing.T) {
 	output := buf.String()
 	assert.Contains(t, output, "existing/repo")
 }
+
+func TestRootCommandHasDBFlag(t *testing.T) {
+	cmd := NewRootCmd()
+
+	// Check that --db flag exists
+	flag := cmd.PersistentFlags().Lookup("db")
+	require.NotNil(t, flag, "--db flag should exist")
+	assert.Equal(t, "string", flag.Value.Type())
+}
+
+func TestGetDBPath_Default(t *testing.T) {
+	// Reset to default
+	SetDBPath("")
+
+	path := GetDBPath()
+
+	// Should return empty string (meaning use default)
+	assert.Equal(t, "", path)
+}
+
+func TestSetDBPath_Override(t *testing.T) {
+	customPath := "/custom/path/db.db"
+	SetDBPath(customPath)
+	defer SetDBPath("") // Reset after test
+
+	assert.Equal(t, customPath, GetDBPath())
+}
+
+func TestRootCommandDBFlagSetsPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config.toml")
+	dbPath := filepath.Join(tmpDir, "custom.db")
+
+	// Create existing config
+	cfg := &config.Config{
+		Repository: "existing/repo",
+		Auth: config.AuthConfig{
+			Method: "env",
+		},
+	}
+	err := config.Save(cfg, cfgPath)
+	require.NoError(t, err)
+
+	SetConfigPath(cfgPath)
+	defer SetConfigPath("")
+	defer SetDBPath("") // Reset after test
+
+	rootCmd := NewRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Verify dbPath was set
+	assert.Equal(t, dbPath, GetDBPath())
+}
+
+func TestRootCommandDBFlagTakesPrecedenceOverConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config.toml")
+	flagDBPath := filepath.Join(tmpDir, "flag.db")
+
+	// Create existing config with database.path set
+	cfg := &config.Config{
+		Repository: "existing/repo",
+		Auth: config.AuthConfig{
+			Method: "env",
+		},
+		Database: config.DatabaseConfig{
+			Path: filepath.Join(tmpDir, "config.db"),
+		},
+	}
+	err := config.Save(cfg, cfgPath)
+	require.NoError(t, err)
+
+	SetConfigPath(cfgPath)
+	defer SetConfigPath("")
+	defer SetDBPath("")
+
+	rootCmd := NewRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"--db", flagDBPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Flag should take precedence
+	assert.Equal(t, flagDBPath, GetDBPath())
+}
+
+func TestRootCommandDBFlagErrorOnUnwritablePath(t *testing.T) {
+	// Skip if running as root
+	if os.Getuid() == 0 {
+		t.Skip("Test skipped when running as root")
+	}
+
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config.toml")
+	unwritablePath := "/root/unwritable/path/db.db"
+
+	// Create existing config
+	cfg := &config.Config{
+		Repository: "existing/repo",
+		Auth: config.AuthConfig{
+			Method: "env",
+		},
+	}
+	err := config.Save(cfg, cfgPath)
+	require.NoError(t, err)
+
+	SetConfigPath(cfgPath)
+	defer SetConfigPath("")
+	defer SetDBPath("")
+
+	rootCmd := NewRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"--db", unwritablePath})
+
+	err = rootCmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not writable")
+}

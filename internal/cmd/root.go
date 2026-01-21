@@ -4,11 +4,13 @@ import (
 	"fmt"
 
 	"github.com/shepbook/ghissues/internal/config"
+	"github.com/shepbook/ghissues/internal/db"
 	"github.com/shepbook/ghissues/internal/setup"
 	"github.com/spf13/cobra"
 )
 
 var configPath string
+var dbPath string
 
 // SetConfigPath sets a custom config path (mainly for testing)
 func SetConfigPath(path string) {
@@ -23,6 +25,16 @@ func GetConfigPath() string {
 	return configPath
 }
 
+// SetDBPath sets a custom database path (mainly for testing)
+func SetDBPath(path string) {
+	dbPath = path
+}
+
+// GetDBPath returns the current database path (empty string means use default)
+func GetDBPath() string {
+	return dbPath
+}
+
 // ShouldRunSetup returns true if the interactive setup should be run
 // (i.e., when config file doesn't exist)
 func ShouldRunSetup(path string) bool {
@@ -31,6 +43,8 @@ func ShouldRunSetup(path string) bool {
 
 // NewRootCmd creates the root command for ghissues
 func NewRootCmd() *cobra.Command {
+	var dbFlagPath string
+
 	rootCmd := &cobra.Command{
 		Use:   "ghissues",
 		Short: "GitHub Issues TUI - Browse and review GitHub issues offline",
@@ -39,6 +53,13 @@ It syncs issues from a GitHub repository to a local database for offline access.
 
 On first run, you'll be prompted to configure your repository and authentication.
 You can also run 'ghissues config' to reconfigure at any time.`,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Set the dbPath global if flag was provided
+			if dbFlagPath != "" {
+				SetDBPath(dbFlagPath)
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := GetConfigPath()
 
@@ -60,12 +81,25 @@ You can also run 'ghissues config' to reconfigure at any time.`,
 				return fmt.Errorf("failed to load config: %w", err)
 			}
 
+			// Resolve and validate database path
+			resolvedDBPath, err := db.ResolveDBPath(GetDBPath(), cfg)
+			if err != nil {
+				return fmt.Errorf("failed to resolve database path: %w", err)
+			}
+
+			if err := db.EnsureDBPath(resolvedDBPath); err != nil {
+				return err
+			}
+
 			fmt.Fprintf(cmd.OutOrStdout(), "Ready to browse issues from %s\n", cfg.Repository)
 			fmt.Fprintln(cmd.OutOrStdout(), "(TUI implementation coming soon)")
 
 			return nil
 		},
 	}
+
+	// Add persistent flags (available to all subcommands)
+	rootCmd.PersistentFlags().StringVar(&dbFlagPath, "db", "", "Path to local database file (default: .ghissues.db)")
 
 	// Add config subcommand
 	rootCmd.AddCommand(newConfigCmd())

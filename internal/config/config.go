@@ -12,8 +12,14 @@ import (
 
 // Config represents the application configuration
 type Config struct {
-	Repository string     `toml:"repository"`
-	Auth       AuthConfig `toml:"auth"`
+	Repository string         `toml:"repository"`
+	Auth       AuthConfig     `toml:"auth"`
+	Database   DatabaseConfig `toml:"database"`
+}
+
+// DatabaseConfig represents database configuration
+type DatabaseConfig struct {
+	Path string `toml:"path,omitempty"`
 }
 
 // AuthConfig represents authentication configuration
