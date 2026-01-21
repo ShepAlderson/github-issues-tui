@@ -11,20 +11,22 @@ import (
 
 // App represents the main TUI application
 type App struct {
-	config     *config.Config
-	dbManager  *database.DBManager
-	issueList  *IssueList
-	width      int
-	height     int
-	ready      bool
+	config        *config.Config
+	dbManager     *database.DBManager
+	issueList     *IssueList
+	issueDetail   *IssueDetailComponent
+	width         int
+	height        int
+	ready         bool
 }
 
 // NewApp creates a new TUI application instance
-func NewApp(cfg *config.Config, dbManager *database.DBManager) *App {
+func NewApp(cfg *config.Config, dbManager *database.DBManager, cfgMgr *config.Manager) *App {
 	return &App{
-		config:    cfg,
-		dbManager: dbManager,
-		issueList: NewIssueList(dbManager, cfg),
+		config:      cfg,
+		dbManager:   dbManager,
+		issueList:   NewIssueList(dbManager, cfg, cfgMgr),
+		issueDetail: NewIssueDetailComponent(dbManager),
 	}
 }
 
@@ -41,18 +43,60 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.width = msg.Width
 		a.height = msg.Height
 		a.ready = true
+		// Pass size to both components
+		if a.issueDetail != nil {
+			var cmd tea.Cmd
+			a.issueDetail, cmd = a.issueDetail.Update(msg)
+			return a, cmd
+		}
 		return a, nil
 
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return a, tea.Quit
+		case "enter":
+			// Handle Enter key for comments view (future US-008)
+			// For now, just pass to issue detail
+			if a.issueDetail != nil {
+				var cmd tea.Cmd
+				a.issueDetail, cmd = a.issueDetail.Update(msg)
+				return a, cmd
+			}
+			return a, nil
 		}
 	}
 
-	// Delegate to issue list
+	// Update issue list and check if selection changed
 	var cmd tea.Cmd
+	previousSelected := a.issueList.SelectedIssue()
 	a.issueList, cmd = a.issueList.Update(msg)
+	currentSelected := a.issueList.SelectedIssue()
+
+	// If selection changed, update issue detail
+	if a.issueDetail != nil && currentSelected != nil &&
+	   (previousSelected == nil || previousSelected.Number != currentSelected.Number) {
+		// Load the selected issue in detail view
+		if err := a.issueDetail.SetIssue(currentSelected.Number); err != nil {
+			// Log error but continue
+			// In production, we might want to show an error message
+		}
+	}
+
+	// Also pass message to issue detail for its own keybindings
+	if a.issueDetail != nil {
+		var detailCmd tea.Cmd
+		a.issueDetail, detailCmd = a.issueDetail.Update(msg)
+		if detailCmd != nil {
+			// Combine commands if we have multiple
+			if cmd != nil {
+				cmd = tea.Batch(cmd, detailCmd)
+			} else {
+				cmd = detailCmd
+			}
+		}
+	}
+
 	return a, cmd
 }
 
@@ -94,15 +138,19 @@ func (a *App) View() string {
 }
 
 func (a *App) renderRightPanel() string {
-	// Placeholder for issue detail view (to be implemented in US-007)
+	if a.issueDetail != nil {
+		return a.issueDetail.View()
+	}
+
+	// Fallback placeholder
 	return lipgloss.NewStyle().
 		Padding(1, 2).
 		Render("Select an issue to view details\n\nPress 'q' or Ctrl+C to quit")
 }
 
 // Run starts the TUI application
-func Run(cfg *config.Config, dbManager *database.DBManager) error {
-	app := NewApp(cfg, dbManager)
+func Run(cfg *config.Config, dbManager *database.DBManager, cfgMgr *config.Manager) error {
+	app := NewApp(cfg, dbManager, cfgMgr)
 	p := tea.NewProgram(app, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("failed to run TUI: %w", err)
