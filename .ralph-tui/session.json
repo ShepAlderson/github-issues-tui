@@ -3,10 +3,10 @@
   "sessionId": "d6e00aaa-c012-4df2-b80b-f2885aec0034",
   "status": "running",
   "startedAt": "2026-01-21T18:26:23.213Z",
-  "updatedAt": "2026-01-21T18:26:27.373Z",
-  "currentIteration": 0,
+  "updatedAt": "2026-01-21T19:05:02.885Z",
+  "currentIteration": 4,
   "maxIterations": 10,
-  "tasksCompleted": 0,
+  "tasksCompleted": 4,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -17,26 +17,26 @@
       {
         "id": "US-001",
         "title": "First-Time Setup",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-002",
         "title": "GitHub Authentication",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-003",
         "title": "Initial Issue Sync",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-004",
         "title": "Database Storage Location",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-005",
@@ -100,11 +100,52 @@
       }
     ]
   },
-  "iterations": [],
+  "iterations": [
+    {
+      "iteration": 1,
+      "status": "completed",
+      "taskId": "US-001",
+      "taskTitle": "First-Time Setup",
+      "taskCompleted": true,
+      "durationMs": 924485,
+      "startedAt": "2026-01-21T18:26:27.346Z",
+      "endedAt": "2026-01-21T18:41:51.831Z"
+    },
+    {
+      "iteration": 2,
+      "status": "completed",
+      "taskId": "US-002",
+      "taskTitle": "GitHub Authentication",
+      "taskCompleted": true,
+      "durationMs": 322008,
+      "startedAt": "2026-01-21T18:43:44.386Z",
+      "endedAt": "2026-01-21T18:49:06.394Z"
+    },
+    {
+      "iteration": 3,
+      "status": "completed",
+      "taskId": "US-004",
+      "taskTitle": "Database Storage Location",
+      "taskCompleted": true,
+      "durationMs": 366546,
+      "startedAt": "2026-01-21T18:49:07.418Z",
+      "endedAt": "2026-01-21T18:55:13.964Z"
+    },
+    {
+      "iteration": 4,
+      "status": "completed",
+      "taskId": "US-003",
+      "taskTitle": "Initial Issue Sync",
+      "taskCompleted": true,
+      "durationMs": 586855,
+      "startedAt": "2026-01-21T18:55:14.984Z",
+      "endedAt": "2026-01-21T19:05:01.839Z"
+    }
+  ],
   "skippedTaskIds": [],
   "cwd": "/Users/shepbook/git/github-issues-tui",
   "activeTaskIds": [
-    "US-001"
+    "US-005"
   ],
-  "subagentPanelVisible": false
+  "subagentPanelVisible": true
 }

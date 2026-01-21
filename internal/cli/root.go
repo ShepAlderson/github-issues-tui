@@ -7,6 +7,7 @@ import (
 	"github.com/shepbook/github-issues-tui/internal/config"
 	"github.com/shepbook/github-issues-tui/internal/database"
 	"github.com/shepbook/github-issues-tui/internal/setup"
+	"github.com/shepbook/github-issues-tui/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -48,9 +49,20 @@ func Execute() error {
 
 			fmt.Printf("Database will be stored at: %s\n", database.AbsolutePath(finalDbPath))
 
-			// Config exists, launch TUI (to be implemented in later stories)
-			fmt.Println("TUI will be launched here (to be implemented)")
-			return nil
+			// Config exists, launch TUI
+			dbManager, err := database.NewDBManager(finalDbPath)
+			if err != nil {
+				return fmt.Errorf("failed to open database: %w", err)
+			}
+			defer dbManager.Close()
+
+			// Initialize database schema
+			if err := dbManager.InitializeSchema(); err != nil {
+				return fmt.Errorf("failed to initialize database schema: %w", err)
+			}
+
+			// Launch TUI
+			return tui.Run(cfg, dbManager)
 		},
 	}
 

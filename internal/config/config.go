@@ -29,7 +29,8 @@ type Database struct {
 
 // Display represents display configuration
 type Display struct {
-	Theme string `toml:"theme"`
+	Theme   string   `toml:"theme"`
+	Columns []string `toml:"columns"`
 }
 
 // Manager handles configuration operations
@@ -64,6 +65,7 @@ func DefaultConfig() *Config {
 		},
 		Display: Display{
 			Theme: "default",
+			Columns: []string{"number", "title", "author", "date", "comments"},
 		},
 	}
 }
