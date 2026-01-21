@@ -60,9 +60,8 @@ func NewDetailModel(dbPath string, issueNum int) (*DetailModel, error) {
 
 // getContent returns the content to display (raw or rendered)
 func (m DetailModel) getContent() string {
-	header := m.renderHeader()
-	body := m.renderBody()
-	return header + "\n\n" + body
+	// Only return the body, header is rendered separately in View()
+	return m.renderBody()
 }
 
 // renderHeader renders the issue header section
@@ -199,8 +198,7 @@ func (m *DetailModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "?":
 			// Toggle help overlay
 			m.showHelp = true
-			m.quitting = true
-			return m, tea.Quit
+			return m, func() tea.Msg { return showHelpMsg{} }
 
 		case "m":
 			// Toggle between raw and rendered markdown
@@ -210,8 +208,7 @@ func (m *DetailModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "c":
 			// Navigate to comments view
 			m.viewComments = true
-			m.quitting = true
-			return m, tea.Quit
+			return m, func() tea.Msg { return viewCommentsMsg{} }
 
 		default:
 			// Pass other keys to viewport for scrolling

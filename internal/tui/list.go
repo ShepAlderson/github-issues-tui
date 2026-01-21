@@ -176,8 +176,7 @@ func (m *ListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "?":
 			// Toggle help overlay
 			m.showHelp = true
-			m.quitting = true
-			return m, tea.Quit
+			return m, func() tea.Msg { return showHelpMsg{} }
 
 		case "j", "down":
 			// Move down with 'j' or arrow down
@@ -189,11 +188,6 @@ func (m *ListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.table, cmd = m.table.Update(tea.KeyMsg{Type: tea.KeyUp})
 			m.selected = m.table.Cursor()
 
-		case "enter":
-			// TODO: In future stories, show issue detail view
-			if m.selected < len(m.issues) && m.selected >= 0 {
-				m.err = fmt.Errorf("issue detail view not yet implemented (selected issue #%d)", m.issues[m.selected].Number)
-			}
 
 		case "s":
 			// Cycle to next sort option

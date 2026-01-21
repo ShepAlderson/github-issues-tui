@@ -78,6 +78,15 @@ func (m AppModel) Init() tea.Cmd {
 // helpDismissedMsg is sent when user dismisses the help overlay
 type helpDismissedMsg struct{}
 
+// showHelpMsg is sent when the user wants to show help
+type showHelpMsg struct{}
+
+// exitCommentsMsg is sent when the user wants to exit comments view
+type exitCommentsMsg struct{}
+
+// viewCommentsMsg is sent when the user wants to view comments
+type viewCommentsMsg struct{}
+
 // Update handles messages and updates the model
 func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle error acknowledgment first
@@ -90,6 +99,82 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if _, ok := msg.(helpDismissedMsg); ok {
 		m.helpModel = nil
 		return m, nil
+	}
+
+	// Handle show help message
+	if _, ok := msg.(showHelpMsg); ok {
+		switch m.currentView {
+		case ListView:
+			if m.listModel != nil {
+				m.listModel.ClearHelpFlag()
+				m.helpModel = NewHelpModel(ListView, m.width, m.height, m.getTheme())
+				return m, m.helpModel.Init()
+			}
+		case DetailView:
+			if m.detailModel != nil {
+				m.detailModel.ClearHelpFlag()
+				m.helpModel = NewHelpModel(DetailView, m.width, m.height, m.getTheme())
+				return m, m.helpModel.Init()
+			}
+		case CommentsView:
+			if m.commentsModel != nil {
+				m.commentsModel.ClearHelpFlag()
+				m.helpModel = NewHelpModel(CommentsView, m.width, m.height, m.getTheme())
+				return m, m.helpModel.Init()
+			}
+		}
+	}
+
+	// Handle exit comments message
+	if _, ok := msg.(exitCommentsMsg); ok {
+		// This should only come from comments view
+		if m.currentView == CommentsView && m.commentsModel != nil {
+			// Quit comments model
+			m.commentsModel.Close()
+
+			// Switch back to detail view
+			m.currentView = DetailView
+
+			// Recreate detail model for the same issue
+			detailModel, err := NewDetailModel(m.dbPath, m.commentsModel.issue.Number)
+			if err != nil {
+				m.err = fmt.Errorf("failed to recreate detail view: %w", err)
+				m.currentView = ListView
+				m.commentsModel = nil
+				return m, nil
+			}
+
+			m.detailModel = detailModel
+			m.commentsModel = nil
+			return m, detailModel.Init()
+		}
+	}
+
+	// Handle view comments message
+	if _, ok := msg.(viewCommentsMsg); ok {
+		// This should only come from detail view
+		if m.currentView == DetailView && m.detailModel != nil {
+			// Get the issue to pass to comments model
+			issue := m.detailModel.issue
+
+			// Close detail model
+			m.detailModel.Close()
+
+			// Create comments model
+			commentsModel, err := NewCommentsModel(m.dbPath, issue)
+			if err != nil {
+				m.err = fmt.Errorf("failed to create comments view: %w", err)
+				m.currentView = ListView
+				m.detailModel = nil
+				return m, nil
+			}
+
+			// Switch to comments view
+			m.currentView = CommentsView
+			m.commentsModel = commentsModel
+			m.detailModel = nil
+			return m, commentsModel.Init()
+		}
 	}
 
 	// Handle window size
@@ -166,30 +251,6 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(cmd, m.helpModel.Init())
 			}
 
-			// Check if user wants to view comments
-			if m.detailModel.viewComments {
-				// Get the issue to pass to comments model
-				issue := m.detailModel.issue
-
-				// Close detail model
-				m.detailModel.Close()
-
-				// Create comments model
-				commentsModel, err := NewCommentsModel(m.dbPath, issue)
-				if err != nil {
-					m.err = fmt.Errorf("failed to create comments view: %w", err)
-					m.currentView = ListView
-					m.detailModel = nil
-					return m, nil
-				}
-
-				// Switch to comments view
-				m.currentView = CommentsView
-				m.commentsModel = commentsModel
-				m.detailModel = nil
-				return m, tea.Batch(cmd, commentsModel.Init())
-			}
-
 			// Check if user wants to go back (press 'q' or 'esc')
 			if msg, ok := msg.(tea.KeyMsg); ok {
 				if msg.String() == "q" || msg.String() == "esc" {
@@ -219,30 +280,6 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.helpModel = NewHelpModel(CommentsView, m.width, m.height, m.getTheme())
 				m.commentsModel.ClearHelpFlag()
 				return m, tea.Batch(cmd, m.helpModel.Init())
-			}
-
-			// Check if user wants to go back (press 'q', 'esc', or Ctrl+C)
-			if msg, ok := msg.(tea.KeyMsg); ok {
-				if msg.String() == "q" || msg.String() == "esc" || msg.Type == tea.KeyCtrlC {
-					// Quit comments model
-					m.commentsModel.Close()
-
-					// Switch back to detail view
-					m.currentView = DetailView
-
-					// Recreate detail model for the same issue
-					detailModel, err := NewDetailModel(m.dbPath, m.commentsModel.issue.Number)
-					if err != nil {
-						m.err = fmt.Errorf("failed to recreate detail view: %w", err)
-						m.currentView = ListView
-						m.commentsModel = nil
-						return m, nil
-					}
-
-					m.detailModel = detailModel
-					m.commentsModel = nil
-					return m, tea.Batch(cmd, detailModel.Init())
-				}
 			}
 
 			return m, cmd

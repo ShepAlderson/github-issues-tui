@@ -61,9 +61,8 @@ func NewCommentsModel(dbPath string, issue *db.Issue) (*CommentsModel, error) {
 
 // getContent returns the content to display (raw or rendered)
 func (m CommentsModel) getContent() string {
-	header := m.renderHeader()
-	comments := m.renderComments()
-	return header + "\n\n" + comments
+	// Only return the comments, header is rendered separately in View()
+	return m.renderComments()
 }
 
 // renderHeader renders the issue header section
@@ -194,14 +193,13 @@ func (m *CommentsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c", "esc":
-			m.quitting = true
-			return m, tea.Quit
+			// Request to exit comments view
+			return m, func() tea.Msg { return exitCommentsMsg{} }
 
 		case "?":
 			// Toggle help overlay
 			m.showHelp = true
-			m.quitting = true
-			return m, tea.Quit
+			return m, func() tea.Msg { return showHelpMsg{} }
 
 		case "m":
 			// Toggle between raw and rendered markdown
