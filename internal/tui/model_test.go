@@ -483,3 +483,221 @@ func TestSortChangedAfterToggleOrder(t *testing.T) {
 
 	assert.True(t, m.SortChanged())
 }
+
+// Helper to create test issues with body content for detail view tests
+func createDetailTestIssues() []github.Issue {
+	return []github.Issue{
+		{
+			Number:       42,
+			Title:        "Test issue with markdown body",
+			Body:         "## Description\n\nThis is a **bold** description with `code`.\n\n- Item 1\n- Item 2",
+			Author:       github.User{Login: "testuser"},
+			CreatedAt:    "2024-01-15T10:30:00Z",
+			UpdatedAt:    "2024-01-20T14:45:00Z",
+			CommentCount: 5,
+			Labels:       []github.Label{{Name: "bug", Color: "d73a4a"}, {Name: "priority", Color: "0052cc"}},
+			Assignees:    []github.User{{Login: "assignee1"}, {Login: "assignee2"}},
+		},
+		{
+			Number:       43,
+			Title:        "Another issue",
+			Body:         "Simple body text",
+			Author:       github.User{Login: "user2"},
+			CreatedAt:    "2024-01-16T10:30:00Z",
+			UpdatedAt:    "2024-01-21T14:45:00Z",
+			CommentCount: 0,
+			Labels:       nil,
+			Assignees:    nil,
+		},
+	}
+}
+
+func TestDetailPanelShowsSelectedIssue(t *testing.T) {
+	issues := createDetailTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	view := m.View()
+
+	// Detail panel should show the selected issue info
+	// Issue 43 is first because it has a more recent UpdatedAt date
+	assert.Contains(t, view, "#43")
+	assert.Contains(t, view, "Another issue")
+	assert.Contains(t, view, "user2")
+}
+
+func TestDetailPanelShowsHeader(t *testing.T) {
+	issues := createDetailTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Select issue 42 (second in sorted order)
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = newModel.(Model)
+
+	view := m.View()
+
+	// Header should show: issue number, title, author, status indicators
+	assert.Contains(t, view, "#42")
+	assert.Contains(t, view, "Test issue with markdown body")
+	assert.Contains(t, view, "testuser")
+}
+
+func TestDetailPanelShowsDates(t *testing.T) {
+	issues := createDetailTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Select issue 42 (second in sorted order)
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = newModel.(Model)
+
+	view := m.View()
+
+	// Should show created and updated dates
+	assert.Contains(t, view, "2024-01-15")
+	assert.Contains(t, view, "2024-01-20")
+}
+
+func TestDetailPanelShowsLabels(t *testing.T) {
+	issues := createDetailTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Select issue 42 (second in sorted order)
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = newModel.(Model)
+
+	view := m.View()
+
+	// Should show labels
+	assert.Contains(t, view, "bug")
+	assert.Contains(t, view, "priority")
+}
+
+func TestDetailPanelShowsAssignees(t *testing.T) {
+	issues := createDetailTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Select issue 42 (second in sorted order)
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = newModel.(Model)
+
+	view := m.View()
+
+	// Should show assignees
+	assert.Contains(t, view, "assignee1")
+	assert.Contains(t, view, "assignee2")
+}
+
+func TestDetailPanelShowsBody(t *testing.T) {
+	issues := createDetailTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Select issue 42 (second in sorted order)
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = newModel.(Model)
+
+	view := m.View()
+
+	// Should show body content (rendered markdown may have transformed text)
+	assert.Contains(t, view, "Description")
+}
+
+func TestDetailPanelToggleRawMarkdown(t *testing.T) {
+	issues := createDetailTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Select issue 42 (second in sorted order)
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = newModel.(Model)
+
+	// Initial state should be rendered markdown
+	assert.False(t, m.IsRawMarkdown())
+
+	// Press 'm' to toggle to raw markdown
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	m = newModel.(Model)
+
+	assert.True(t, m.IsRawMarkdown())
+	view := m.View()
+	// Raw view should contain markdown syntax
+	assert.Contains(t, view, "**bold**")
+	assert.Contains(t, view, "`code`")
+
+	// Press 'm' again to toggle back to rendered
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	m = newModel.(Model)
+
+	assert.False(t, m.IsRawMarkdown())
+}
+
+func TestDetailPanelScroll(t *testing.T) {
+	// Create an issue with a long body
+	issues := []github.Issue{
+		{
+			Number:       1,
+			Title:        "Long issue",
+			Body:         "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9\nLine 10\nLine 11\nLine 12\nLine 13\nLine 14\nLine 15\nLine 16\nLine 17\nLine 18\nLine 19\nLine 20",
+			Author:       github.User{Login: "testuser"},
+			CreatedAt:    "2024-01-15T10:30:00Z",
+			UpdatedAt:    "2024-01-20T14:45:00Z",
+			CommentCount: 0,
+		},
+	}
+
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 15) // Small height to trigger scrolling
+
+	// Initial scroll should be at 0
+	assert.Equal(t, 0, m.DetailScrollOffset())
+
+	// Press 'l' to scroll down in the detail panel
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	m = newModel.(Model)
+
+	assert.Greater(t, m.DetailScrollOffset(), 0)
+
+	// Press 'h' to scroll up in the detail panel
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	m = newModel.(Model)
+
+	assert.Equal(t, 0, m.DetailScrollOffset())
+}
+
+func TestEnterKeyOpensCommentsView(t *testing.T) {
+	issues := createDetailTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Initial state: not in comments view
+	assert.False(t, m.InCommentsView())
+
+	// Press Enter to open comments view
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	assert.True(t, m.InCommentsView())
+
+	// Press Escape to go back
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	m = newModel.(Model)
+
+	assert.False(t, m.InCommentsView())
+}
+
+func TestDetailPanelNoLabelsOrAssignees(t *testing.T) {
+	issues := createDetailTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Issue 43 is first (more recent UpdatedAt) and has no labels or assignees
+	view := m.View()
+
+	// Should still render without crashing, just not show label/assignee sections
+	assert.Contains(t, view, "#43")
+	assert.Contains(t, view, "Another issue")
+}

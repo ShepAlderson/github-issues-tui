@@ -11,11 +11,11 @@ import (
 
 // Progress contains progress information during sync
 type Progress struct {
-	Phase          string // "issues" or "comments"
-	IssuesFetched  int
-	TotalIssues    int
+	Phase           string // "issues" or "comments"
+	IssuesFetched   int
+	TotalIssues     int
 	CommentsFetched int
-	CurrentIssue   int
+	CurrentIssue    int
 }
 
 // ProgressCallback is called during sync operations to report progress

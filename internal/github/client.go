@@ -35,15 +35,15 @@ func (c *Client) SetBaseURL(url string) {
 
 // Issue represents a GitHub issue
 type Issue struct {
-	Number       int       `json:"number"`
-	Title        string    `json:"title"`
-	Body         string    `json:"body"`
-	Author       User      `json:"author"`
-	CreatedAt    string    `json:"createdAt"`
-	UpdatedAt    string    `json:"updatedAt"`
-	CommentCount int       `json:"commentCount"`
-	Labels       []Label   `json:"labels"`
-	Assignees    []User    `json:"assignees"`
+	Number       int     `json:"number"`
+	Title        string  `json:"title"`
+	Body         string  `json:"body"`
+	Author       User    `json:"author"`
+	CreatedAt    string  `json:"createdAt"`
+	UpdatedAt    string  `json:"updatedAt"`
+	CommentCount int     `json:"commentCount"`
+	Labels       []Label `json:"labels"`
+	Assignees    []User  `json:"assignees"`
 }
 
 // User represents a GitHub user
