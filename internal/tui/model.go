@@ -20,18 +20,20 @@ func DefaultColumns() []string {
 
 // Model represents the TUI application state
 type Model struct {
-	issues          []github.Issue
-	columns         []string
-	cursor          int
-	width           int
-	height          int
-	sortField       config.SortField
-	sortOrder       config.SortOrder
-	sortChanged     bool // Track if sort was changed during session
-	rawMarkdown     bool // Toggle between raw and rendered markdown
-	detailScrollY   int  // Scroll offset for detail panel
-	inCommentsView  bool // Whether we're in the comments view
-	glamourRenderer *glamour.TermRenderer
+	issues           []github.Issue
+	comments         []github.Comment
+	columns          []string
+	cursor           int
+	width            int
+	height           int
+	sortField        config.SortField
+	sortOrder        config.SortOrder
+	sortChanged      bool // Track if sort was changed during session
+	rawMarkdown      bool // Toggle between raw and rendered markdown
+	detailScrollY    int  // Scroll offset for detail panel
+	commentsScrollY  int  // Scroll offset for comments view
+	inCommentsView   bool // Whether we're in the comments view
+	glamourRenderer  *glamour.TermRenderer
 }
 
 // NewModel creates a new TUI model with the given issues and columns
@@ -93,46 +95,68 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Exit comments view if in it
 			if m.inCommentsView {
 				m.inCommentsView = false
+				m.commentsScrollY = 0
 			}
 		case msg.Type == tea.KeyEnter:
 			// Open comments view for selected issue
-			if len(m.issues) > 0 {
+			if len(m.issues) > 0 && !m.inCommentsView {
 				m.inCommentsView = true
+				m.commentsScrollY = 0
 			}
 		case msg.Type == tea.KeyDown || (msg.Type == tea.KeyRunes && len(msg.Runes) > 0 && msg.Runes[0] == 'j'):
-			if m.cursor < len(m.issues)-1 {
+			if !m.inCommentsView && m.cursor < len(m.issues)-1 {
 				m.cursor++
 				m.detailScrollY = 0 // Reset detail scroll when changing issue
 			}
 		case msg.Type == tea.KeyUp || (msg.Type == tea.KeyRunes && len(msg.Runes) > 0 && msg.Runes[0] == 'k'):
-			if m.cursor > 0 {
+			if !m.inCommentsView && m.cursor > 0 {
 				m.cursor--
 				m.detailScrollY = 0 // Reset detail scroll when changing issue
 			}
 		case msg.Type == tea.KeyRunes && len(msg.Runes) > 0 && msg.Runes[0] == 'q':
-			return m, tea.Quit
+			// In comments view, 'q' returns to issue list; otherwise, quit
+			if m.inCommentsView {
+				m.inCommentsView = false
+				m.commentsScrollY = 0
+			} else {
+				return m, tea.Quit
+			}
 		case msg.Type == tea.KeyRunes && len(msg.Runes) > 0 && msg.Runes[0] == 's':
-			// Cycle sort field
-			m.sortField = config.NextSortField(m.sortField)
-			m.sortIssues()
-			m.cursor = 0 // Reset cursor after sort change
-			m.sortChanged = true
+			// Cycle sort field (only in issue list view)
+			if !m.inCommentsView {
+				m.sortField = config.NextSortField(m.sortField)
+				m.sortIssues()
+				m.cursor = 0 // Reset cursor after sort change
+				m.sortChanged = true
+			}
 		case msg.Type == tea.KeyRunes && len(msg.Runes) > 0 && msg.Runes[0] == 'S':
-			// Toggle sort order
-			m.sortOrder = config.ToggleSortOrder(m.sortOrder)
-			m.sortIssues()
-			m.cursor = 0 // Reset cursor after sort change
-			m.sortChanged = true
+			// Toggle sort order (only in issue list view)
+			if !m.inCommentsView {
+				m.sortOrder = config.ToggleSortOrder(m.sortOrder)
+				m.sortIssues()
+				m.cursor = 0 // Reset cursor after sort change
+				m.sortChanged = true
+			}
 		case msg.Type == tea.KeyRunes && len(msg.Runes) > 0 && msg.Runes[0] == 'm':
 			// Toggle raw/rendered markdown
 			m.rawMarkdown = !m.rawMarkdown
 		case msg.Type == tea.KeyRunes && len(msg.Runes) > 0 && msg.Runes[0] == 'l':
-			// Scroll detail panel down
-			m.detailScrollY++
+			// Scroll down - either detail panel or comments view
+			if m.inCommentsView {
+				m.commentsScrollY++
+			} else {
+				m.detailScrollY++
+			}
 		case msg.Type == tea.KeyRunes && len(msg.Runes) > 0 && msg.Runes[0] == 'h':
-			// Scroll detail panel up
-			if m.detailScrollY > 0 {
-				m.detailScrollY--
+			// Scroll up - either detail panel or comments view
+			if m.inCommentsView {
+				if m.commentsScrollY > 0 {
+					m.commentsScrollY--
+				}
+			} else {
+				if m.detailScrollY > 0 {
+					m.detailScrollY--
+				}
 			}
 		}
 	case tea.WindowSizeMsg:
@@ -146,6 +170,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) View() string {
 	if m.width == 0 {
 		return ""
+	}
+
+	// If in comments view, render the drill-down view instead
+	if m.inCommentsView {
+		return m.renderCommentsView()
 	}
 
 	var b strings.Builder
@@ -376,6 +405,84 @@ func (m Model) renderBody(body string) string {
 	return body
 }
 
+// renderCommentsView renders the full-screen comments drill-down view
+func (m Model) renderCommentsView() string {
+	if len(m.issues) == 0 || m.cursor >= len(m.issues) {
+		return "No issue selected"
+	}
+
+	issue := m.issues[m.cursor]
+	var b strings.Builder
+
+	// Styles
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86"))
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
+	authorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("208"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	statusStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+
+	// Title: Issue number and title
+	b.WriteString(titleStyle.Render(fmt.Sprintf("Comments for #%d: %s", issue.Number, issue.Title)))
+	b.WriteString("\n")
+	b.WriteString(strings.Repeat("═", min(m.width, 80)))
+	b.WriteString("\n\n")
+
+	// Handle empty comments
+	if len(m.comments) == 0 {
+		b.WriteString(dimStyle.Render("No comments on this issue."))
+		b.WriteString("\n")
+	} else {
+		// Render comments
+		var allCommentLines []string
+
+		for i, comment := range m.comments {
+			// Comment header: author and date
+			createdAt, _ := time.Parse(time.RFC3339, comment.CreatedAt)
+			header := fmt.Sprintf("%s  %s",
+				authorStyle.Render(comment.Author.Login),
+				dimStyle.Render(createdAt.Format("2006-01-02 15:04")))
+			allCommentLines = append(allCommentLines, header)
+
+			// Comment body
+			bodyContent := m.renderBody(comment.Body)
+			bodyLines := strings.Split(bodyContent, "\n")
+			allCommentLines = append(allCommentLines, bodyLines...)
+
+			// Add separator between comments (except after last one)
+			if i < len(m.comments)-1 {
+				allCommentLines = append(allCommentLines, "")
+				allCommentLines = append(allCommentLines, headerStyle.Render(strings.Repeat("─", min(m.width-4, 60))))
+				allCommentLines = append(allCommentLines, "")
+			}
+		}
+
+		// Apply scroll offset
+		visibleHeight := m.height - 8 // Account for header and status bar
+		if visibleHeight < 5 {
+			visibleHeight = 10
+		}
+
+		startLine := m.commentsScrollY
+		if startLine >= len(allCommentLines) {
+			startLine = max(0, len(allCommentLines)-1)
+		}
+		endLine := min(startLine+visibleHeight, len(allCommentLines))
+
+		for i := startLine; i < endLine; i++ {
+			b.WriteString(allCommentLines[i])
+			b.WriteString("\n")
+		}
+	}
+
+	// Status bar
+	b.WriteString("\n")
+	status := fmt.Sprintf("%d comments | m: toggle markdown | h/l: scroll | Esc/q: back",
+		len(m.comments))
+	b.WriteString(statusStyle.Render(status))
+
+	return b.String()
+}
+
 // padToWidth pads a string to a specific width, accounting for ANSI codes
 func padToWidth(s string, width int) string {
 	// Get visual width (lipgloss handles ANSI codes)
@@ -428,6 +535,22 @@ func (m Model) DetailScrollOffset() int {
 // InCommentsView returns whether the comments view is active
 func (m Model) InCommentsView() bool {
 	return m.inCommentsView
+}
+
+// SetComments sets the comments for the currently selected issue
+func (m *Model) SetComments(comments []github.Comment) {
+	m.comments = comments
+	m.commentsScrollY = 0 // Reset scroll when setting new comments
+}
+
+// GetComments returns the current comments
+func (m Model) GetComments() []github.Comment {
+	return m.comments
+}
+
+// CommentsScrollOffset returns the current scroll offset for the comments view
+func (m Model) CommentsScrollOffset() int {
+	return m.commentsScrollY
 }
 
 // sortIssues sorts the issues based on the current sort field and order

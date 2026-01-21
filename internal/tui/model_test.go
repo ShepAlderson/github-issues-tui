@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -700,4 +701,254 @@ func TestDetailPanelNoLabelsOrAssignees(t *testing.T) {
 	// Should still render without crashing, just not show label/assignee sections
 	assert.Contains(t, view, "#43")
 	assert.Contains(t, view, "Another issue")
+}
+
+// Helper to create test comments
+func createTestComments() []github.Comment {
+	return []github.Comment{
+		{
+			ID:        "comment1",
+			Body:      "This is the **first** comment with `code`.",
+			Author:    github.User{Login: "commenter1"},
+			CreatedAt: "2024-01-10T10:00:00Z",
+		},
+		{
+			ID:        "comment2",
+			Body:      "Second comment here.",
+			Author:    github.User{Login: "commenter2"},
+			CreatedAt: "2024-01-11T14:30:00Z",
+		},
+		{
+			ID:        "comment3",
+			Body:      "Third comment with more details.\n\n- Point 1\n- Point 2",
+			Author:    github.User{Login: "commenter3"},
+			CreatedAt: "2024-01-12T09:15:00Z",
+		},
+	}
+}
+
+func TestSetComments(t *testing.T) {
+	issues := createDetailTestIssues()
+	m := NewModel(issues, nil)
+
+	comments := createTestComments()
+	m.SetComments(comments)
+
+	assert.Equal(t, 3, len(m.GetComments()))
+}
+
+func TestCommentsViewShowsIssueHeader(t *testing.T) {
+	issues := createDetailTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+	m.SetComments(createTestComments())
+
+	// Press Enter to open comments view
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	view := m.View()
+
+	// Comments view should replace main interface (no issue list panel)
+	// and show issue title/number as header
+	assert.True(t, m.InCommentsView())
+	assert.Contains(t, view, "#43") // Issue number
+	assert.Contains(t, view, "Another issue") // Issue title
+}
+
+func TestCommentsViewShowsCommentsChronologically(t *testing.T) {
+	issues := createDetailTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 40)
+	m.SetComments(createTestComments())
+
+	// Press Enter to open comments view
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	view := m.View()
+
+	// Comments should be displayed chronologically
+	// Check that all comment authors are visible
+	assert.Contains(t, view, "commenter1")
+	assert.Contains(t, view, "commenter2")
+	assert.Contains(t, view, "commenter3")
+}
+
+func TestCommentsViewShowsCommentDate(t *testing.T) {
+	issues := createDetailTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 40)
+	m.SetComments(createTestComments())
+
+	// Press Enter to open comments view
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	view := m.View()
+
+	// Comments should show dates
+	assert.Contains(t, view, "2024-01-10")
+	assert.Contains(t, view, "2024-01-11")
+	assert.Contains(t, view, "2024-01-12")
+}
+
+func TestCommentsViewShowsCommentBody(t *testing.T) {
+	issues := createDetailTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 40)
+	m.SetComments(createTestComments())
+
+	// Press Enter to open comments view
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	view := m.View()
+
+	// Comments should show body content
+	assert.Contains(t, view, "first")
+	assert.Contains(t, view, "Second comment")
+}
+
+func TestCommentsViewToggleMarkdown(t *testing.T) {
+	issues := createDetailTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 40)
+	m.SetComments(createTestComments())
+
+	// Press Enter to open comments view
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	// Default is rendered markdown
+	assert.False(t, m.IsRawMarkdown())
+
+	// Press 'm' to toggle to raw markdown
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	m = newModel.(Model)
+
+	assert.True(t, m.IsRawMarkdown())
+	view := m.View()
+	// Raw view should contain markdown syntax
+	assert.Contains(t, view, "**first**")
+	assert.Contains(t, view, "`code`")
+
+	// Press 'm' again to toggle back
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	m = newModel.(Model)
+
+	assert.False(t, m.IsRawMarkdown())
+}
+
+func TestCommentsViewScrollable(t *testing.T) {
+	issues := createDetailTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 15) // Small height to test scrolling
+
+	// Create many comments to test scrolling
+	manyComments := []github.Comment{}
+	for i := 0; i < 20; i++ {
+		manyComments = append(manyComments, github.Comment{
+			ID:        fmt.Sprintf("comment%d", i),
+			Body:      fmt.Sprintf("Comment %d body text", i),
+			Author:    github.User{Login: fmt.Sprintf("user%d", i)},
+			CreatedAt: fmt.Sprintf("2024-01-%02dT10:00:00Z", i+1),
+		})
+	}
+	m.SetComments(manyComments)
+
+	// Press Enter to open comments view
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	// Initial scroll should be 0
+	assert.Equal(t, 0, m.CommentsScrollOffset())
+
+	// Press 'l' to scroll down
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	m = newModel.(Model)
+
+	assert.Greater(t, m.CommentsScrollOffset(), 0)
+
+	// Press 'h' to scroll back up
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	m = newModel.(Model)
+
+	assert.Equal(t, 0, m.CommentsScrollOffset())
+}
+
+func TestCommentsViewEscapeReturnsToIssueList(t *testing.T) {
+	issues := createDetailTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+	m.SetComments(createTestComments())
+
+	// Press Enter to open comments view
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	assert.True(t, m.InCommentsView())
+
+	// Press Escape to return to issue list
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	m = newModel.(Model)
+
+	assert.False(t, m.InCommentsView())
+}
+
+func TestCommentsViewQKeyReturnsToIssueList(t *testing.T) {
+	issues := createDetailTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+	m.SetComments(createTestComments())
+
+	// Press Enter to open comments view
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	assert.True(t, m.InCommentsView())
+
+	// Press 'q' to return to issue list (not quit the app when in comments view)
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	m = newModel.(Model)
+
+	assert.False(t, m.InCommentsView())
+}
+
+func TestCommentsViewEmptyState(t *testing.T) {
+	issues := createDetailTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+	// No comments set
+
+	// Press Enter to open comments view
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	view := m.View()
+
+	// Should show a message when there are no comments
+	assert.Contains(t, view, "No comments")
+}
+
+func TestCommentsViewReplacesMainInterface(t *testing.T) {
+	issues := createDetailTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+	m.SetComments(createTestComments())
+
+	// Before entering comments view, should see the issue list
+	view := m.View()
+	assert.Contains(t, view, "#") // Issue list column header
+
+	// Press Enter to open comments view
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	view = m.View()
+
+	// Comments view should be a drill-down (full screen), not split panel
+	// The issue list should not be visible
+	// Check that the comments header is present
+	assert.Contains(t, view, "Comments")
 }
