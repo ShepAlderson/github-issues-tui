@@ -5,8 +5,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/shepbook/github-issues-tui/internal/config"
 	"github.com/manifoldco/promptui"
+	"github.com/shepbook/github-issues-tui/internal/config"
 )
 
 // Setup runs the interactive setup wizard

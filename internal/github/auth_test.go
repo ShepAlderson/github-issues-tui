@@ -20,14 +20,14 @@ func TestNewAuthManager(t *testing.T) {
 
 func TestResolveTokenPriority(t *testing.T) {
 	tests := []struct {
-		name           string
-		envToken       string
-		configMethod   string
-		configToken    string
-		ghCLIWorks     bool
-		ghCLIToken     string
-		expectedToken  string
-		expectError    bool
+		name          string
+		envToken      string
+		configMethod  string
+		configToken   string
+		ghCLIWorks    bool
+		ghCLIToken    string
+		expectedToken string
+		expectError   bool
 	}{
 		{
 			name:          "env token takes priority",
@@ -153,4 +153,3 @@ func TestGetAuthenticatedClientIntegration(t *testing.T) {
 		// which is valid behavior
 	}
 }
-

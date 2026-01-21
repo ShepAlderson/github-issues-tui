@@ -7,8 +7,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/shepbook/github-issues-tui/internal/config"
 	gh "github.com/google/go-github/v62/github"
+	"github.com/shepbook/github-issues-tui/internal/config"
 	"golang.org/x/oauth2"
 )
 

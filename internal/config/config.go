@@ -10,8 +10,8 @@ import (
 
 // Config represents the application configuration
 type Config struct {
-	Repository string `toml:"repository"`
-	Auth       Auth   `toml:"auth"`
+	Repository string   `toml:"repository"`
+	Auth       Auth     `toml:"auth"`
 	Database   Database `toml:"database"`
 	Display    Display  `toml:"display"`
 }
@@ -29,8 +29,10 @@ type Database struct {
 
 // Display represents display configuration
 type Display struct {
-	Theme   string   `toml:"theme"`
-	Columns []string `toml:"columns"`
+	Theme         string   `toml:"theme"`
+	Columns       []string `toml:"columns"`
+	SortField     string   `toml:"sort_field"`
+	SortAscending bool     `toml:"sort_ascending"`
 }
 
 // Manager handles configuration operations
@@ -64,8 +66,10 @@ func DefaultConfig() *Config {
 			Path: ".ghissues.db",
 		},
 		Display: Display{
-			Theme: "default",
-			Columns: []string{"number", "title", "author", "date", "comments"},
+			Theme:         "default",
+			Columns:       []string{"number", "title", "author", "date", "comments"},
+			SortField:     "updated",
+			SortAscending: false,
 		},
 	}
 }

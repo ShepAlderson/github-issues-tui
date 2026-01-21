@@ -17,7 +17,12 @@ func TestNewApp(t *testing.T) {
 	}
 	defer dbManager.Close()
 
-	app := NewApp(cfg, dbManager)
+	// Create a test config manager
+	cfgMgr := config.NewTestManager(func() (string, error) {
+		return t.TempDir(), nil
+	})
+
+	app := NewApp(cfg, dbManager, cfgMgr)
 	if app == nil {
 		t.Error("NewApp returned nil")
 	}
@@ -32,7 +37,12 @@ func TestNewIssueList(t *testing.T) {
 	}
 	defer dbManager.Close()
 
-	issueList := NewIssueList(dbManager, cfg)
+	// Create a test config manager
+	cfgMgr := config.NewTestManager(func() (string, error) {
+		return t.TempDir(), nil
+	})
+
+	issueList := NewIssueList(dbManager, cfg, cfgMgr)
 	if issueList == nil {
 		t.Error("NewIssueList returned nil")
 	}

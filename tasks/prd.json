@@ -215,14 +215,15 @@
         "Updates after each successful sync"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-009"
       ],
       "labels": [
         "tui",
         "status"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-011",
@@ -235,14 +236,15 @@
         "Help overlay dismissible with ? or Esc"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-005"
       ],
       "labels": [
         "tui",
         "help"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-012",
@@ -255,14 +257,15 @@
         "Themes use lipgloss for consistent styling"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-005"
       ],
       "labels": [
         "tui",
         "theme"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-013",
@@ -276,14 +279,15 @@
         "Network errors suggest checking connectivity and retrying"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-005"
       ],
       "labels": [
         "tui",
         "errors"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-014",
@@ -297,7 +301,7 @@
         "ghissues repos lists configured repositories"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-001",
         "US-004"
@@ -305,10 +309,11 @@
       "labels": [
         "config",
         "multi-repo"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     }
   ],
   "metadata": {
-    "updatedAt": "2026-01-21T19:35:04.953Z"
+    "updatedAt": "2026-01-21T20:10:13.294Z"
   }
 }

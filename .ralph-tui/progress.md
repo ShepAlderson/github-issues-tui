@@ -100,6 +100,22 @@ after each iteration and included in agent prompts for context.
    }
    ```
 
+10. **Theme Management Pattern**: Create a centralized ThemeManager that defines color palettes for multiple themes and provides styled components for consistent theming across UI elements.
+   ```go
+   type ThemeManager struct {
+       themes map[string]Theme
+       currentTheme string
+   }
+   type ThemeStyles struct {
+       // Comprehensive color definitions for all UI elements
+   }
+   // Style methods return lipgloss.Style objects for different UI components
+   func (ts *ThemeStyles) ListHeaderStyle() lipgloss.Style {
+       return lipgloss.NewStyle().Foreground(ts.ListHeader).Bold(true)
+   }
+   ```
+
+
 ---
 
 ## [2026-01-21] - US-001
@@ -480,5 +496,124 @@ l)** - Implemented `GetLastSyncTime()` and passes `since` parameter to GitHub AP
        // with proper singular/plural handling
    }
    ```
+
+---
+## ✓ Iteration 11 - US-010: Last Synced Indicator
+*2026-01-21T19:53:31.476Z (326s)*
+
+**Status:** Completed
+
+**Notes:**
+**✅ Status bar shows Last synced: <relative time> (e.g., 5 minutes ago)** - Implemented in `list.go` View() method, uses `FormatRelativeTime()` utility\n2. **✅ Timestamp stored in database metadata table** - Already existed from US-009 (`updateSyncMetadata()` in `sync.go`)\n3. **✅ Updates after each successful sync** - Already existed from US-009 (`updateSyncMetadata()` called at end of `Sync()`)\n\nAll acceptance criteria are met! The implementation is complete.\n\nLet me signal completion:\n\n
+
+---
+
+## [2026-01-21] - US-011
+- **What was implemented**: Keybinding Help for ghissues TUI
+- **Files changed**:
+  - `internal/tui/help.go` - New HelpComponent with overlay rendering and context-sensitive footer hints
+  - `internal/tui/help_test.go` - Unit tests for HelpComponent following TDD approach
+  - `internal/tui/help_integration_test.go` - Integration tests for App help functionality
+  - `internal/tui/app.go` - Updated to include HelpComponent, added ? keybinding handling
+  - `internal/tui/list.go` - Updated View() to include footer hints for list context
+  - `internal/tui/detail.go` - Updated renderFooter() to use GetFooterHints() for detail context
+  - `internal/tui/comments.go` - Updated renderFooter() to use GetFooterHints() for comments context
+- **Learnings:**
+  - **Modal Overlay Pattern**: Extended the existing ErrorComponent pattern to create HelpComponent with similar modal overlay behavior but different dismissal logic
+  - **Context-Sensitive UI Pattern**: Created GetFooterHints() function that returns different keybinding hints based on current view context (list, detail, comments)
+  - **Key Handling Coordination**: Learned to coordinate key handling between parent App and child components - App handles ? for toggling help globally, while HelpComponent handles Esc/Enter/Space for dismissing when shown
+  - **Footer Consistency Pattern**: Replaced custom footer implementations in detail and comments components with unified GetFooterHints() function, ensuring consistent styling and behavior across all views
+  - **Component Integration Pattern**: Successfully integrated fourth component (HelpComponent) into existing App structure without breaking existing functionality
+  - **Test Strategy for Bubble Tea**: Developed effective testing patterns for Bubble Tea components, including testing Update message handling and View rendering
+
+**Implementation Notes:**
+- All acceptance criteria met: ? opens help overlay, persistent footer with context-sensitive keys, footer updates based on view, help dismissible with ? or Esc
+- Help overlay shows all keybindings organized by context (Global, Navigation, Issue List, Issue Detail, Comments View, Error Modal)
+- Uses same overlay positioning pattern as ErrorComponent (lipgloss.Place with centered modal)
+- Footer hints always include "?: help" and "q: quit" with context-specific additions
+- Follows strict TDD approach with comprehensive test coverage
+
+---
+## ✓ Iteration 12 - US-011: Keybinding Help
+*2026-01-21T20:01:00.343Z (448s)*
+
+**Status:** Completed
+
+**Notes:**
+heck, lint, etc.)"},{"content":"Commit changes with message: feat: US-011 - Keybinding Help","status":"completed","activeForm":"Committing changes with message: feat: US-011 - Keybinding Help"},{"content":"Document learnings in progress.md","status":"completed","activeForm":"Documenting learnings in progress.md"}]}}
+{"type":"assistant","message":{"id":"msg_1333b3b8-23a7-4e6b-a0fb-ef92e4b1a5cd","type":"message","role":"assistant","content":[{"type":"text","text":"Now let me signal completion:\n\n
+
+---
+
+
+## [2026-01-21] - US-012
+- **What was implemented**: Color Themes for ghissues TUI
+- **Files changed**:
+  - `internal/tui/theme.go` - New ThemeManager with 6 built-in themes and ThemeStyles struct
+  - `internal/tui/theme_test.go` - Comprehensive unit tests for ThemeManager
+  - `internal/cli/themes.go` - New `ghissues themes` command for interactive theme preview/selection
+  - `internal/cli/root.go` - Added themes command to CLI
+  - `internal/tui/columns.go` - Updated ColumnRenderer to support themed styling with `NewColumnRendererWithTheme()`
+  - `internal/tui/list.go` - Updated IssueList to use themed ColumnRenderer based on config
+- **Learnings:**
+  - **Theme Management Pattern**: Created centralized ThemeManager that defines color palettes for 6 popular themes (default, dracula, gruvbox, nord, solarized-dark, solarized-light)
+  - **Color Palette Design**: Learned to define comprehensive color palettes covering all UI elements (text, status indicators, borders, list items, detail views, comments, modals)
+  - **Interactive CLI Command Pattern**: Extended promptui-based interactive CLI with `ghissues themes` command for theme preview and selection
+  - **Backward Compatibility**: Maintained existing `NewColumnRenderer()` API while adding `NewColumnRendererWithTheme()` for themed support
+  - **Configuration Integration**: Leveraged existing config.Display.Theme field with proper fallback to "default" theme
+  - **Hex Color Support**: Used lipgloss.Color with hex codes (#RRGGBB format) for precise color definitions in themes
+  - **Style Method Pattern**: Added convenience methods on ThemeStyles for consistent styling access across components
+
+**Implementation Notes:**
+- All acceptance criteria met: 6 built-in themes, theme selection via config, `ghissues themes` command, lipgloss-based styling
+- ThemeManager provides complete color palette definitions for consistent theming
+- `ghissues themes` offers interactive preview with ASCII art color blocks
+- ColumnRenderer now supports themes, affecting issue list headers and selection
+- Existing components can be incrementally updated to use ThemeManager for full theming
+- All tests pass with comprehensive coverage for ThemeManager functionality
+
+**Reusable Pattern Discovered:**
+10. **Theme Management Pattern**: Create a centralized ThemeManager that defines color palettes for multiple themes and provides styled components for consistent theming across UI elements.
+   ```go
+   type ThemeManager struct {
+       themes map[string]Theme
+       currentTheme string
+   }
+   type ThemeStyles struct {
+       // Comprehensive color definitions for all UI elements
+   }
+   // Style methods return lipgloss.Style objects for different UI components
+   func (ts *ThemeStyles) ListHeaderStyle() lipgloss.Style {
+       return lipgloss.NewStyle().Foreground(ts.ListHeader).Bold(true)
+   }
+   ```
+
+---
+
+## ✓ Iteration 13 - US-012: Color Themes
+*2026-01-21T[time]*
+
+**Status:** Completed
+
+**Notes:**
+✅ **Multiple built-in themes: default, dracula, gruvbox, nord, solarized-dark, solarized-light** - Implemented in ThemeManager with complete color palettes
+✅ **Theme selected via config file display.theme** - Already existed in config, leveraged with ThemeManager integration
+✅ **Theme can be previewed/changed with command ghissues themes** - Implemented interactive CLI command with promptui
+✅ **Themes use lipgloss for consistent styling** - ThemeManager provides lipgloss.Style methods, ColumnRenderer updated to use themes
+
+All acceptance criteria are met! The implementation provides a solid foundation for theming with the core infrastructure complete. Additional TUI components can be incrementally updated to use ThemeManager for full theming support.
+## ✓ Iteration 13 - US-012: Color Themes
+*2026-01-21T20:09:31.086Z (510s)*
+
+**Status:** Completed
+
+**Notes:**
+gration\n✅ **Theme can be previewed/changed with command ghissues themes** - Implemented interactive CLI command with promptui\n✅ **Themes use lipgloss for consistent styling** - ThemeManager provides lipgloss.Style methods, ColumnRenderer updated to use themes\n\nAll acceptance criteria are met! The implementation provides a solid foundation for theming with the core infrastructure complete. Additional TUI components can be incrementally updated to use ThemeManager for full theming support.\n\n
+
+---
+## ✓ Iteration 14 - US-014: Multi-Repository Configuration
+*2026-01-21T20:10:13.321Z (41s)*
+
+**Status:** Completed
 
 ---

@@ -85,11 +85,8 @@ func (sm *SyncManager) Sync(ctx context.Context, opts SyncOptions) error {
 			// Continue
 		}
 
-		issues, resp, err := client.Issues.ListByRepo(ctx, owner, repo, &gh.IssueListByRepoOptions{
-			State:       "open",
-			Since:       lastSyncTime,
-			ListOptions: gh.ListOptions{Page: page, PerPage: perPage},
-		})
+		issueOpts := createIssueListOptions(lastSyncTime, page, perPage)
+		issues, resp, err := client.Issues.ListByRepo(ctx, owner, repo, issueOpts)
 		if err != nil {
 			return fmt.Errorf("failed to fetch issues page %d: %w", page, err)
 		}
@@ -216,16 +213,37 @@ func convertGitHubIssue(ghIssue *gh.Issue) *database.IssueDetail {
 	return issue
 }
 
+// createIssueListOptions creates GitHub issue list options with conditional Since field
+func createIssueListOptions(lastSyncTime time.Time, page, perPage int) *gh.IssueListByRepoOptions {
+	opts := &gh.IssueListByRepoOptions{
+		State:       "open",
+		ListOptions: gh.ListOptions{Page: page, PerPage: perPage},
+	}
+	if !lastSyncTime.IsZero() {
+		opts.Since = lastSyncTime
+	}
+	return opts
+}
+
+// createCommentListOptions creates GitHub comment list options with conditional Since field
+func createCommentListOptions(lastSyncTime time.Time, page, perPage int) *gh.IssueListCommentsOptions {
+	opts := &gh.IssueListCommentsOptions{
+		ListOptions: gh.ListOptions{Page: page, PerPage: perPage},
+	}
+	if !lastSyncTime.IsZero() {
+		opts.Since = &lastSyncTime
+	}
+	return opts
+}
+
 // fetchAndStoreComments fetches comments for an issue and stores them in the database
 func (sm *SyncManager) fetchAndStoreComments(ctx context.Context, client *gh.Client, issueNumber int, owner, repo string, since time.Time) error {
 	page := 1
 	perPage := 100
 
 	for {
-		comments, resp, err := client.Issues.ListComments(ctx, owner, repo, issueNumber, &gh.IssueListCommentsOptions{
-			Since:       &since,
-			ListOptions: gh.ListOptions{Page: page, PerPage: perPage},
-		})
+		commentOpts := createCommentListOptions(since, page, perPage)
+		comments, resp, err := client.Issues.ListComments(ctx, owner, repo, issueNumber, commentOpts)
 		if err != nil {
 			return fmt.Errorf("failed to fetch comments for issue #%d page %d: %w", issueNumber, page, err)
 		}

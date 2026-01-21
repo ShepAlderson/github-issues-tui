@@ -24,11 +24,11 @@ func TestGetDatabasePath(t *testing.T) {
 	// tempDir := t.TempDir() - not used in this test
 
 	tests := []struct {
-		name           string
-		flagPath       string
-		configPath     string
-		expectedPath   string
-		expectedError  bool
+		name          string
+		flagPath      string
+		configPath    string
+		expectedPath  string
+		expectedError bool
 	}{
 		{
 			name:          "no flag, no config - uses default",
