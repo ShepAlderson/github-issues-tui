@@ -152,8 +152,11 @@ You can also run 'ghissues config' to reconfigure at any time.`,
 				return fmt.Errorf("invalid repository format: %w", err)
 			}
 
+			// Get theme from config
+			theme := cfg.Display.Theme
+
 			// Create and run TUI
-			model := tui.NewModelWithSort(issues, columns, sortField, sortOrder)
+			model := tui.NewModelWithTheme(issues, columns, sortField, sortOrder, theme)
 			model.SetLastSyncTime(lastSyncTime)
 
 			// Set up refresh function for manual refresh (r key)
@@ -193,6 +196,7 @@ You can also run 'ghissues config' to reconfigure at any time.`,
 	// Add subcommands
 	rootCmd.AddCommand(newConfigCmd())
 	rootCmd.AddCommand(newSyncCmd())
+	rootCmd.AddCommand(newThemesCmd())
 
 	return rootCmd
 }

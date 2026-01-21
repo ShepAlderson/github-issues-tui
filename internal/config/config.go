@@ -29,6 +29,7 @@ type DisplayConfig struct {
 	Columns   []string  `toml:"columns,omitempty"`
 	SortField SortField `toml:"sort_field,omitempty"`
 	SortOrder SortOrder `toml:"sort_order,omitempty"`
+	Theme     Theme     `toml:"theme,omitempty"`
 }
 
 // ValidColumns contains all valid column names for issue display
@@ -56,6 +57,22 @@ const (
 	SortDesc SortOrder = "desc"
 	SortAsc  SortOrder = "asc"
 )
+
+// Theme represents a color theme for the TUI
+type Theme string
+
+// Theme constants for built-in themes
+const (
+	ThemeDefault        Theme = "default"
+	ThemeDracula        Theme = "dracula"
+	ThemeGruvbox        Theme = "gruvbox"
+	ThemeNord           Theme = "nord"
+	ThemeSolarizedDark  Theme = "solarized-dark"
+	ThemeSolarizedLight Theme = "solarized-light"
+)
+
+// ValidThemes contains all valid theme names
+var ValidThemes = []Theme{ThemeDefault, ThemeDracula, ThemeGruvbox, ThemeNord, ThemeSolarizedDark, ThemeSolarizedLight}
 
 // DefaultDisplayColumns returns the default columns to display
 func DefaultDisplayColumns() []string {
@@ -232,5 +249,43 @@ func (f SortField) DisplayName() string {
 		return "Comments"
 	default:
 		return "Updated"
+	}
+}
+
+// ValidateTheme validates that a theme name is valid
+func ValidateTheme(theme Theme) error {
+	if slices.Contains(ValidThemes, theme) {
+		return nil
+	}
+	return fmt.Errorf("invalid theme: %q, must be one of: %v", theme, ValidThemes)
+}
+
+// DefaultTheme returns the default theme
+func DefaultTheme() Theme {
+	return ThemeDefault
+}
+
+// AllThemes returns all available themes
+func AllThemes() []Theme {
+	return []Theme{ThemeDefault, ThemeDracula, ThemeGruvbox, ThemeNord, ThemeSolarizedDark, ThemeSolarizedLight}
+}
+
+// DisplayName returns a human-readable name for the theme
+func (t Theme) DisplayName() string {
+	switch t {
+	case ThemeDefault:
+		return "Default"
+	case ThemeDracula:
+		return "Dracula"
+	case ThemeGruvbox:
+		return "Gruvbox"
+	case ThemeNord:
+		return "Nord"
+	case ThemeSolarizedDark:
+		return "Solarized Dark"
+	case ThemeSolarizedLight:
+		return "Solarized Light"
+	default:
+		return "Default"
 	}
 }

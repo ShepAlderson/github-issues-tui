@@ -577,3 +577,140 @@ func TestSortFieldDisplayName(t *testing.T) {
 		})
 	}
 }
+
+// Theme configuration tests
+
+func TestValidThemes(t *testing.T) {
+	// Verify all expected themes are available
+	expected := []Theme{ThemeDefault, ThemeDracula, ThemeGruvbox, ThemeNord, ThemeSolarizedDark, ThemeSolarizedLight}
+	assert.Equal(t, expected, ValidThemes)
+}
+
+func TestValidateTheme(t *testing.T) {
+	tests := []struct {
+		name    string
+		theme   Theme
+		wantErr bool
+	}{
+		{name: "default theme", theme: ThemeDefault, wantErr: false},
+		{name: "dracula theme", theme: ThemeDracula, wantErr: false},
+		{name: "gruvbox theme", theme: ThemeGruvbox, wantErr: false},
+		{name: "nord theme", theme: ThemeNord, wantErr: false},
+		{name: "solarized-dark theme", theme: ThemeSolarizedDark, wantErr: false},
+		{name: "solarized-light theme", theme: ThemeSolarizedLight, wantErr: false},
+		{name: "invalid theme", theme: "invalid", wantErr: true},
+		{name: "empty theme", theme: "", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateTheme(tt.theme)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestDefaultTheme(t *testing.T) {
+	theme := DefaultTheme()
+	assert.Equal(t, ThemeDefault, theme)
+}
+
+func TestLoadConfigWithTheme(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Create a config file with theme setting
+	content := `repository = "myorg/myrepo"
+
+[auth]
+method = "env"
+
+[display]
+theme = "dracula"
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load the config
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	assert.Equal(t, ThemeDracula, cfg.Display.Theme)
+}
+
+func TestSaveConfigWithTheme(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	cfg := &Config{
+		Repository: "owner/repo",
+		Auth: AuthConfig{
+			Method: "env",
+		},
+		Display: DisplayConfig{
+			Theme: ThemeNord,
+		},
+	}
+
+	err := Save(cfg, configPath)
+	require.NoError(t, err)
+
+	// Verify contents
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `theme = "nord"`)
+}
+
+func TestLoadConfigWithoutTheme(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Create a config file without theme setting
+	content := `repository = "myorg/myrepo"
+
+[auth]
+method = "env"
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load the config
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	// Theme should be empty (will use default)
+	assert.Empty(t, cfg.Display.Theme)
+}
+
+func TestThemeDisplayName(t *testing.T) {
+	tests := []struct {
+		theme    Theme
+		expected string
+	}{
+		{ThemeDefault, "Default"},
+		{ThemeDracula, "Dracula"},
+		{ThemeGruvbox, "Gruvbox"},
+		{ThemeNord, "Nord"},
+		{ThemeSolarizedDark, "Solarized Dark"},
+		{ThemeSolarizedLight, "Solarized Light"},
+		{"unknown", "Default"}, // default fallback
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.theme), func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.theme.DisplayName())
+		})
+	}
+}
+
+func TestAllThemes(t *testing.T) {
+	themes := AllThemes()
+
+	// Should contain all valid themes
+	expected := []Theme{ThemeDefault, ThemeDracula, ThemeGruvbox, ThemeNord, ThemeSolarizedDark, ThemeSolarizedLight}
+	assert.Equal(t, expected, themes)
+}

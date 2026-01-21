@@ -1816,3 +1816,69 @@ func TestHelpOverlayShowsDismissInstructions(t *testing.T) {
 	// Should show how to dismiss
 	assert.Contains(t, view, "Esc")
 }
+
+// Theme tests
+
+func TestNewModelWithTheme(t *testing.T) {
+	issues := createTestIssues()
+	columns := DefaultColumns()
+
+	// Create model with theme
+	m := NewModelWithTheme(issues, columns, config.SortByUpdated, config.SortDesc, config.ThemeDracula)
+
+	// Should have the theme set
+	assert.Equal(t, config.ThemeDracula, m.GetTheme())
+}
+
+func TestNewModelWithDefaultTheme(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+
+	// Should have empty theme (uses default)
+	assert.Equal(t, config.Theme(""), m.GetTheme())
+}
+
+func TestSetTheme(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+
+	// Set theme
+	m.SetTheme(config.ThemeNord)
+
+	assert.Equal(t, config.ThemeNord, m.GetTheme())
+}
+
+func TestThemeStylesAppliedInView(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+	m.SetTheme(config.ThemeDracula)
+
+	view := m.View()
+
+	// The view should render without errors - we can't easily test ANSI codes,
+	// but we can verify basic structure is present
+	assert.Contains(t, view, "GitHub Issues")
+	assert.Contains(t, view, "issues")
+}
+
+func TestThemeChangePersistsAcrossViews(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+	m.SetTheme(config.ThemeGruvbox)
+
+	// Get main view
+	_ = m.View()
+
+	// Theme should still be set
+	assert.Equal(t, config.ThemeGruvbox, m.GetTheme())
+
+	// Enter comments view
+	m.SetComments(createTestComments())
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	// Theme should still be the same
+	assert.Equal(t, config.ThemeGruvbox, m.GetTheme())
+}

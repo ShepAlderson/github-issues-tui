@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/shepbook/ghissues/internal/config"
 	"github.com/shepbook/ghissues/internal/github"
+	"github.com/shepbook/ghissues/internal/themes"
 )
 
 // DefaultColumns returns the default columns to display
@@ -85,6 +86,9 @@ type Model struct {
 
 	// Help overlay state
 	showHelpOverlay bool // Whether the help overlay is visible
+
+	// Theme
+	theme config.Theme // Current color theme
 }
 
 // NewModel creates a new TUI model with the given issues and columns
@@ -96,6 +100,11 @@ func NewModel(issues []github.Issue, columns []string) Model {
 
 // NewModelWithSort creates a new TUI model with the given issues, columns, and sort options
 func NewModelWithSort(issues []github.Issue, columns []string, sortField config.SortField, sortOrder config.SortOrder) Model {
+	return NewModelWithTheme(issues, columns, sortField, sortOrder, "")
+}
+
+// NewModelWithTheme creates a new TUI model with the given issues, columns, sort options, and theme
+func NewModelWithTheme(issues []github.Issue, columns []string, sortField config.SortField, sortOrder config.SortOrder, theme config.Theme) Model {
 	if columns == nil {
 		columns = DefaultColumns()
 	}
@@ -119,6 +128,7 @@ func NewModelWithSort(issues []github.Issue, columns []string, sortField config.
 		sortField:       sortField,
 		sortOrder:       sortOrder,
 		glamourRenderer: renderer,
+		theme:           theme,
 	}
 
 	// Copy issues to avoid modifying the original slice
@@ -345,13 +355,11 @@ func (m Model) View() string {
 
 	var b strings.Builder
 
-	// Styles
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86"))
-	statusStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	// Get themed styles
+	styles := m.getThemeStyles()
 
 	// Title
-	title := titleStyle.Render("GitHub Issues")
+	title := styles.Title.Render("GitHub Issues")
 	b.WriteString(title)
 	b.WriteString("\n\n")
 
@@ -422,7 +430,7 @@ func (m Model) View() string {
 			status = fmt.Sprintf("Refreshing... | %d issues | %s %s | j/k: nav | Enter: comments | ?: help",
 				len(m.issues), m.sortField.DisplayName(), sortIndicator)
 		}
-		b.WriteString(statusStyle.Render(status))
+		b.WriteString(styles.Status.Render(status))
 	} else if m.refreshError != "" {
 		// Show minor error in status bar with retry hint
 		errMsg := m.refreshError
@@ -435,11 +443,11 @@ func (m Model) View() string {
 			errMsg = errMsg[:maxErrLen-3] + "..."
 		}
 		status = fmt.Sprintf("Error: %s | r: retry | ?: help | q: quit", errMsg)
-		b.WriteString(errorStyle.Render(status))
+		b.WriteString(styles.Error.Render(status))
 	} else {
 		status = fmt.Sprintf("Last synced: %s | %d issues | %s %s | j/k: nav | Enter: comments | ?: help | q: quit",
 			lastSyncedStr, len(m.issues), m.sortField.DisplayName(), sortIndicator)
-		b.WriteString(statusStyle.Render(status))
+		b.WriteString(styles.Status.Render(status))
 	}
 
 	return b.String()
@@ -449,13 +457,12 @@ func (m Model) View() string {
 func (m Model) renderIssueListPanel(width int) string {
 	var b strings.Builder
 
-	selectedStyle := lipgloss.NewStyle().Bold(true).Background(lipgloss.Color("238"))
-	normalStyle := lipgloss.NewStyle()
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
+	// Get themed styles
+	styles := m.getThemeStyles()
 
 	// Render header
 	header := fmt.Sprintf("  %-6s %-*s", "#", width-10, "Title")
-	b.WriteString(headerStyle.Render(header))
+	b.WriteString(styles.Header.Render(header))
 	b.WriteString("\n")
 	b.WriteString(strings.Repeat("─", width))
 	b.WriteString("\n")
@@ -483,9 +490,9 @@ func (m Model) renderIssueListPanel(width int) string {
 		row := fmt.Sprintf("#%-5d %-*s", issue.Number, titleWidth, title)
 
 		if i == m.cursor {
-			b.WriteString(selectedStyle.Render("> " + row))
+			b.WriteString(styles.Selected.Render("> " + row))
 		} else {
-			b.WriteString(normalStyle.Render("  " + row))
+			b.WriteString(styles.Normal.Render("  " + row))
 		}
 		b.WriteString("\n")
 	}
@@ -502,42 +509,40 @@ func (m Model) renderDetailPanel(width int) string {
 	issue := m.issues[m.cursor]
 	var b strings.Builder
 
-	// Styles
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
-	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("86"))
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	// Get themed styles
+	styles := m.getThemeStyles()
 
 	// Issue header: number and title
-	b.WriteString(headerStyle.Render(fmt.Sprintf("#%d", issue.Number)))
+	b.WriteString(styles.Header.Render(fmt.Sprintf("#%d", issue.Number)))
 	b.WriteString(" ")
 	title := issue.Title
 	if len(title) > width-10 {
 		title = title[:width-13] + "..."
 	}
-	b.WriteString(headerStyle.Render(title))
+	b.WriteString(styles.Header.Render(title))
 	b.WriteString("\n")
 
 	// Author
-	b.WriteString(dimStyle.Render("Author: "))
+	b.WriteString(styles.Muted.Render("Author: "))
 	b.WriteString(issue.Author.Login)
 	b.WriteString("\n")
 
 	// Dates
 	createdAt, _ := time.Parse(time.RFC3339, issue.CreatedAt)
 	updatedAt, _ := time.Parse(time.RFC3339, issue.UpdatedAt)
-	b.WriteString(dimStyle.Render("Created: "))
+	b.WriteString(styles.Muted.Render("Created: "))
 	b.WriteString(createdAt.Format("2006-01-02"))
 	b.WriteString("  ")
-	b.WriteString(dimStyle.Render("Updated: "))
+	b.WriteString(styles.Muted.Render("Updated: "))
 	b.WriteString(updatedAt.Format("2006-01-02"))
 	b.WriteString("\n")
 
 	// Labels
 	if len(issue.Labels) > 0 {
-		b.WriteString(dimStyle.Render("Labels: "))
+		b.WriteString(styles.Muted.Render("Labels: "))
 		var labels []string
 		for _, label := range issue.Labels {
-			labels = append(labels, labelStyle.Render(label.Name))
+			labels = append(labels, styles.Label.Render(label.Name))
 		}
 		b.WriteString(strings.Join(labels, ", "))
 		b.WriteString("\n")
@@ -545,7 +550,7 @@ func (m Model) renderDetailPanel(width int) string {
 
 	// Assignees
 	if len(issue.Assignees) > 0 {
-		b.WriteString(dimStyle.Render("Assignees: "))
+		b.WriteString(styles.Muted.Render("Assignees: "))
 		var assignees []string
 		for _, a := range issue.Assignees {
 			assignees = append(assignees, a.Login)
@@ -612,22 +617,20 @@ func (m Model) renderCommentsView() string {
 	issue := m.issues[m.cursor]
 	var b strings.Builder
 
-	// Styles
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86"))
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
-	authorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("208"))
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	statusStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	// Get themed styles
+	styles := m.getThemeStyles()
+	// Author style uses the label color for distinction
+	authorStyle := lipgloss.NewStyle().Foreground(themes.GetTheme(m.theme).Accent)
 
 	// Title: Issue number and title
-	b.WriteString(titleStyle.Render(fmt.Sprintf("Comments for #%d: %s", issue.Number, issue.Title)))
+	b.WriteString(styles.Title.Render(fmt.Sprintf("Comments for #%d: %s", issue.Number, issue.Title)))
 	b.WriteString("\n")
 	b.WriteString(strings.Repeat("═", min(m.width, 80)))
 	b.WriteString("\n\n")
 
 	// Handle empty comments
 	if len(m.comments) == 0 {
-		b.WriteString(dimStyle.Render("No comments on this issue."))
+		b.WriteString(styles.Muted.Render("No comments on this issue."))
 		b.WriteString("\n")
 	} else {
 		// Render comments
@@ -638,7 +641,7 @@ func (m Model) renderCommentsView() string {
 			createdAt, _ := time.Parse(time.RFC3339, comment.CreatedAt)
 			header := fmt.Sprintf("%s  %s",
 				authorStyle.Render(comment.Author.Login),
-				dimStyle.Render(createdAt.Format("2006-01-02 15:04")))
+				styles.Muted.Render(createdAt.Format("2006-01-02 15:04")))
 			allCommentLines = append(allCommentLines, header)
 
 			// Comment body
@@ -649,7 +652,7 @@ func (m Model) renderCommentsView() string {
 			// Add separator between comments (except after last one)
 			if i < len(m.comments)-1 {
 				allCommentLines = append(allCommentLines, "")
-				allCommentLines = append(allCommentLines, headerStyle.Render(strings.Repeat("─", min(m.width-4, 60))))
+				allCommentLines = append(allCommentLines, styles.Header.Render(strings.Repeat("─", min(m.width-4, 60))))
 				allCommentLines = append(allCommentLines, "")
 			}
 		}
@@ -676,7 +679,7 @@ func (m Model) renderCommentsView() string {
 	b.WriteString("\n")
 	status := fmt.Sprintf("%d comments | m: toggle markdown | h/l: scroll | ?: help | Esc/q: back",
 		len(m.comments))
-	b.WriteString(statusStyle.Render(status))
+	b.WriteString(styles.Status.Render(status))
 
 	return b.String()
 }
@@ -1025,6 +1028,21 @@ func (m Model) GetLastSyncTime() time.Time {
 // ShowHelpOverlay returns whether the help overlay is visible
 func (m Model) ShowHelpOverlay() bool {
 	return m.showHelpOverlay
+}
+
+// SetTheme sets the color theme
+func (m *Model) SetTheme(theme config.Theme) {
+	m.theme = theme
+}
+
+// GetTheme returns the current color theme
+func (m Model) GetTheme() config.Theme {
+	return m.theme
+}
+
+// getThemeStyles returns the lipgloss styles for the current theme
+func (m Model) getThemeStyles() *themes.Styles {
+	return themes.GetTheme(m.theme).Styles()
 }
 
 // formatRelativeTime formats a time as a relative duration (e.g., "5m ago")
