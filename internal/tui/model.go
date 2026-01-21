@@ -18,6 +18,31 @@ func DefaultColumns() []string {
 	return []string{"number", "title", "author", "date", "comments"}
 }
 
+// RefreshProgress contains progress information during a refresh operation
+type RefreshProgress struct {
+	Phase   string // "issues" or "comments"
+	Current int
+	Total   int
+}
+
+// RefreshProgressMsg is sent when refresh progress updates
+type RefreshProgressMsg struct {
+	Progress RefreshProgress
+}
+
+// RefreshDoneMsg is sent when refresh completes successfully
+type RefreshDoneMsg struct {
+	Issues []github.Issue
+}
+
+// RefreshErrorMsg is sent when refresh fails
+type RefreshErrorMsg struct {
+	Err error
+}
+
+// RefreshStartMsg is sent to initiate a refresh (used by Init for auto-refresh)
+type RefreshStartMsg struct{}
+
 // Model represents the TUI application state
 type Model struct {
 	issues           []github.Issue
@@ -34,6 +59,12 @@ type Model struct {
 	commentsScrollY  int  // Scroll offset for comments view
 	inCommentsView   bool // Whether we're in the comments view
 	glamourRenderer  *glamour.TermRenderer
+
+	// Refresh state
+	isRefreshing     bool            // Whether a refresh is in progress
+	refreshProgress  RefreshProgress // Current refresh progress
+	refreshError     string          // Last refresh error message
+	refreshFunc      func() tea.Msg  // Function to call to perform refresh
 }
 
 // NewModel creates a new TUI model with the given issues and columns
@@ -158,10 +189,59 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.detailScrollY--
 				}
 			}
+		case msg.Type == tea.KeyRunes && len(msg.Runes) > 0 && (msg.Runes[0] == 'r' || msg.Runes[0] == 'R'):
+			// Trigger refresh (only in issue list view, not while already refreshing)
+			if !m.inCommentsView && !m.isRefreshing {
+				m.isRefreshing = true
+				m.refreshError = "" // Clear previous error
+				m.refreshProgress = RefreshProgress{}
+				if m.refreshFunc != nil {
+					return m, m.refreshFunc
+				}
+				return m, nil
+			}
 		}
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+	case RefreshProgressMsg:
+		m.refreshProgress = msg.Progress
+	case RefreshDoneMsg:
+		m.isRefreshing = false
+		m.refreshProgress = RefreshProgress{}
+		// Remember the currently selected issue number
+		var selectedNumber int
+		if m.cursor < len(m.issues) {
+			selectedNumber = m.issues[m.cursor].Number
+		}
+		// Update issues
+		m.issues = make([]github.Issue, len(msg.Issues))
+		copy(m.issues, msg.Issues)
+		m.sortIssues()
+		// Try to restore cursor to the same issue
+		m.cursor = 0
+		for i, issue := range m.issues {
+			if issue.Number == selectedNumber {
+				m.cursor = i
+				break
+			}
+		}
+	case RefreshErrorMsg:
+		m.isRefreshing = false
+		m.refreshProgress = RefreshProgress{}
+		if msg.Err != nil {
+			m.refreshError = msg.Err.Error()
+		}
+	case RefreshStartMsg:
+		// Auto-refresh trigger from Init
+		if !m.isRefreshing {
+			m.isRefreshing = true
+			m.refreshError = ""
+			m.refreshProgress = RefreshProgress{}
+			if m.refreshFunc != nil {
+				return m, m.refreshFunc
+			}
+		}
 	}
 	return m, nil
 }
@@ -240,8 +320,22 @@ func (m Model) View() string {
 	if m.sortOrder == config.SortAsc {
 		sortIndicator = "↑"
 	}
-	status := fmt.Sprintf("%d issues | %s %s | s: sort | S: reverse | m: markdown | j/k: nav | h/l: scroll | Enter: comments | q: quit",
-		len(m.issues), m.sortField.DisplayName(), sortIndicator)
+
+	// Build status line with refresh indicator
+	var status string
+	if m.isRefreshing {
+		if m.refreshProgress.Total > 0 {
+			status = fmt.Sprintf("Refreshing %s: %d/%d | %d issues | %s %s | r: refresh | q: quit",
+				m.refreshProgress.Phase, m.refreshProgress.Current, m.refreshProgress.Total,
+				len(m.issues), m.sortField.DisplayName(), sortIndicator)
+		} else {
+			status = fmt.Sprintf("Refreshing... | %d issues | %s %s | r: refresh | q: quit",
+				len(m.issues), m.sortField.DisplayName(), sortIndicator)
+		}
+	} else {
+		status = fmt.Sprintf("%d issues | %s %s | s: sort | S: reverse | r: refresh | m: markdown | j/k: nav | h/l: scroll | Enter: comments | q: quit",
+			len(m.issues), m.sortField.DisplayName(), sortIndicator)
+	}
 	b.WriteString(statusStyle.Render(status))
 
 	return b.String()
@@ -551,6 +645,26 @@ func (m Model) GetComments() []github.Comment {
 // CommentsScrollOffset returns the current scroll offset for the comments view
 func (m Model) CommentsScrollOffset() int {
 	return m.commentsScrollY
+}
+
+// IsRefreshing returns whether a refresh is in progress
+func (m Model) IsRefreshing() bool {
+	return m.isRefreshing
+}
+
+// GetRefreshProgress returns the current refresh progress
+func (m Model) GetRefreshProgress() RefreshProgress {
+	return m.refreshProgress
+}
+
+// GetRefreshError returns the last refresh error message
+func (m Model) GetRefreshError() string {
+	return m.refreshError
+}
+
+// SetRefreshFunc sets the function to be called when refresh is triggered
+func (m *Model) SetRefreshFunc(fn func() tea.Msg) {
+	m.refreshFunc = fn
 }
 
 // sortIssues sorts the issues based on the current sort field and order

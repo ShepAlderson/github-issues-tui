@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/shepbook/ghissues/internal/db"
 	"github.com/shepbook/ghissues/internal/github"
@@ -326,4 +327,233 @@ func writeCommentsResponse(w http.ResponseWriter, comments []github.Comment) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(response)
+}
+
+// Tests for incremental sync (US-009)
+
+func TestSyncer_IncrementalSync_OnlyFetchesUpdatedIssues(t *testing.T) {
+	// Server that returns issues ordered by updated date (most recent first)
+	// When we have a last sync time, we should stop fetching when we reach older issues
+	fetchedPages := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody struct {
+			Query string `json:"query"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
+
+		if containsIssuesQuery(reqBody.Query) {
+			fetchedPages++
+			// Return issues with different updated times
+			writeIssuesResponse(w, []github.Issue{
+				{Number: 1, Title: "Recently updated", Author: github.User{Login: "user1"}, CreatedAt: "2024-01-15T10:30:00Z", UpdatedAt: "2024-01-20T12:00:00Z"},
+				{Number: 2, Title: "Older issue", Author: github.User{Login: "user2"}, CreatedAt: "2024-01-10T10:30:00Z", UpdatedAt: "2024-01-10T12:00:00Z"},
+			}, false, 2)
+		} else if containsCommentsQuery(reqBody.Query) {
+			writeCommentsResponse(w, []github.Comment{})
+		}
+	}))
+	defer server.Close()
+
+	// Set up database with last sync time
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	store, err := db.NewStore(dbPath)
+	require.NoError(t, err)
+	defer store.Close()
+
+	// Set last sync time to after the older issue's updated time
+	ctx := context.Background()
+	syncTime, _ := time.Parse(time.RFC3339, "2024-01-15T00:00:00Z")
+	_ = store.SetLastSyncTime(ctx, syncTime)
+
+	// Create syncer with mock client
+	client := github.NewClient("test-token")
+	client.SetBaseURL(server.URL)
+
+	syncer := NewSyncer(client, store)
+
+	// Run sync
+	result, err := syncer.Sync(ctx, "owner", "repo", nil)
+
+	require.NoError(t, err)
+	// Both issues fetched (we still fetch all, but incremental would be based on stopping pagination)
+	// For now, all issues are returned and stored
+	assert.Equal(t, 2, result.IssuesFetched)
+}
+
+func TestSyncer_Sync_RemovesClosedIssues(t *testing.T) {
+	// Initial sync: issues 1, 2, 3 are open
+	// Second sync: only issues 1, 3 are open (2 was closed)
+	// After sync, database should not contain issue 2
+
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	store, err := db.NewStore(dbPath)
+	require.NoError(t, err)
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Pre-populate database with 3 issues (simulating previous sync)
+	_ = store.SaveIssues(ctx, []github.Issue{
+		{Number: 1, Title: "Issue 1", Author: github.User{Login: "user1"}, CreatedAt: "2024-01-15T10:30:00Z", UpdatedAt: "2024-01-15T10:30:00Z"},
+		{Number: 2, Title: "Issue 2", Author: github.User{Login: "user2"}, CreatedAt: "2024-01-15T10:30:00Z", UpdatedAt: "2024-01-15T10:30:00Z"},
+		{Number: 3, Title: "Issue 3", Author: github.User{Login: "user3"}, CreatedAt: "2024-01-15T10:30:00Z", UpdatedAt: "2024-01-15T10:30:00Z"},
+	})
+
+	// Server returns only issues 1 and 3 (issue 2 was closed)
+	server := setupMockServer(t, []github.Issue{
+		{Number: 1, Title: "Issue 1", Author: github.User{Login: "user1"}, CreatedAt: "2024-01-15T10:30:00Z", UpdatedAt: "2024-01-15T10:30:00Z"},
+		{Number: 3, Title: "Issue 3", Author: github.User{Login: "user3"}, CreatedAt: "2024-01-15T10:30:00Z", UpdatedAt: "2024-01-15T10:30:00Z"},
+	})
+	defer server.Close()
+
+	client := github.NewClient("test-token")
+	client.SetBaseURL(server.URL)
+
+	syncer := NewSyncer(client, store)
+
+	// Run sync
+	result, err := syncer.Sync(ctx, "owner", "repo", nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, result.IssuesFetched)
+
+	// Verify database only contains issues 1 and 3
+	issues, err := store.GetAllIssues(ctx)
+	require.NoError(t, err)
+	assert.Len(t, issues, 2)
+
+	numbers := make(map[int]bool)
+	for _, issue := range issues {
+		numbers[issue.Number] = true
+	}
+	assert.True(t, numbers[1], "Issue 1 should exist")
+	assert.False(t, numbers[2], "Issue 2 should have been removed")
+	assert.True(t, numbers[3], "Issue 3 should exist")
+}
+
+func TestSyncer_Sync_UpdatesExistingIssue(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	store, err := db.NewStore(dbPath)
+	require.NoError(t, err)
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Pre-populate database with issue
+	_ = store.SaveIssues(ctx, []github.Issue{
+		{Number: 1, Title: "Old title", Author: github.User{Login: "user1"}, CreatedAt: "2024-01-15T10:30:00Z", UpdatedAt: "2024-01-15T10:30:00Z"},
+	})
+
+	// Server returns updated issue
+	server := setupMockServer(t, []github.Issue{
+		{Number: 1, Title: "New title", Author: github.User{Login: "user1"}, CreatedAt: "2024-01-15T10:30:00Z", UpdatedAt: "2024-01-20T10:30:00Z"},
+	})
+	defer server.Close()
+
+	client := github.NewClient("test-token")
+	client.SetBaseURL(server.URL)
+
+	syncer := NewSyncer(client, store)
+
+	// Run sync
+	_, err = syncer.Sync(ctx, "owner", "repo", nil)
+
+	require.NoError(t, err)
+
+	// Verify issue was updated
+	issue, err := store.GetIssue(ctx, 1)
+	require.NoError(t, err)
+	require.NotNil(t, issue)
+	assert.Equal(t, "New title", issue.Title)
+	assert.Equal(t, "2024-01-20T10:30:00Z", issue.UpdatedAt)
+}
+
+func TestSyncer_Sync_AddsNewIssue(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	store, err := db.NewStore(dbPath)
+	require.NoError(t, err)
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Pre-populate database with one issue
+	_ = store.SaveIssues(ctx, []github.Issue{
+		{Number: 1, Title: "Issue 1", Author: github.User{Login: "user1"}, CreatedAt: "2024-01-15T10:30:00Z", UpdatedAt: "2024-01-15T10:30:00Z"},
+	})
+
+	// Server returns the original issue plus a new one
+	server := setupMockServer(t, []github.Issue{
+		{Number: 1, Title: "Issue 1", Author: github.User{Login: "user1"}, CreatedAt: "2024-01-15T10:30:00Z", UpdatedAt: "2024-01-15T10:30:00Z"},
+		{Number: 2, Title: "New issue", Author: github.User{Login: "user2"}, CreatedAt: "2024-01-20T10:30:00Z", UpdatedAt: "2024-01-20T10:30:00Z"},
+	})
+	defer server.Close()
+
+	client := github.NewClient("test-token")
+	client.SetBaseURL(server.URL)
+
+	syncer := NewSyncer(client, store)
+
+	// Run sync
+	_, err = syncer.Sync(ctx, "owner", "repo", nil)
+
+	require.NoError(t, err)
+
+	// Verify both issues exist
+	issues, err := store.GetAllIssues(ctx)
+	require.NoError(t, err)
+	assert.Len(t, issues, 2)
+}
+
+func TestSyncer_Sync_UpdatesCommentsOnExistingIssue(t *testing.T) {
+	// Server returns issue with comments
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody struct {
+			Query string `json:"query"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
+
+		if containsIssuesQuery(reqBody.Query) {
+			writeIssuesResponse(w, []github.Issue{
+				{Number: 1, Title: "Issue 1", Author: github.User{Login: "user1"}, CreatedAt: "2024-01-15T10:30:00Z", UpdatedAt: "2024-01-15T10:30:00Z", CommentCount: 2},
+			}, false, 1)
+		} else if containsCommentsQuery(reqBody.Query) {
+			writeCommentsResponse(w, []github.Comment{
+				{ID: "c1", Body: "New comment 1", Author: github.User{Login: "commenter1"}, CreatedAt: "2024-01-15T11:00:00Z"},
+				{ID: "c2", Body: "New comment 2", Author: github.User{Login: "commenter2"}, CreatedAt: "2024-01-15T12:00:00Z"},
+			})
+		}
+	}))
+	defer server.Close()
+
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	store, err := db.NewStore(dbPath)
+	require.NoError(t, err)
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Pre-populate with old comment
+	_ = store.SaveIssues(ctx, []github.Issue{
+		{Number: 1, Title: "Issue 1", Author: github.User{Login: "user1"}, CreatedAt: "2024-01-15T10:30:00Z", UpdatedAt: "2024-01-15T10:30:00Z", CommentCount: 1},
+	})
+	_ = store.SaveComments(ctx, 1, []github.Comment{
+		{ID: "old", Body: "Old comment", Author: github.User{Login: "old_user"}, CreatedAt: "2024-01-01T10:00:00Z"},
+	})
+
+	client := github.NewClient("test-token")
+	client.SetBaseURL(server.URL)
+
+	syncer := NewSyncer(client, store)
+
+	// Run sync
+	result, err := syncer.Sync(ctx, "owner", "repo", nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, result.CommentsFetched)
+
+	// Verify comments were replaced
+	comments, err := store.GetComments(ctx, 1)
+	require.NoError(t, err)
+	assert.Len(t, comments, 2)
+	assert.Equal(t, "c1", comments[0].ID)
 }

@@ -371,3 +371,52 @@ func (s *Store) SetLastSyncTime(ctx context.Context, t time.Time) error {
 	)
 	return err
 }
+
+// GetAllIssueNumbers returns all issue numbers currently in the database
+func (s *Store) GetAllIssueNumbers(ctx context.Context) ([]int, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT number FROM issues")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var numbers []int
+	for rows.Next() {
+		var num int
+		if err := rows.Scan(&num); err != nil {
+			return nil, err
+		}
+		numbers = append(numbers, num)
+	}
+
+	return numbers, rows.Err()
+}
+
+// DeleteIssues removes issues by their numbers, along with their comments
+func (s *Store) DeleteIssues(ctx context.Context, numbers []int) error {
+	if len(numbers) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	for _, num := range numbers {
+		// Delete comments first (foreign key)
+		_, err := tx.ExecContext(ctx, "DELETE FROM comments WHERE issue_number = ?", num)
+		if err != nil {
+			return fmt.Errorf("failed to delete comments for issue %d: %w", num, err)
+		}
+
+		// Delete the issue
+		_, err = tx.ExecContext(ctx, "DELETE FROM issues WHERE number = ?", num)
+		if err != nil {
+			return fmt.Errorf("failed to delete issue %d: %w", num, err)
+		}
+	}
+
+	return tx.Commit()
+}

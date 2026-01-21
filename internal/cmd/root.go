@@ -3,11 +3,15 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/shepbook/ghissues/internal/auth"
 	"github.com/shepbook/ghissues/internal/config"
 	"github.com/shepbook/ghissues/internal/db"
+	"github.com/shepbook/ghissues/internal/github"
 	"github.com/shepbook/ghissues/internal/setup"
+	"github.com/shepbook/ghissues/internal/sync"
 	"github.com/shepbook/ghissues/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -134,9 +138,25 @@ You can also run 'ghissues config' to reconfigure at any time.`,
 				return nil
 			}
 
+			// Parse repository for sync
+			owner, repo, err := parseRepo(cfg.Repository)
+			if err != nil {
+				return fmt.Errorf("invalid repository format: %w", err)
+			}
+
 			// Create and run TUI
 			model := tui.NewModelWithSort(issues, columns, sortField, sortOrder)
+
+			// Set up refresh function for manual refresh (r key)
+			// This creates a closure that captures the necessary context
+			model.SetRefreshFunc(createRefreshFunc(cfg, store, owner, repo))
+
 			p := tea.NewProgram(model, tea.WithAltScreen())
+
+			// Trigger auto-refresh on launch by sending RefreshStartMsg
+			go func() {
+				p.Send(tui.RefreshStartMsg{})
+			}()
 
 			finalModel, err := p.Run()
 			if err != nil {
@@ -217,4 +237,45 @@ You can also provide flags to configure non-interactively.`,
 // Execute runs the root command
 func Execute() error {
 	return NewRootCmd().Execute()
+}
+
+// parseRepo parses a repository string in the format "owner/repo"
+func parseRepo(repoStr string) (owner, repo string, err error) {
+	parts := strings.Split(repoStr, "/")
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid repository format: %s (expected owner/repo)", repoStr)
+	}
+	return parts[0], parts[1], nil
+}
+
+// createRefreshFunc creates a function that performs a sync operation
+// This function is called as a tea.Cmd and returns a tea.Msg
+func createRefreshFunc(cfg *config.Config, store *db.Store, owner, repo string) func() tea.Msg {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		// Get authentication token
+		token, _, err := auth.GetToken(cfg)
+		if err != nil {
+			return tui.RefreshErrorMsg{Err: fmt.Errorf("authentication failed: %w", err)}
+		}
+
+		// Create client and syncer
+		client := github.NewClient(token)
+		syncer := sync.NewSyncer(client, store)
+
+		// Run sync synchronously (progress callback not used in TUI for simplicity)
+		_, err = syncer.Sync(ctx, owner, repo, nil)
+		if err != nil {
+			return tui.RefreshErrorMsg{Err: fmt.Errorf("sync failed: %w", err)}
+		}
+
+		// Re-fetch issues from database after sync
+		issues, err := store.GetAllIssues(ctx)
+		if err != nil {
+			return tui.RefreshErrorMsg{Err: fmt.Errorf("failed to load issues after sync: %w", err)}
+		}
+
+		return tui.RefreshDoneMsg{Issues: issues}
+	}
 }

@@ -952,3 +952,257 @@ func TestCommentsViewReplacesMainInterface(t *testing.T) {
 	// Check that the comments header is present
 	assert.Contains(t, view, "Comments")
 }
+
+// Tests for Data Refresh functionality (US-009)
+
+func TestRefreshKeyRTriggersRefresh(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Set a mock refresh function
+	refreshCalled := false
+	m.SetRefreshFunc(func() tea.Msg {
+		refreshCalled = true
+		return RefreshDoneMsg{Issues: issues}
+	})
+
+	// Initially not refreshing
+	assert.False(t, m.IsRefreshing())
+
+	// Press 'r' to trigger refresh
+	newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = newModel.(Model)
+
+	// Should set refreshing state
+	assert.True(t, m.IsRefreshing())
+	// Should return a command to start the refresh
+	assert.NotNil(t, cmd)
+	// Execute the command to verify it was called
+	cmd()
+	assert.True(t, refreshCalled)
+}
+
+func TestRefreshKeyRUpperCaseTriggersRefresh(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Set a mock refresh function
+	m.SetRefreshFunc(func() tea.Msg {
+		return RefreshDoneMsg{Issues: issues}
+	})
+
+	// Press 'R' (uppercase) to trigger refresh
+	newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+	m = newModel.(Model)
+
+	assert.True(t, m.IsRefreshing())
+	assert.NotNil(t, cmd)
+}
+
+func TestRefreshKeyIgnoredWhileRefreshing(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Set a mock refresh function
+	m.SetRefreshFunc(func() tea.Msg {
+		return RefreshDoneMsg{Issues: issues}
+	})
+
+	// Start a refresh
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = newModel.(Model)
+
+	// Try to trigger another refresh while already refreshing
+	newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = newModel.(Model)
+
+	// Should still be refreshing, but no new command
+	assert.True(t, m.IsRefreshing())
+	assert.Nil(t, cmd) // No additional command should be returned
+}
+
+func TestRefreshKeyIgnoredInCommentsView(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Enter comments view
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(Model)
+
+	assert.True(t, m.InCommentsView())
+
+	// Press 'r' - should not trigger refresh while in comments view
+	newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = newModel.(Model)
+
+	assert.False(t, m.IsRefreshing())
+	assert.Nil(t, cmd)
+}
+
+func TestRefreshProgressMsgUpdatesProgress(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Start refresh
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = newModel.(Model)
+
+	// Simulate progress message
+	progress := RefreshProgress{Phase: "issues", Current: 5, Total: 10}
+	newModel, _ = m.Update(RefreshProgressMsg{Progress: progress})
+	m = newModel.(Model)
+
+	// Check progress is tracked
+	currentProgress := m.GetRefreshProgress()
+	assert.Equal(t, "issues", currentProgress.Phase)
+	assert.Equal(t, 5, currentProgress.Current)
+	assert.Equal(t, 10, currentProgress.Total)
+}
+
+func TestRefreshDoneMsgUpdatesIssues(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Start refresh
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = newModel.(Model)
+
+	assert.True(t, m.IsRefreshing())
+
+	// New issues from refresh
+	newIssues := []github.Issue{
+		{
+			Number:       100,
+			Title:        "New issue",
+			Author:       github.User{Login: "newuser"},
+			CreatedAt:    "2024-02-01T12:00:00Z",
+			UpdatedAt:    "2024-02-01T12:00:00Z",
+			CommentCount: 0,
+		},
+	}
+
+	// Simulate refresh done message
+	newModel, _ = m.Update(RefreshDoneMsg{Issues: newIssues})
+	m = newModel.(Model)
+
+	// Should no longer be refreshing
+	assert.False(t, m.IsRefreshing())
+	// Issues should be updated
+	assert.Equal(t, 1, m.IssueCount())
+	assert.Equal(t, 100, m.issues[0].Number)
+}
+
+func TestRefreshErrorMsgStopsRefreshing(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Start refresh
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = newModel.(Model)
+
+	// Simulate error message
+	newModel, _ = m.Update(RefreshErrorMsg{Err: fmt.Errorf("network error")})
+	m = newModel.(Model)
+
+	// Should no longer be refreshing
+	assert.False(t, m.IsRefreshing())
+	// Error should be tracked
+	assert.Equal(t, "network error", m.GetRefreshError())
+	// Original issues should remain
+	assert.Equal(t, 3, m.IssueCount())
+}
+
+func TestStatusBarShowsRefreshingIndicator(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Start refresh
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = newModel.(Model)
+
+	view := m.View()
+
+	// Status bar should show refreshing indicator
+	assert.Contains(t, view, "Refreshing")
+}
+
+func TestStatusBarShowsRefreshProgress(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Start refresh
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = newModel.(Model)
+
+	// Simulate progress message
+	progress := RefreshProgress{Phase: "issues", Current: 5, Total: 10}
+	newModel, _ = m.Update(RefreshProgressMsg{Progress: progress})
+	m = newModel.(Model)
+
+	view := m.View()
+
+	// Status bar should show progress
+	assert.Contains(t, view, "5/10")
+}
+
+func TestRefreshClearsErrorOnNewRefresh(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Set a mock refresh function
+	m.SetRefreshFunc(func() tea.Msg {
+		return RefreshDoneMsg{Issues: issues}
+	})
+
+	// Start and fail a refresh
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = newModel.(Model)
+	newModel, _ = m.Update(RefreshErrorMsg{Err: fmt.Errorf("network error")})
+	m = newModel.(Model)
+
+	assert.NotEmpty(t, m.GetRefreshError())
+
+	// Start a new refresh
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = newModel.(Model)
+
+	// Error should be cleared
+	assert.Empty(t, m.GetRefreshError())
+}
+
+func TestRefreshMaintainsCursorOnSameIssue(t *testing.T) {
+	issues := createTestIssues()
+	m := NewModel(issues, nil)
+	m.SetWindowSize(120, 30)
+
+	// Move cursor to issue #2 (second in sorted order after applying default sort)
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = newModel.(Model)
+
+	selectedBefore := m.SelectedIssue()
+	require.NotNil(t, selectedBefore)
+	selectedNumber := selectedBefore.Number
+
+	// Start refresh
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = newModel.(Model)
+
+	// Complete refresh with same issues
+	newModel, _ = m.Update(RefreshDoneMsg{Issues: createTestIssues()})
+	m = newModel.(Model)
+
+	// Cursor should still be on the same issue
+	selectedAfter := m.SelectedIssue()
+	require.NotNil(t, selectedAfter)
+	assert.Equal(t, selectedNumber, selectedAfter.Number)
+}

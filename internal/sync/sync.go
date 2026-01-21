@@ -47,6 +47,17 @@ func (s *Syncer) Sync(ctx context.Context, owner, repo string, progress Progress
 	startTime := time.Now()
 	result := &Result{}
 
+	// Get current issue numbers from database before sync
+	// This allows us to detect issues that have been closed/deleted
+	existingNumbers, err := s.store.GetAllIssueNumbers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get existing issue numbers: %w", err)
+	}
+	existingSet := make(map[int]bool)
+	for _, num := range existingNumbers {
+		existingSet[num] = true
+	}
+
 	// Fetch issues with progress
 	issues, err := s.client.FetchIssues(ctx, owner, repo, func(p github.FetchProgress) {
 		if progress != nil {
@@ -63,6 +74,27 @@ func (s *Syncer) Sync(ctx context.Context, owner, repo string, progress Progress
 
 	result.IssuesFetched = len(issues)
 	result.Duration = time.Since(startTime)
+
+	// Build set of fetched issue numbers
+	fetchedSet := make(map[int]bool)
+	for _, issue := range issues {
+		fetchedSet[issue.Number] = true
+	}
+
+	// Find issues that were in DB but not in the fresh fetch (closed/deleted)
+	var issuesToRemove []int
+	for num := range existingSet {
+		if !fetchedSet[num] {
+			issuesToRemove = append(issuesToRemove, num)
+		}
+	}
+
+	// Remove closed/deleted issues from database
+	if len(issuesToRemove) > 0 {
+		if err := s.store.DeleteIssues(ctx, issuesToRemove); err != nil {
+			return nil, fmt.Errorf("failed to remove closed issues: %w", err)
+		}
+	}
 
 	// Save issues to database
 	if err := s.store.SaveIssues(ctx, issues); err != nil {
