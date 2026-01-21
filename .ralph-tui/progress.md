@@ -91,6 +91,15 @@ after each iteration and included in agent prompts for context.
    }
    ```
 
+9. **Relative Time Formatting Pattern**: Create a utility function that converts time.Time values to human-readable relative strings with proper bucketing and pluralization.
+   ```go
+   func FormatRelativeTime(t time.Time) string {
+       if t.IsZero() { return "never" }
+       // Implement logical time buckets (minutes, hours, days, etc.)
+       // with proper singular/plural handling
+   }
+   ```
+
 ---
 
 ## [2026-01-21] - US-001
@@ -253,6 +262,15 @@ ithub.com/shepbook/github-issues-tui/internal/database\t(cached)\nok  \tgithub.c
    }
    ```
 
+9. **Relative Time Formatting Pattern**: Create a utility function that converts time.Time values to human-readable relative strings with proper bucketing and pluralization.
+   ```go
+   func FormatRelativeTime(t time.Time) string {
+       if t.IsZero() { return "never" }
+       // Implement logical time buckets (minutes, hours, days, etc.)
+       // with proper singular/plural handling
+   }
+   ```
+
 ---
 
 ## ✓ Iteration 5 - US-005: Issue List View
@@ -404,3 +422,63 @@ t Composition Pattern**: Extended with third component (`CommentsComponent`)\n- 
 *2026-01-21T[time]*
 
 **Status:** Completed
+## ✓ Iteration 9 - US-009: Data Refresh
+*2026-01-21T19:42:35.209Z (450s)*
+
+**Status:** Completed
+
+**Notes:**
+l)** - Implemented `GetLastSyncTime()` and passes `since` parameter to GitHub API\n5. ✅ **Handles deleted issues (removes from local db)** - Added `handleDeletedIssues()` method\n6. ✅ **Handles new comments on existing issues** - Implemented comment fetching with incremental updates\n\nAdditionally, I completed the stubbed GitHub API integration from US-003, added proper database operations (`UpsertIssue`, `UpsertComment`, `DeleteIssue`), and implemented proper pagination and error handling.\n\n
+
+---
+## ✓ Iteration 10 - US-013: Error Handling
+*2026-01-21T19:48:04.411Z (328s)*
+
+**Status:** Completed
+
+---
+
+## [2026-01-21] - US-010
+- **What was implemented**: Last Synced Indicator for ghissues TUI
+- **Files changed**:
+  - `internal/tui/time.go` - New relative time formatting utility with `FormatRelativeTime()` function
+  - `internal/tui/time_test.go` - Comprehensive unit tests for relative time formatting
+  - `internal/tui/time_integration_test.go` - Integration tests for time formatting
+  - `internal/tui/list.go` - Updated status bar to include "Last synced: <relative time>"
+- **Learnings:**
+  - **Relative Time Formatting Pattern**: Created reusable `FormatRelativeTime()` utility that converts time.Time to human-readable strings like "5 minutes ago", "2 hours ago", "3 days ago", etc.
+  - **Time Bucketing Approach**: Implemented logical time buckets (minutes, hours, days, weeks, months, years) with proper singular/plural handling
+  - **Zero Time Handling**: Special case for `time.Time{}` (zero value) returns "never" indicating no sync has occurred
+  - **Future Time Graceful Handling**: Future timestamps (shouldn't occur with sync) return "just now" as safe fallback
+  - **Status Bar Extension Pattern**: Extended existing status bar format by adding new component while preserving existing information (issue count, sort status)
+  - **Database Integration Reuse**: Leveraged existing `GetLastSyncTime()` method from US-009, demonstrating good separation of concerns
+  - **Error Resilience**: Added graceful error handling when database calls fail, showing "unknown" instead of crashing
+  - **Test-Driven Development**: Created comprehensive test suite covering edge cases (zero time, future times, pluralization, all time buckets)
+
+**Implementation Notes:**
+- Status bar now shows: "Issues: X/Y | Sort: field ↑↓ | Last synced: 5 minutes ago"
+- Uses existing metadata table infrastructure from US-003/US-009
+- `FormatRelativeTime()` handles all common time intervals with proper English pluralization
+- Zero sync time (never synced) shows as "never"
+- Database errors or missing dbManager shows as "unknown"
+- All acceptance criteria met: status bar shows relative time, timestamp stored in database metadata, updates after each successful sync
+
+**Reusable Pattern Discovered:**
+9. **Relative Time Formatting Pattern**: Create a utility function that converts time.Time values to human-readable relative strings with proper bucketing and pluralization.
+   ```go
+   func FormatRelativeTime(t time.Time) string {
+       if t.IsZero() { return "never" }
+       // Implement logical time buckets with singular/plural handling
+   }
+   ```
+
+9. **Relative Time Formatting Pattern**: Create a utility function that converts time.Time values to human-readable relative strings with proper bucketing and pluralization.
+   ```go
+   func FormatRelativeTime(t time.Time) string {
+       if t.IsZero() { return "never" }
+       // Implement logical time buckets (minutes, hours, days, etc.)
+       // with proper singular/plural handling
+   }
+   ```
+
+---
