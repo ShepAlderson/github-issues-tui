@@ -101,8 +101,9 @@ You can also run 'ghissues config' to reconfigure at any time.`,
 	// Add persistent flags (available to all subcommands)
 	rootCmd.PersistentFlags().StringVar(&dbFlagPath, "db", "", "Path to local database file (default: .ghissues.db)")
 
-	// Add config subcommand
+	// Add subcommands
 	rootCmd.AddCommand(newConfigCmd())
+	rootCmd.AddCommand(newSyncCmd())
 
 	return rootCmd
 }
