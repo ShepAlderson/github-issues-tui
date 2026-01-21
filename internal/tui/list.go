@@ -149,6 +149,10 @@ func (il *IssueList) View() string {
 		Foreground(lipgloss.Color("240")).
 		Render(status))
 
+	// Add footer hints
+	builder.WriteString("\n\n")
+	builder.WriteString(GetFooterHints(FooterContextList))
+
 	return builder.String()
 }
 

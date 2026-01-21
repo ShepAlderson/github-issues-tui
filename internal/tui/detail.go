@@ -255,23 +255,7 @@ func (idc *IssueDetailComponent) renderBody() string {
 
 // renderFooter renders navigation hints
 func (idc *IssueDetailComponent) renderFooter() string {
-	hintStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Italic(true)
-
-	hints := []string{}
-	if idc.currentIssue != nil && idc.currentIssue.Body != "" {
-		if idc.showRawMarkdown {
-			hints = append(hints, "m: view rendered markdown")
-		} else {
-			hints = append(hints, "m: view raw markdown")
-		}
-		hints = append(hints, "↑/↓: scroll")
-		hints = append(hints, "g/G: top/bottom")
-	}
-	hints = append(hints, "q: quit")
-
-	return hintStyle.Render(strings.Join(hints, " • "))
+	return GetFooterHints(FooterContextDetail)
 }
 
 // toggleMarkdownView toggles between raw and rendered markdown

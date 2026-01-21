@@ -241,23 +241,7 @@ func (cc *CommentsComponent) renderCommentBody(body string) string {
 
 // renderFooter renders navigation hints
 func (cc *CommentsComponent) renderFooter() string {
-	hintStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Italic(true)
-
-	hints := []string{}
-	if len(cc.comments) > 0 {
-		if cc.showRawMarkdown {
-			hints = append(hints, "m: view rendered markdown")
-		} else {
-			hints = append(hints, "m: view raw markdown")
-		}
-		hints = append(hints, "↑/↓: scroll comments")
-		hints = append(hints, "g/G: top/bottom")
-	}
-	hints = append(hints, "q/esc: back to issue list")
-
-	return hintStyle.Render(strings.Join(hints, " • "))
+	return GetFooterHints(FooterContextComments)
 }
 
 // toggleMarkdownView toggles between raw and rendered markdown
