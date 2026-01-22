@@ -16,4 +16,4 @@ prompt_template = "ralph-prompt.hbs"
   name = "claude"
   plugin = "claude"
   default = true
-  options = { model = "sonnet" }
+  options = { model = "opus" }

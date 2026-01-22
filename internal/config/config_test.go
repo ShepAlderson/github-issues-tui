@@ -1,0 +1,978 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestDefaultConfigPath(t *testing.T) {
+	path := DefaultConfigPath()
+
+	// Should be in user's home directory under .config/ghissues
+	homeDir, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	expected := filepath.Join(homeDir, ".config", "ghissues", "config.toml")
+	assert.Equal(t, expected, path)
+}
+
+func TestNewConfig(t *testing.T) {
+	cfg := New()
+
+	// Should have default values
+	assert.NotNil(t, cfg)
+	assert.Empty(t, cfg.Repository)
+	assert.Empty(t, cfg.Auth.Token)
+	assert.Equal(t, "env", cfg.Auth.Method) // Default to env method
+}
+
+func TestConfigExists(t *testing.T) {
+	// Create a temp directory for testing
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Should return false when file doesn't exist
+	assert.False(t, Exists(configPath))
+
+	// Create the file
+	err := os.WriteFile(configPath, []byte("[auth]\nmethod = \"env\"\n"), 0600)
+	require.NoError(t, err)
+
+	// Should return true when file exists
+	assert.True(t, Exists(configPath))
+}
+
+func TestSaveConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	cfg := &Config{
+		Repository: "owner/repo",
+		Auth: AuthConfig{
+			Method: "env",
+		},
+	}
+
+	err := Save(cfg, configPath)
+	require.NoError(t, err)
+
+	// Verify file was created
+	assert.True(t, Exists(configPath))
+
+	// Verify file permissions are secure (0600)
+	info, err := os.Stat(configPath)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
+
+	// Verify contents
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `repository = "owner/repo"`)
+	assert.Contains(t, string(data), `method = "env"`)
+}
+
+func TestSaveConfigCreatesParentDirs(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "nested", "deep", "config.toml")
+
+	cfg := &Config{
+		Repository: "owner/repo",
+		Auth: AuthConfig{
+			Method: "env",
+		},
+	}
+
+	err := Save(cfg, configPath)
+	require.NoError(t, err)
+
+	// Verify file was created in nested directory
+	assert.True(t, Exists(configPath))
+}
+
+func TestLoadConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Create a config file
+	content := `repository = "myorg/myrepo"
+
+[auth]
+method = "token"
+token = "ghp_secret123"
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load the config
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	assert.Equal(t, "myorg/myrepo", cfg.Repository)
+	assert.Equal(t, "token", cfg.Auth.Method)
+	assert.Equal(t, "ghp_secret123", cfg.Auth.Token)
+}
+
+func TestLoadConfigFileNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "nonexistent.toml")
+
+	_, err := Load(configPath)
+	assert.Error(t, err)
+}
+
+func TestValidateRepository(t *testing.T) {
+	tests := []struct {
+		name       string
+		repo       string
+		wantErr    bool
+		errMessage string
+	}{
+		{
+			name:    "valid repository",
+			repo:    "owner/repo",
+			wantErr: false,
+		},
+		{
+			name:    "valid repository with dashes",
+			repo:    "my-org/my-repo",
+			wantErr: false,
+		},
+		{
+			name:    "valid repository with numbers",
+			repo:    "org123/repo456",
+			wantErr: false,
+		},
+		{
+			name:       "missing slash",
+			repo:       "ownerrepo",
+			wantErr:    true,
+			errMessage: "must be in owner/repo format",
+		},
+		{
+			name:       "empty string",
+			repo:       "",
+			wantErr:    true,
+			errMessage: "repository cannot be empty",
+		},
+		{
+			name:       "too many slashes",
+			repo:       "owner/repo/extra",
+			wantErr:    true,
+			errMessage: "must be in owner/repo format",
+		},
+		{
+			name:       "empty owner",
+			repo:       "/repo",
+			wantErr:    true,
+			errMessage: "owner cannot be empty",
+		},
+		{
+			name:       "empty repo name",
+			repo:       "owner/",
+			wantErr:    true,
+			errMessage: "repository name cannot be empty",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateRepository(tt.repo)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMessage)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateAuthMethod(t *testing.T) {
+	tests := []struct {
+		name    string
+		method  string
+		wantErr bool
+	}{
+		{name: "env method", method: "env", wantErr: false},
+		{name: "token method", method: "token", wantErr: false},
+		{name: "gh method", method: "gh", wantErr: false},
+		{name: "invalid method", method: "invalid", wantErr: true},
+		{name: "empty method", method: "", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateAuthMethod(tt.method)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestLoadConfigWithDatabasePath(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Create a config file with database section
+	content := `repository = "myorg/myrepo"
+
+[auth]
+method = "env"
+
+[database]
+path = "/custom/path/issues.db"
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load the config
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	assert.Equal(t, "/custom/path/issues.db", cfg.Database.Path)
+}
+
+func TestSaveConfigWithDatabasePath(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	cfg := &Config{
+		Repository: "owner/repo",
+		Auth: AuthConfig{
+			Method: "env",
+		},
+		Database: DatabaseConfig{
+			Path: "/my/custom/db.db",
+		},
+	}
+
+	err := Save(cfg, configPath)
+	require.NoError(t, err)
+
+	// Verify contents
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `path = "/my/custom/db.db"`)
+}
+
+func TestLoadConfigWithoutDatabasePath(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Create a config file without database section
+	content := `repository = "myorg/myrepo"
+
+[auth]
+method = "env"
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load the config
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	// Database path should be empty (will use default)
+	assert.Empty(t, cfg.Database.Path)
+}
+
+func TestLoadConfigWithDisplayColumns(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Create a config file with display section
+	content := `repository = "myorg/myrepo"
+
+[auth]
+method = "env"
+
+[display]
+columns = ["number", "title", "author"]
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load the config
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"number", "title", "author"}, cfg.Display.Columns)
+}
+
+func TestSaveConfigWithDisplayColumns(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	cfg := &Config{
+		Repository: "owner/repo",
+		Auth: AuthConfig{
+			Method: "env",
+		},
+		Display: DisplayConfig{
+			Columns: []string{"number", "title", "date", "comments"},
+		},
+	}
+
+	err := Save(cfg, configPath)
+	require.NoError(t, err)
+
+	// Verify contents
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `columns = ["number", "title", "date", "comments"]`)
+}
+
+func TestLoadConfigWithoutDisplayColumns(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Create a config file without display section
+	content := `repository = "myorg/myrepo"
+
+[auth]
+method = "env"
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load the config
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	// Display columns should be nil (will use defaults)
+	assert.Nil(t, cfg.Display.Columns)
+}
+
+func TestDefaultDisplayColumns(t *testing.T) {
+	expected := []string{"number", "title", "author", "date", "comments"}
+	assert.Equal(t, expected, DefaultDisplayColumns())
+}
+
+func TestValidateDisplayColumn(t *testing.T) {
+	tests := []struct {
+		name    string
+		column  string
+		wantErr bool
+	}{
+		{name: "number column", column: "number", wantErr: false},
+		{name: "title column", column: "title", wantErr: false},
+		{name: "author column", column: "author", wantErr: false},
+		{name: "date column", column: "date", wantErr: false},
+		{name: "comments column", column: "comments", wantErr: false},
+		{name: "invalid column", column: "invalid", wantErr: true},
+		{name: "empty column", column: "", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateDisplayColumn(tt.column)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestSortFieldValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		field   SortField
+		wantErr bool
+	}{
+		{name: "updated", field: SortByUpdated, wantErr: false},
+		{name: "created", field: SortByCreated, wantErr: false},
+		{name: "number", field: SortByNumber, wantErr: false},
+		{name: "comments", field: SortByComments, wantErr: false},
+		{name: "invalid", field: "invalid", wantErr: true},
+		{name: "empty", field: "", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateSortField(tt.field)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestSortOrderValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		order   SortOrder
+		wantErr bool
+	}{
+		{name: "desc", order: SortDesc, wantErr: false},
+		{name: "asc", order: SortAsc, wantErr: false},
+		{name: "invalid", order: "invalid", wantErr: true},
+		{name: "empty", order: "", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateSortOrder(tt.order)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestDefaultSortConfig(t *testing.T) {
+	sortField, sortOrder := DefaultSortConfig()
+
+	// Default should be updated descending (most recently updated first)
+	assert.Equal(t, SortByUpdated, sortField)
+	assert.Equal(t, SortDesc, sortOrder)
+}
+
+func TestAllSortFields(t *testing.T) {
+	fields := AllSortFields()
+
+	expected := []SortField{SortByUpdated, SortByCreated, SortByNumber, SortByComments}
+	assert.Equal(t, expected, fields)
+}
+
+func TestLoadConfigWithSortSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Create a config file with sort settings
+	content := `repository = "myorg/myrepo"
+
+[auth]
+method = "env"
+
+[display]
+sort_field = "created"
+sort_order = "asc"
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load the config
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	assert.Equal(t, SortByCreated, cfg.Display.SortField)
+	assert.Equal(t, SortAsc, cfg.Display.SortOrder)
+}
+
+func TestSaveConfigWithSortSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	cfg := &Config{
+		Repository: "owner/repo",
+		Auth: AuthConfig{
+			Method: "env",
+		},
+		Display: DisplayConfig{
+			SortField: SortByNumber,
+			SortOrder: SortDesc,
+		},
+	}
+
+	err := Save(cfg, configPath)
+	require.NoError(t, err)
+
+	// Verify contents
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `sort_field = "number"`)
+	assert.Contains(t, string(data), `sort_order = "desc"`)
+}
+
+func TestLoadConfigWithoutSortSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Create a config file without sort settings
+	content := `repository = "myorg/myrepo"
+
+[auth]
+method = "env"
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load the config
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	// Sort settings should be empty (will use defaults)
+	assert.Empty(t, cfg.Display.SortField)
+	assert.Empty(t, cfg.Display.SortOrder)
+}
+
+func TestNextSortField(t *testing.T) {
+	tests := []struct {
+		name     string
+		current  SortField
+		expected SortField
+	}{
+		{name: "updated to created", current: SortByUpdated, expected: SortByCreated},
+		{name: "created to number", current: SortByCreated, expected: SortByNumber},
+		{name: "number to comments", current: SortByNumber, expected: SortByComments},
+		{name: "comments wraps to updated", current: SortByComments, expected: SortByUpdated},
+		{name: "empty defaults to updated then created", current: "", expected: SortByCreated},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := NextSortField(tt.current)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestToggleSortOrder(t *testing.T) {
+	tests := []struct {
+		name     string
+		current  SortOrder
+		expected SortOrder
+	}{
+		{name: "desc to asc", current: SortDesc, expected: SortAsc},
+		{name: "asc to desc", current: SortAsc, expected: SortDesc},
+		{name: "empty defaults to desc then asc", current: "", expected: SortAsc},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ToggleSortOrder(tt.current)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestSortFieldDisplayName(t *testing.T) {
+	tests := []struct {
+		field    SortField
+		expected string
+	}{
+		{SortByUpdated, "Updated"},
+		{SortByCreated, "Created"},
+		{SortByNumber, "Number"},
+		{SortByComments, "Comments"},
+		{"unknown", "Updated"}, // default
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.field), func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.field.DisplayName())
+		})
+	}
+}
+
+// Theme configuration tests
+
+func TestValidThemes(t *testing.T) {
+	// Verify all expected themes are available
+	expected := []Theme{ThemeDefault, ThemeDracula, ThemeGruvbox, ThemeNord, ThemeSolarizedDark, ThemeSolarizedLight}
+	assert.Equal(t, expected, ValidThemes)
+}
+
+func TestValidateTheme(t *testing.T) {
+	tests := []struct {
+		name    string
+		theme   Theme
+		wantErr bool
+	}{
+		{name: "default theme", theme: ThemeDefault, wantErr: false},
+		{name: "dracula theme", theme: ThemeDracula, wantErr: false},
+		{name: "gruvbox theme", theme: ThemeGruvbox, wantErr: false},
+		{name: "nord theme", theme: ThemeNord, wantErr: false},
+		{name: "solarized-dark theme", theme: ThemeSolarizedDark, wantErr: false},
+		{name: "solarized-light theme", theme: ThemeSolarizedLight, wantErr: false},
+		{name: "invalid theme", theme: "invalid", wantErr: true},
+		{name: "empty theme", theme: "", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateTheme(tt.theme)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestDefaultTheme(t *testing.T) {
+	theme := DefaultTheme()
+	assert.Equal(t, ThemeDefault, theme)
+}
+
+func TestLoadConfigWithTheme(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Create a config file with theme setting
+	content := `repository = "myorg/myrepo"
+
+[auth]
+method = "env"
+
+[display]
+theme = "dracula"
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load the config
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	assert.Equal(t, ThemeDracula, cfg.Display.Theme)
+}
+
+func TestSaveConfigWithTheme(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	cfg := &Config{
+		Repository: "owner/repo",
+		Auth: AuthConfig{
+			Method: "env",
+		},
+		Display: DisplayConfig{
+			Theme: ThemeNord,
+		},
+	}
+
+	err := Save(cfg, configPath)
+	require.NoError(t, err)
+
+	// Verify contents
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `theme = "nord"`)
+}
+
+func TestLoadConfigWithoutTheme(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Create a config file without theme setting
+	content := `repository = "myorg/myrepo"
+
+[auth]
+method = "env"
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load the config
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	// Theme should be empty (will use default)
+	assert.Empty(t, cfg.Display.Theme)
+}
+
+func TestThemeDisplayName(t *testing.T) {
+	tests := []struct {
+		theme    Theme
+		expected string
+	}{
+		{ThemeDefault, "Default"},
+		{ThemeDracula, "Dracula"},
+		{ThemeGruvbox, "Gruvbox"},
+		{ThemeNord, "Nord"},
+		{ThemeSolarizedDark, "Solarized Dark"},
+		{ThemeSolarizedLight, "Solarized Light"},
+		{"unknown", "Default"}, // default fallback
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.theme), func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.theme.DisplayName())
+		})
+	}
+}
+
+func TestAllThemes(t *testing.T) {
+	themes := AllThemes()
+
+	// Should contain all valid themes
+	expected := []Theme{ThemeDefault, ThemeDracula, ThemeGruvbox, ThemeNord, ThemeSolarizedDark, ThemeSolarizedLight}
+	assert.Equal(t, expected, themes)
+}
+
+// Multi-repository configuration tests
+
+func TestLoadConfigWithMultipleRepositories(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Create a config file with multiple repositories
+	content := `default_repository = "myorg/primary"
+
+[auth]
+method = "env"
+
+[[repositories]]
+name = "myorg/primary"
+database_path = "/path/to/primary.db"
+
+[[repositories]]
+name = "myorg/secondary"
+database_path = "/path/to/secondary.db"
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load the config
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	assert.Equal(t, "myorg/primary", cfg.DefaultRepository)
+	require.Len(t, cfg.Repositories, 2)
+	assert.Equal(t, "myorg/primary", cfg.Repositories[0].Name)
+	assert.Equal(t, "/path/to/primary.db", cfg.Repositories[0].DatabasePath)
+	assert.Equal(t, "myorg/secondary", cfg.Repositories[1].Name)
+	assert.Equal(t, "/path/to/secondary.db", cfg.Repositories[1].DatabasePath)
+}
+
+func TestSaveConfigWithMultipleRepositories(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	cfg := &Config{
+		DefaultRepository: "owner/default",
+		Auth: AuthConfig{
+			Method: "env",
+		},
+		Repositories: []RepositoryConfig{
+			{Name: "owner/repo1", DatabasePath: "/db/repo1.db"},
+			{Name: "owner/repo2", DatabasePath: "/db/repo2.db"},
+		},
+	}
+
+	err := Save(cfg, configPath)
+	require.NoError(t, err)
+
+	// Verify contents
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `default_repository = "owner/default"`)
+	assert.Contains(t, string(data), `name = "owner/repo1"`)
+	assert.Contains(t, string(data), `name = "owner/repo2"`)
+}
+
+func TestGetRepositoryConfig_Found(t *testing.T) {
+	cfg := &Config{
+		Repositories: []RepositoryConfig{
+			{Name: "owner/repo1", DatabasePath: "/db/repo1.db"},
+			{Name: "owner/repo2", DatabasePath: "/db/repo2.db"},
+		},
+	}
+
+	repo, err := cfg.GetRepositoryConfig("owner/repo1")
+	require.NoError(t, err)
+	assert.Equal(t, "owner/repo1", repo.Name)
+	assert.Equal(t, "/db/repo1.db", repo.DatabasePath)
+}
+
+func TestGetRepositoryConfig_NotFound(t *testing.T) {
+	cfg := &Config{
+		Repositories: []RepositoryConfig{
+			{Name: "owner/repo1", DatabasePath: "/db/repo1.db"},
+		},
+	}
+
+	_, err := cfg.GetRepositoryConfig("owner/nonexistent")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestGetActiveRepository_WithFlag(t *testing.T) {
+	cfg := &Config{
+		DefaultRepository: "owner/default",
+		Repositories: []RepositoryConfig{
+			{Name: "owner/default", DatabasePath: "/db/default.db"},
+			{Name: "owner/selected", DatabasePath: "/db/selected.db"},
+		},
+	}
+
+	// When flag is provided, it takes precedence
+	repo, err := cfg.GetActiveRepository("owner/selected")
+	require.NoError(t, err)
+	assert.Equal(t, "owner/selected", repo.Name)
+}
+
+func TestGetActiveRepository_UsesDefault(t *testing.T) {
+	cfg := &Config{
+		DefaultRepository: "owner/default",
+		Repositories: []RepositoryConfig{
+			{Name: "owner/default", DatabasePath: "/db/default.db"},
+			{Name: "owner/other", DatabasePath: "/db/other.db"},
+		},
+	}
+
+	// When no flag provided, uses default
+	repo, err := cfg.GetActiveRepository("")
+	require.NoError(t, err)
+	assert.Equal(t, "owner/default", repo.Name)
+}
+
+func TestGetActiveRepository_FallbackToSingleRepo(t *testing.T) {
+	cfg := &Config{
+		Repositories: []RepositoryConfig{
+			{Name: "owner/only", DatabasePath: "/db/only.db"},
+		},
+	}
+
+	// When no default and only one repo, use that one
+	repo, err := cfg.GetActiveRepository("")
+	require.NoError(t, err)
+	assert.Equal(t, "owner/only", repo.Name)
+}
+
+func TestGetActiveRepository_ErrorWhenNoReposConfigured(t *testing.T) {
+	cfg := &Config{
+		Repositories: []RepositoryConfig{},
+	}
+
+	_, err := cfg.GetActiveRepository("")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no repositories configured")
+}
+
+func TestGetActiveRepository_ErrorWhenAmbiguous(t *testing.T) {
+	cfg := &Config{
+		// No default set
+		Repositories: []RepositoryConfig{
+			{Name: "owner/repo1", DatabasePath: "/db/repo1.db"},
+			{Name: "owner/repo2", DatabasePath: "/db/repo2.db"},
+		},
+	}
+
+	// Multiple repos but no default and no flag - should error
+	_, err := cfg.GetActiveRepository("")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "multiple repositories")
+}
+
+func TestAddRepository(t *testing.T) {
+	cfg := &Config{
+		Repositories: []RepositoryConfig{
+			{Name: "owner/existing", DatabasePath: "/db/existing.db"},
+		},
+	}
+
+	err := cfg.AddRepository("owner/new", "/db/new.db")
+	require.NoError(t, err)
+
+	require.Len(t, cfg.Repositories, 2)
+	assert.Equal(t, "owner/new", cfg.Repositories[1].Name)
+}
+
+func TestAddRepository_Duplicate(t *testing.T) {
+	cfg := &Config{
+		Repositories: []RepositoryConfig{
+			{Name: "owner/existing", DatabasePath: "/db/existing.db"},
+		},
+	}
+
+	err := cfg.AddRepository("owner/existing", "/db/new.db")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "already exists")
+}
+
+func TestListRepositories(t *testing.T) {
+	cfg := &Config{
+		DefaultRepository: "owner/default",
+		Repositories: []RepositoryConfig{
+			{Name: "owner/default", DatabasePath: "/db/default.db"},
+			{Name: "owner/other", DatabasePath: "/db/other.db"},
+		},
+	}
+
+	repos := cfg.ListRepositories()
+	require.Len(t, repos, 2)
+	assert.Equal(t, "owner/default", repos[0].Name)
+	assert.Equal(t, "owner/other", repos[1].Name)
+}
+
+func TestSetDefaultRepository(t *testing.T) {
+	cfg := &Config{
+		Repositories: []RepositoryConfig{
+			{Name: "owner/repo1", DatabasePath: "/db/repo1.db"},
+			{Name: "owner/repo2", DatabasePath: "/db/repo2.db"},
+		},
+	}
+
+	err := cfg.SetDefaultRepository("owner/repo2")
+	require.NoError(t, err)
+	assert.Equal(t, "owner/repo2", cfg.DefaultRepository)
+}
+
+func TestSetDefaultRepository_NotConfigured(t *testing.T) {
+	cfg := &Config{
+		Repositories: []RepositoryConfig{
+			{Name: "owner/repo1", DatabasePath: "/db/repo1.db"},
+		},
+	}
+
+	err := cfg.SetDefaultRepository("owner/nonexistent")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestRepositoryConfigDefaultDatabasePath(t *testing.T) {
+	// When no database path specified, should generate one based on repo name
+	cfg := &Config{
+		Repositories: []RepositoryConfig{
+			{Name: "owner/myrepo"},
+		},
+	}
+
+	dbPath := cfg.Repositories[0].GetDatabasePath()
+	assert.Contains(t, dbPath, "owner-myrepo")
+	assert.Contains(t, dbPath, ".db")
+}
+
+func TestMigrateFromSingleRepo(t *testing.T) {
+	// Test migration from old single-repo format to new multi-repo format
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	// Old format config
+	content := `repository = "myorg/myrepo"
+
+[auth]
+method = "env"
+
+[database]
+path = "/old/path/issues.db"
+`
+	err := os.WriteFile(configPath, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Load and migrate
+	cfg, err := Load(configPath)
+	require.NoError(t, err)
+
+	// Should have migrated the single repo to the new format
+	require.Len(t, cfg.Repositories, 1)
+	assert.Equal(t, "myorg/myrepo", cfg.Repositories[0].Name)
+	assert.Equal(t, "/old/path/issues.db", cfg.Repositories[0].DatabasePath)
+	assert.Equal(t, "myorg/myrepo", cfg.DefaultRepository)
+}
