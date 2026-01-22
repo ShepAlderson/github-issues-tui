@@ -634,10 +634,6 @@ func (m Model) renderListPanel(width, height int) string {
 		}
 
 		line := fmt.Sprintf("%s %s", cursor, m.renderIssue(issue))
-		// Truncate to width before applying style (plain text, no ANSI yet)
-		if len(line) > width {
-			line = line[:width]
-		}
 		// Apply style and ensure it fits width with padding
 		styledLine := style.Render(line)
 		styledLine = padLineWithANSI(styledLine, width)
@@ -957,16 +953,11 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen-3] + "..."
 }
 
-// truncateLineWithANSI properly truncates a string containing ANSI codes to a visual width
-func truncateLineWithANSI(s string, width int) string {
-	return ansi.Truncate(s, width, "")
-}
-
 // padLineWithANSI pads a string containing ANSI codes to a visual width
 func padLineWithANSI(s string, width int) string {
 	visualWidth := ansi.StringWidth(s)
 	if visualWidth >= width {
-		return truncateLineWithANSI(s, width)
+		return ansi.Truncate(s, width, "")
 	}
 	padding := width - visualWidth
 	return s + strings.Repeat(" ", padding)
