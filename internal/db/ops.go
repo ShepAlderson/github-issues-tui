@@ -1,0 +1,546 @@
+package db
+
+import (
+	"database/sql"
+	"fmt"
+	"time"
+
+	_ "modernc.org/sqlite"
+	"github.com/shepbook/ghissues/internal/config"
+	"github.com/shepbook/ghissues/internal/github"
+)
+
+// Open opens a database connection and creates the schema if needed
+func Open(path string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+
+	// Enable foreign keys (disabled by default in SQLite)
+	if _, err := db.Exec("PRAGMA foreign_keys = ON;"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
+	}
+
+	if err := createSchema(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to create schema: %w", err)
+	}
+
+	return db, nil
+}
+
+// createSchema creates the tables if they don't exist
+func createSchema(db *sql.DB) error {
+	// Create issues table
+	issuesSQL := `
+	CREATE TABLE IF NOT EXISTS issues (
+		number INTEGER PRIMARY KEY,
+		owner TEXT NOT NULL,
+		repo TEXT NOT NULL,
+		title TEXT NOT NULL,
+		body TEXT,
+		state TEXT NOT NULL,
+		author_login TEXT NOT NULL,
+		author_id INTEGER,
+		author_email TEXT,
+		author_name TEXT,
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL,
+		comment_count INTEGER DEFAULT 0,
+		html_url TEXT,
+		synced_at TEXT NOT NULL
+	);`
+
+	if _, err := db.Exec(issuesSQL); err != nil {
+		return fmt.Errorf("failed to create issues table: %w", err)
+	}
+
+	// Create labels table
+	labelsSQL := `
+	CREATE TABLE IF NOT EXISTS labels (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		issue_number INTEGER NOT NULL,
+		name TEXT NOT NULL,
+		color TEXT,
+		FOREIGN KEY (issue_number) REFERENCES issues(number) ON DELETE CASCADE
+	);`
+
+	if _, err := db.Exec(labelsSQL); err != nil {
+		return fmt.Errorf("failed to create labels table: %w", err)
+	}
+
+	// Create assignees table
+	assigneesSQL := `
+	CREATE TABLE IF NOT EXISTS assignees (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		issue_number INTEGER NOT NULL,
+		login TEXT NOT NULL,
+		user_id INTEGER,
+		FOREIGN KEY (issue_number) REFERENCES issues(number) ON DELETE CASCADE
+	);`
+
+	if _, err := db.Exec(assigneesSQL); err != nil {
+		return fmt.Errorf("failed to create assignees table: %w", err)
+	}
+
+	// Create comments table
+	commentsSQL := `
+	CREATE TABLE IF NOT EXISTS comments (
+		id INTEGER PRIMARY KEY,
+		issue_number INTEGER NOT NULL,
+		body TEXT NOT NULL,
+		author_login TEXT NOT NULL,
+		author_id INTEGER,
+		author_email TEXT,
+		author_name TEXT,
+		created_at TEXT NOT NULL,
+		synced_at TEXT NOT NULL,
+		FOREIGN KEY (issue_number) REFERENCES issues(number) ON DELETE CASCADE
+	);`
+
+	if _, err := db.Exec(commentsSQL); err != nil {
+		return fmt.Errorf("failed to create comments table: %w", err)
+	}
+
+	// Create indexes for better query performance
+	indexes := []string{
+		"CREATE INDEX IF NOT EXISTS idx_issues_owner_repo ON issues(owner, repo);",
+		"CREATE INDEX IF NOT EXISTS idx_issues_state ON issues(state);",
+		"CREATE INDEX IF NOT EXISTS idx_issues_updated ON issues(updated_at);",
+		"CREATE INDEX IF NOT EXISTS idx_labels_issue ON labels(issue_number);",
+		"CREATE INDEX IF NOT EXISTS idx_assignees_issue ON assignees(issue_number);",
+		"CREATE INDEX IF NOT EXISTS idx_comments_issue ON comments(issue_number);",
+	}
+
+	for _, idx := range indexes {
+		if _, err := db.Exec(idx); err != nil {
+			return fmt.Errorf("failed to create index: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// UpsertIssue inserts or updates an issue in the database
+func UpsertIssue(db *sql.DB, owner, repo string, issue *github.Issue) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	query := `
+	INSERT INTO issues (number, owner, repo, title, body, state, author_login, author_id, author_email, author_name, created_at, updated_at, comment_count, html_url, synced_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	ON CONFLICT(number) DO UPDATE SET
+		title = excluded.title,
+		body = excluded.body,
+		state = excluded.state,
+		author_login = excluded.author_login,
+		author_id = excluded.author_id,
+		author_email = excluded.author_email,
+		author_name = excluded.author_name,
+		updated_at = excluded.updated_at,
+		comment_count = excluded.comment_count,
+		html_url = excluded.html_url,
+		synced_at = excluded.synced_at;`
+
+	_, err := db.Exec(query,
+		issue.Number,
+		owner,
+		repo,
+		issue.Title,
+		issue.Body,
+		issue.State,
+		issue.Author.Login,
+		issue.Author.ID,
+		issue.Author.Email,
+		issue.Author.Name,
+		issue.CreatedAt.Format(time.RFC3339),
+		issue.UpdatedAt.Format(time.RFC3339),
+		issue.Comments,
+		issue.HTMLURL,
+		now,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to upsert issue: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteLabels deletes all labels for an issue
+func DeleteLabels(db *sql.DB, issueNumber int) error {
+	_, err := db.Exec("DELETE FROM labels WHERE issue_number = ?", issueNumber)
+	return err
+}
+
+// InsertLabel inserts a label for an issue
+func InsertLabel(db *sql.DB, issueNumber int, label *github.Label) error {
+	query := `INSERT INTO labels (issue_number, name, color) VALUES (?, ?, ?);`
+	_, err := db.Exec(query, issueNumber, label.Name, label.Color)
+	return err
+}
+
+// DeleteAssignees deletes all assignees for an issue
+func DeleteAssignees(db *sql.DB, issueNumber int) error {
+	_, err := db.Exec("DELETE FROM assignees WHERE issue_number = ?", issueNumber)
+	return err
+}
+
+// InsertAssignee inserts an assignee for an issue
+func InsertAssignee(db *sql.DB, issueNumber int, assignee *github.User) error {
+	query := `INSERT INTO assignees (issue_number, login, user_id) VALUES (?, ?, ?);`
+	_, err := db.Exec(query, issueNumber, assignee.Login, assignee.ID)
+	return err
+}
+
+// UpsertComment inserts or updates a comment in the database
+func UpsertComment(db *sql.DB, issueNumber int, comment *github.Comment) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	query := `
+	INSERT INTO comments (id, issue_number, body, author_login, author_id, author_email, author_name, created_at, synced_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	ON CONFLICT(id) DO UPDATE SET
+		body = excluded.body,
+		author_login = excluded.author_login,
+		author_id = excluded.author_id,
+		author_email = excluded.author_email,
+		author_name = excluded.author_name,
+		created_at = excluded.created_at,
+		synced_at = excluded.synced_at;`
+
+	_, err := db.Exec(query,
+		comment.ID,
+		issueNumber,
+		comment.Body,
+		comment.Author.Login,
+		comment.Author.ID,
+		comment.Author.Email,
+		comment.Author.Name,
+		comment.CreatedAt.Format(time.RFC3339),
+		now,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to upsert comment: %w", err)
+	}
+
+	return nil
+}
+
+// IssueExists checks if an issue exists in the database
+func IssueExists(db *sql.DB, owner, repo string, number int) (bool, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM issues WHERE owner = ? AND repo = ? AND number = ?;`
+	err := db.QueryRow(query, owner, repo, number).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// GetIssueCount returns the count of issues for a repository
+func GetIssueCount(db *sql.DB, owner, repo string) (int, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM issues WHERE owner = ? AND repo = ?;`
+	err := db.QueryRow(query, owner, repo).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// GetCommentCount returns the count of comments for an issue
+func GetCommentCount(db *sql.DB, issueNumber int) (int, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM comments WHERE issue_number = ?;`
+	err := db.QueryRow(query, issueNumber).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// IssueList represents an issue for display in the list view
+type IssueList struct {
+	Number      int
+	Title       string
+	Author      string
+	CreatedAt   string
+	CommentCnt  int
+	State       string
+}
+
+// ListIssues returns a list of issues for a repository, ordered by updated time descending
+func ListIssues(db *sql.DB, owner, repo string) ([]IssueList, error) {
+	return ListIssuesSorted(db, owner, repo, config.DefaultSort(), config.DefaultSortOrder())
+}
+
+// ListIssuesSorted returns a list of issues for a repository, sorted by the specified criteria
+func ListIssuesSorted(db *sql.DB, owner, repo string, sort config.SortOption, order config.SortOrder) ([]IssueList, error) {
+	// Map sort option to database column
+	columnMap := map[config.SortOption]string{
+		config.SortUpdated:  "updated_at",
+		config.SortCreated:  "created_at",
+		config.SortNumber:   "number",
+		config.SortComments: "comment_count",
+	}
+
+	column, ok := columnMap[sort]
+	if !ok {
+		column = "updated_at"
+	}
+
+	// Determine sort direction
+	direction := "DESC"
+	if order == config.SortOrderAsc {
+		direction = "ASC"
+	}
+
+	query := fmt.Sprintf(`
+		SELECT number, title, author_login, created_at, comment_count, state
+		FROM issues
+		WHERE owner = ? AND repo = ?
+		ORDER BY %s %s;
+	`, column, direction)
+
+	rows, err := db.Query(query, owner, repo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list issues: %w", err)
+	}
+	defer rows.Close()
+
+	var issues []IssueList
+	for rows.Next() {
+		var issue IssueList
+		if err := rows.Scan(&issue.Number, &issue.Title, &issue.Author, &issue.CreatedAt, &issue.CommentCnt, &issue.State); err != nil {
+			return nil, fmt.Errorf("failed to scan issue: %w", err)
+		}
+		issues = append(issues, issue)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating issues: %w", err)
+	}
+
+	return issues, nil
+}
+
+// GetIssue returns a single issue by number
+func GetIssue(db *sql.DB, owner, repo string, number int) (*IssueList, error) {
+	query := `
+		SELECT number, title, author_login, created_at, comment_count, state
+		FROM issues
+		WHERE owner = ? AND repo = ? AND number = ?;
+	`
+	var issue IssueList
+	err := db.QueryRow(query, owner, repo, number).Scan(
+		&issue.Number, &issue.Title, &issue.Author, &issue.CreatedAt, &issue.CommentCnt, &issue.State,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get issue: %w", err)
+	}
+	return &issue, nil
+}
+
+// IssueDetail represents the full details of an issue for the detail view
+type IssueDetail struct {
+	Number      int
+	Title       string
+	Body        string
+	State       string
+	Author      string
+	CreatedAt   string
+	UpdatedAt   string
+	CommentCnt  int
+	HTMLURL     string
+	Labels      []string
+	Assignees   []string
+}
+
+// GetIssueDetail returns full details of an issue including labels and assignees
+func GetIssueDetail(db *sql.DB, owner, repo string, number int) (*IssueDetail, error) {
+	query := `
+		SELECT number, title, body, state, author_login, created_at, updated_at, comment_count, html_url
+		FROM issues
+		WHERE owner = ? AND repo = ? AND number = ?;
+	`
+	var issue IssueDetail
+	err := db.QueryRow(query, owner, repo, number).Scan(
+		&issue.Number, &issue.Title, &issue.Body, &issue.State,
+		&issue.Author, &issue.CreatedAt, &issue.UpdatedAt,
+		&issue.CommentCnt, &issue.HTMLURL,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get issue detail: %w", err)
+	}
+
+	// Fetch labels
+	labels, err := GetLabels(db, number)
+	if err != nil {
+		return nil, err
+	}
+	issue.Labels = labels
+
+	// Fetch assignees
+	assignees, err := GetAssignees(db, number)
+	if err != nil {
+		return nil, err
+	}
+	issue.Assignees = assignees
+
+	return &issue, nil
+}
+
+// GetLabels returns all labels for an issue
+func GetLabels(db *sql.DB, issueNumber int) ([]string, error) {
+	query := `SELECT name FROM labels WHERE issue_number = ?;`
+	rows, err := db.Query(query, issueNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get labels: %w", err)
+	}
+	defer rows.Close()
+
+	var labels []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("failed to scan label: %w", err)
+		}
+		labels = append(labels, name)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating labels: %w", err)
+	}
+
+	return labels, nil
+}
+
+// GetAssignees returns all assignees for an issue
+func GetAssignees(db *sql.DB, issueNumber int) ([]string, error) {
+	query := `SELECT login FROM assignees WHERE issue_number = ?;`
+	rows, err := db.Query(query, issueNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get assignees: %w", err)
+	}
+	defer rows.Close()
+
+	var assignees []string
+	for rows.Next() {
+		var login string
+		if err := rows.Scan(&login); err != nil {
+			return nil, fmt.Errorf("failed to scan assignee: %w", err)
+		}
+		assignees = append(assignees, login)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating assignees: %w", err)
+	}
+
+	return assignees, nil
+}
+
+// Comment represents a comment on an issue
+type Comment struct {
+	ID        int
+	Body      string
+	Author    string
+	CreatedAt string
+}
+
+// GetComments returns all comments for an issue
+func GetComments(db *sql.DB, issueNumber int) ([]Comment, error) {
+	query := `
+		SELECT id, body, author_login, created_at
+		FROM comments
+		WHERE issue_number = ?
+		ORDER BY created_at ASC;
+	`
+	rows, err := db.Query(query, issueNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get comments: %w", err)
+	}
+	defer rows.Close()
+
+	var comments []Comment
+	for rows.Next() {
+		var comment Comment
+		if err := rows.Scan(&comment.ID, &comment.Body, &comment.Author, &comment.CreatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan comment: %w", err)
+		}
+		comments = append(comments, comment)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating comments: %w", err)
+	}
+
+	return comments, nil
+}
+
+// GetLastSyncTime returns the latest synced_at timestamp for issues in a repository
+func GetLastSyncTime(db *sql.DB, owner, repo string) (string, error) {
+	query := `SELECT MAX(synced_at) FROM issues WHERE owner = ? AND repo = ?;`
+	var lastSync sql.NullString
+	err := db.QueryRow(query, owner, repo).Scan(&lastSync)
+	if err != nil {
+		return "", err
+	}
+	if !lastSync.Valid {
+		return "", nil
+	}
+	return lastSync.String, nil
+}
+
+// GetIssueNumbers returns all issue numbers for a repository
+func GetIssueNumbers(db *sql.DB, owner, repo string) ([]int, error) {
+	query := `SELECT number FROM issues WHERE owner = ? AND repo = ?;`
+	rows, err := db.Query(query, owner, repo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get issue numbers: %w", err)
+	}
+	defer rows.Close()
+
+	var numbers []int
+	for rows.Next() {
+		var number int
+		if err := rows.Scan(&number); err != nil {
+			return nil, fmt.Errorf("failed to scan issue number: %w", err)
+		}
+		numbers = append(numbers, number)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating issue numbers: %w", err)
+	}
+
+	return numbers, nil
+}
+
+// DeleteIssue removes an issue from the database
+func DeleteIssue(db *sql.DB, owner, repo string, number int) error {
+	query := `DELETE FROM issues WHERE owner = ? AND repo = ? AND number = ?;`
+	_, err := db.Exec(query, owner, repo, number)
+	return err
+}
+
+// DeleteIssues removes multiple issues from the database
+func DeleteIssues(db *sql.DB, owner, repo string, numbers []int) error {
+	if len(numbers) == 0 {
+		return nil
+	}
+	query := `DELETE FROM issues WHERE owner = ? AND repo = ? AND number = ?;`
+	for _, number := range numbers {
+		if _, err := db.Exec(query, owner, repo, number); err != nil {
+			return fmt.Errorf("failed to delete issue %d: %w", number, err)
+		}
+	}
+	return nil
+}
