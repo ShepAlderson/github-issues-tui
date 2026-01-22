@@ -519,3 +519,59 @@ TestFooterShowsContextSensitiveKeysInCommentsView (0.00s)\n--- PASS: TestFooterS
     - lipgloss.Color can use hex codes (`#bd93f9`) or ANSI numbers (`"86"`) - consistency matters for predictability
 
 ---
+## ✓ Iteration 13 - US-012: Color Themes
+*2026-01-21T23:35:49.746Z (506s)*
+
+**Status:** Completed
+
+**Notes:**
+8 new theme tests\n- `internal/themes/themes.go` - Theme definitions with colors\n- `internal/themes/themes_test.go` - 5 theme package tests\n- `internal/cmd/themes.go` - New themes command\n- `internal/cmd/themes_test.go` - 8 command tests\n- `internal/cmd/root.go` - Register themes subcommand, pass theme to TUI\n- `internal/tui/model.go` - Theme field, constructors, themed render methods\n- `internal/tui/model_test.go` - 5 TUI theme tests\n- `.ralph-tui/progress.md` - Documented learnings\n\n
+
+---
+
+## 2026-01-21 - US-014 Multi-Repository Configuration
+- **What was implemented:**
+  - Multi-repository configuration support: `[[repositories]]` TOML array for multiple repos
+  - RepositoryConfig struct with Name and DatabasePath fields
+  - Automatic migration from old single-repo format (`repository = "..."`) to new multi-repo format
+  - `default_repository` field for setting which repo to use by default
+  - `--repo owner/repo` flag on root command to select repository
+  - `ghissues repos` command to list and manage repositories:
+    - Lists all configured repos with `*` indicator for default
+    - `--add owner/repo` flag to add new repositories
+    - `--db-path /path/to.db` flag for custom database path when adding
+    - `--set-default owner/repo` flag to set the default repository
+  - Each repository has its own database file (from config or auto-generated from repo name)
+  - Repository selection priority: --repo flag > default_repository > single repo (if only one)
+
+- **Files changed:**
+  - `internal/config/config.go` - Added RepositoryConfig type, Repositories slice, DefaultRepository field, migration function, GetRepositoryConfig(), GetActiveRepository(), AddRepository(), ListRepositories(), SetDefaultRepository(), GetDatabasePath() methods
+  - `internal/config/config_test.go` - Added 17 tests for multi-repo configuration
+  - `internal/cmd/repos.go` - New repos command for listing and managing repositories
+  - `internal/cmd/repos_test.go` - 10 tests for repos command
+  - `internal/cmd/root.go` - Added --repo flag, repoFlag global variable, updated to use GetActiveRepository()
+
+- **Learnings:**
+  - **Patterns discovered:**
+    - TOML arrays of tables use `[[tablename]]` syntax for multi-entry sections
+    - Migration pattern: check for legacy field + empty new field, then transform data in Load()
+    - Use `GetActiveRepository(flagValue)` pattern to encapsulate repository selection logic with clear priority
+    - Generate default database paths from repo names by replacing `/` with `-` (owner/repo -> .owner-repo.db)
+    - When adding new persistent flags, need SetFlagName/GetFlagName functions for testing similar to existing patterns
+  - **Gotchas encountered:**
+    - When migrating config formats, need to handle both old and new format coexisting during transition
+    - Tests that check specific repository output need to reset global flags (defer SetRepoFlag(""))
+    - Multiple repos without a default should error with helpful message, not silently pick one
+    - The --db flag for root command overrides per-repo database paths, maintaining existing precedence pattern
+
+---
+## ✓ Iteration 14 - US-014: Multi-Repository Configuration
+*2026-01-21T23:41:21.122Z (330s)*
+
+**Status:** Completed
+
+**Notes:**
+ithub.com/shepbook/ghissues/internal/setup\t1.385s\nok  \tgithub.com/shepbook/ghissues/internal/sync\t1.937s\nok  \tgithub.com/shepbook/ghissues/internal/themes\t1.607s\nok  \tgithub.com/shepbook/ghissues/internal/tui\t1.244s","stderr":"","interrupted":false,"isImage":false}}
+{"type":"assistant","message":{"model":"claude-opus-4-5-20251101","id":"msg_01XUC9ZrT8tDgibSq3Fzhpzn","type":"message","role":"assistant","content":[{"type":"text","text":"All tests pass. The implementation is complete.\n\n
+
+---

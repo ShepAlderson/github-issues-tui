@@ -52,6 +52,11 @@ type CriticalErrorMsg struct {
 	Guidance string // Optional actionable guidance for resolving the error
 }
 
+// CommentsLoadedMsg is sent when comments have been loaded from the database
+type CommentsLoadedMsg struct {
+	Comments []github.Comment
+}
+
 // Model represents the TUI application state
 type Model struct {
 	issues          []github.Issue
@@ -74,6 +79,9 @@ type Model struct {
 	refreshProgress RefreshProgress // Current refresh progress
 	refreshError    string          // Last refresh error message
 	refreshFunc     func() tea.Msg  // Function to call to perform refresh
+
+	// Comments loading
+	loadCommentsFunc func(issueNumber int) tea.Msg // Function to load comments for an issue
 
 	// Error modal state (for critical errors)
 	showErrorModal     bool   // Whether the error modal is visible
@@ -207,6 +215,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.issues) > 0 && !m.inCommentsView {
 				m.inCommentsView = true
 				m.commentsScrollY = 0
+				// Load comments for the selected issue
+				if m.loadCommentsFunc != nil {
+					m.comments = nil // Clear stale comments while loading
+					issueNumber := m.issues[m.cursor].Number
+					return m, func() tea.Msg {
+						return m.loadCommentsFunc(issueNumber)
+					}
+				}
 			}
 		case msg.Type == tea.KeyDown || (msg.Type == tea.KeyRunes && len(msg.Runes) > 0 && msg.Runes[0] == 'j'):
 			if !m.inCommentsView && m.cursor < len(m.issues)-1 {
@@ -328,6 +344,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.refreshFunc
 			}
 		}
+	case CommentsLoadedMsg:
+		// Update comments when they've been loaded from the database
+		m.comments = msg.Comments
+		m.commentsScrollY = 0
 	}
 	return m, nil
 }
@@ -993,6 +1013,11 @@ func (m Model) GetRefreshError() string {
 // SetRefreshFunc sets the function to be called when refresh is triggered
 func (m *Model) SetRefreshFunc(fn func() tea.Msg) {
 	m.refreshFunc = fn
+}
+
+// SetLoadCommentsFunc sets the function to be called when comments need to be loaded
+func (m *Model) SetLoadCommentsFunc(fn func(issueNumber int) tea.Msg) {
+	m.loadCommentsFunc = fn
 }
 
 // HasErrorModal returns whether the error modal is visible

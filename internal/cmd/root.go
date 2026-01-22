@@ -187,6 +187,9 @@ When multiple repositories are configured, use --repo to select which one to vie
 			// This creates a closure that captures the necessary context
 			model.SetRefreshFunc(createRefreshFunc(cfg, store, owner, repo))
 
+			// Set up load comments function for viewing issue comments
+			model.SetLoadCommentsFunc(createLoadCommentsFunc(store))
+
 			p := tea.NewProgram(model, tea.WithAltScreen())
 
 			// Trigger auto-refresh on launch by sending RefreshStartMsg
@@ -285,6 +288,19 @@ func parseRepo(repoStr string) (owner, repo string, err error) {
 		return "", "", fmt.Errorf("invalid repository format: %s (expected owner/repo)", repoStr)
 	}
 	return parts[0], parts[1], nil
+}
+
+// createLoadCommentsFunc creates a function that loads comments for an issue from the database
+func createLoadCommentsFunc(store *db.Store) func(issueNumber int) tea.Msg {
+	return func(issueNumber int) tea.Msg {
+		ctx := context.Background()
+		comments, err := store.GetComments(ctx, issueNumber)
+		if err != nil {
+			// Return empty comments on error (non-fatal)
+			return tui.CommentsLoadedMsg{Comments: nil}
+		}
+		return tui.CommentsLoadedMsg{Comments: comments}
+	}
 }
 
 // createRefreshFunc creates a function that performs a sync operation
