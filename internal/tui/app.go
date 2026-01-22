@@ -1,0 +1,623 @@
+package tui
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/shepbook/ghissues/internal/sort"
+	"github.com/shepbook/ghissues/internal/storage"
+	"github.com/shepbook/ghissues/internal/theme"
+	"github.com/shepbook/ghissues/internal/timefmt"
+)
+
+// FormatRelativeTime formats a time as a relative string like "5 minutes ago"
+func FormatRelativeTime(t time.Time) string {
+	return timefmt.FormatRelative(t, time.Now())
+}
+
+// Model represents the main application state
+type Model struct {
+	IssueList     *IssueList
+	DetailPanel   *DetailPanel
+	CommentsView  *CommentsView // Comments view for drill-down
+	AllComments   map[int][]storage.Comment // Cache comments by issue number
+	Refresh       RefreshModel // Refresh progress state
+	Error         ErrorModel   // Error state for modal and status bar
+	Help          HelpModel    // Help overlay state
+	LastSync      time.Time    // Last sync timestamp
+	Theme         *theme.Theme // Color theme
+	Quitting      bool
+	Width         int
+	Height        int
+}
+
+// NewModel creates a new TUI model
+func NewModel(issues []storage.Issue, columns []Column, lastSync time.Time, themeName string) Model {
+	// Load theme
+	theme := theme.GetTheme(themeName)
+
+	issueList := NewIssueList(issues, columns)
+	model := Model{
+		IssueList:   issueList,
+		DetailPanel: nil,
+		AllComments: make(map[int][]storage.Comment),
+		Refresh:     NewRefreshModel(),
+		Error:       ErrorModel{},
+		Help:        NewHelpModel(),
+		LastSync:    lastSync,
+		Theme:       theme,
+		Quitting:    false,
+	}
+	// Initialize detail panel with first issue if available
+	if len(issues) > 0 {
+		model.DetailPanel = NewDetailPanel(issues[0])
+	}
+	return model
+}
+
+// NewModelWithSort creates a new TUI model with specific sort settings
+func NewModelWithSort(issues []storage.Issue, columns []Column, sortField string, sortDescending bool, lastSync time.Time, themeName string) Model {
+	// Load theme
+	theme := theme.GetTheme(themeName)
+
+	issueList := NewIssueListWithSort(issues, columns, sortField, sortDescending)
+	model := Model{
+		IssueList:   issueList,
+		DetailPanel: nil,
+		AllComments: make(map[int][]storage.Comment),
+		Refresh:     NewRefreshModel(),
+		Error:       ErrorModel{},
+		Help:        NewHelpModel(),
+		LastSync:    lastSync,
+		Theme:       theme,
+		Quitting:    false,
+	}
+	// Initialize detail panel with first issue if available
+	if len(issueList.Issues) > 0 {
+		model.DetailPanel = NewDetailPanel(issueList.Issues[0])
+	}
+	return model
+}
+
+// Init initializes the model
+func (m Model) Init() tea.Cmd {
+	return nil
+}
+
+// Update handles messages and updates the model
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		// If error modal is active, handle it first
+		if m.Error.Active {
+			updated, _ := m.Error.Update(msg)
+			m.Error = updated
+			return m, nil
+		}
+
+		// If help is active, let help model handle the key
+		if m.Help.Active {
+			updated, _ := m.Help.Update(msg)
+			m.Help = updated
+			return m, nil
+		}
+
+		// Toggle help with ? key
+		if msg.String() == "?" {
+			m.Help.Toggle()
+			return m, nil
+		}
+
+		// If refresh is complete, any key dismisses it
+		if m.Refresh.Complete {
+			m.Refresh.Reset()
+			return m, nil
+		}
+
+		// If in comments view, handle comments-specific keybindings
+		if m.CommentsView != nil {
+			return m.updateCommentsView(msg)
+		}
+
+		// Otherwise handle main view keybindings
+		switch msg.String() {
+		case "q", "ctrl+c":
+			m.Quitting = true
+			return m, tea.Quit
+
+		case "j", "down":
+			m.IssueList.MoveCursor(1)
+			m.updateDetailPanel()
+			return m, nil
+
+		case "k", "up":
+			m.IssueList.MoveCursor(-1)
+			m.updateDetailPanel()
+			return m, nil
+
+		case "enter":
+			// Open comments view for current issue
+			return m.openCommentsView()
+
+		case " ":
+			m.IssueList.SelectCurrent()
+			m.updateDetailPanel()
+			return m, nil
+
+		case "s":
+			// Cycle to next sort field
+			m.IssueList.CycleSortField()
+			return m, nil
+
+		case "S":
+			// Toggle sort order (shift+s)
+			m.IssueList.ToggleSortOrder()
+			return m, nil
+
+		case "m":
+			// Toggle markdown rendering in detail panel
+			if m.DetailPanel != nil {
+				m.DetailPanel.ToggleMarkdown()
+			}
+			return m, nil
+
+		case "r", "R":
+			// Trigger refresh - for now just mark as complete
+			// In real implementation, this would trigger a background sync
+			var cmd tea.Cmd
+			if msg.String() == "r" {
+				// Incremental refresh
+				m.Refresh.Reset()
+				m.Refresh.Active = true
+				// Send a tick command to simulate refresh completion
+				cmd = tea.Tick(time.Second*2, func(t time.Time) tea.Msg {
+					return RefreshCompleteMsg{Success: true}
+				})
+			} else {
+				// Full refresh (R)
+				m.Refresh.Reset()
+				m.Refresh.Active = true
+				cmd = tea.Tick(time.Second*2, func(t time.Time) tea.Msg {
+					return RefreshCompleteMsg{Success: true}
+				})
+			}
+			return m, cmd
+
+		case "pgdn":
+			// Scroll detail panel down
+			if m.DetailPanel != nil {
+				m.DetailPanel.ScrollDown()
+			}
+			return m, nil
+
+		case "pgup":
+			// Scroll detail panel up
+			if m.DetailPanel != nil {
+				m.DetailPanel.ScrollUp()
+			}
+			return m, nil
+		}
+
+	case RefreshProgressMsg:
+		updated, _ := m.Refresh.Update(msg)
+		m.Refresh = updated
+		return m, nil
+
+	case RefreshCompleteMsg:
+		updated, _ := m.Refresh.Update(msg)
+		m.Refresh = updated
+
+		// Update last sync time on successful refresh
+		if msg.Success {
+			m.LastSync = time.Now()
+		}
+
+		// If refresh failed, show error
+		if !msg.Success && msg.Error != nil {
+			severity, _ := ClassifyError(msg.Error)
+			m.Error.Show(msg.Error, severity)
+		}
+
+		return m, nil
+
+	case tea.WindowSizeMsg:
+		m.Width = msg.Width
+		m.Height = msg.Height
+		// Reserve space for header and status (3 lines)
+		// Split remaining space between list and detail (60/40)
+		listHeight := (msg.Height - 3) * 6 / 10
+		detailHeight := (msg.Height - 3) * 4 / 10
+		m.IssueList.SetViewport(listHeight)
+		if m.DetailPanel != nil {
+			m.DetailPanel.SetViewport(detailHeight)
+		}
+		if m.CommentsView != nil {
+			m.CommentsView.SetViewport(m.Height - 3)
+		}
+		updated, _ := m.Refresh.Update(msg)
+		m.Refresh = updated
+		updatedError, _ := m.Error.Update(msg)
+		m.Error = updatedError
+		updatedHelp, _ := m.Help.Update(msg)
+		m.Help = updatedHelp
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// updateCommentsView handles keybindings when in comments view
+func (m Model) updateCommentsView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "?":
+		// Toggle help overlay
+		m.Help.Toggle()
+		return m, nil
+
+	case "q", "esc":
+		// Close comments view and return to main view
+		m.CommentsView = nil
+		return m, nil
+
+	case "j", "down":
+		m.CommentsView.ScrollDown()
+		return m, nil
+
+	case "k", "up":
+		m.CommentsView.ScrollUp()
+		return m, nil
+
+	case "m":
+		// Toggle markdown rendering in comments view
+		m.CommentsView.ToggleMarkdown()
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// openCommentsView opens the comments view for the current issue
+func (m Model) openCommentsView() (tea.Model, tea.Cmd) {
+	if len(m.IssueList.Issues) == 0 {
+		return m, nil
+	}
+
+	if m.IssueList.Cursor < 0 || m.IssueList.Cursor >= len(m.IssueList.Issues) {
+		return m, nil
+	}
+
+	issue := m.IssueList.Issues[m.IssueList.Cursor]
+
+	// Get comments from cache
+	comments, ok := m.AllComments[issue.Number]
+	if !ok {
+		// No comments loaded yet, create empty slice
+		comments = []storage.Comment{}
+	}
+
+	m.CommentsView = NewCommentsView(issue, comments)
+	m.CommentsView.SetViewport(m.Height - 3)
+
+	return m, nil
+}
+
+// SetComments sets the comments for a specific issue in the cache
+func (m *Model) SetComments(issueNumber int, comments []storage.Comment) {
+	if m.AllComments == nil {
+		m.AllComments = make(map[int][]storage.Comment)
+	}
+	m.AllComments[issueNumber] = comments
+}
+
+// View renders the UI
+func (m Model) View() string {
+	if m.Quitting {
+		return "Goodbye!\n"
+	}
+
+	if m.Width == 0 || m.Height == 0 {
+		return "Loading..."
+	}
+
+	// If error modal is active, show error overlay
+	if m.Error.Active {
+		return m.renderErrorView()
+	}
+
+	// If help is active, show help overlay
+	if m.Help.Active {
+		return m.Help.View(m.Theme)
+	}
+
+	// If refresh is active or just completed, show refresh overlay
+	if m.Refresh.Active || m.Refresh.Complete {
+		return m.renderRefreshView()
+	}
+
+	// If in comments view, render comments view
+	if m.CommentsView != nil {
+		return m.renderCommentsView()
+	}
+
+	// Build header
+	header := m.renderHeader()
+
+	// Build main content (split layout)
+	content := m.renderSplitLayout()
+
+	// Build status bar
+	status := m.renderStatusBar()
+
+	// Combine all parts
+	return header + "\n" + content + "\n" + status
+}
+
+// renderHeader renders the column headers
+func (m Model) renderHeader() string {
+	if len(m.IssueList.Columns) == 0 {
+		return ""
+	}
+
+	var parts []string
+	for _, col := range m.IssueList.Columns {
+		if col.Width > 0 {
+			parts = append(parts, lipgloss.NewStyle().Width(col.Width).Render(col.Title))
+		} else {
+			parts = append(parts, col.Title)
+		}
+	}
+
+	header := strings.Join(parts, "  ")
+
+	// Add separator line
+	separator := strings.Repeat("─", m.Width)
+
+	style := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.Theme.ListHeader))
+	return style.Render(header) + "\n" + lipgloss.NewStyle().Faint(true).Render(separator)
+}
+
+// renderIssueList renders the visible issues
+func (m Model) renderIssueList() string {
+	if len(m.IssueList.Issues) == 0 {
+		return "No issues found. Run 'ghissues sync' to fetch issues."
+	}
+
+	visibleIssues := m.IssueList.GetVisibleIssues()
+	var lines []string
+
+	visibleStart := m.IssueList.ViewportOffset
+	for i, issue := range visibleIssues {
+		globalIndex := visibleStart + i
+		isCursor := globalIndex == m.IssueList.Cursor
+		line := m.renderIssueRow(issue, isCursor)
+		lines = append(lines, line)
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// renderIssueRow renders a single issue row
+func (m Model) renderIssueRow(issue storage.Issue, isCursor bool) string {
+	if len(m.IssueList.Columns) == 0 {
+		return ""
+	}
+
+	var parts []string
+	for _, col := range m.IssueList.Columns {
+		value := GetColumnValue(issue, col.Name)
+
+		if col.Width > 0 {
+			parts = append(parts, lipgloss.NewStyle().Width(col.Width).Render(value))
+		} else {
+			// For flexible width columns, truncate if needed
+			maxWidth := m.Width - sumFixedWidths(m.IssueList.Columns)
+			if len(value) > maxWidth && maxWidth > 0 {
+				value = value[:maxWidth-3] + "..."
+			}
+			parts = append(parts, value)
+		}
+	}
+
+	row := strings.Join(parts, "  ")
+
+	if isCursor {
+		row = lipgloss.NewStyle().
+			Background(lipgloss.Color(m.Theme.Cursor)).
+			Foreground(lipgloss.Color("white")).
+			Render(row)
+	}
+
+	return row
+}
+
+// renderStatusBar renders the status bar
+func (m Model) renderStatusBar() string {
+	issueCount := len(m.IssueList.Issues)
+	selectedInfo := ""
+
+	if m.IssueList.Selected != nil {
+		selectedInfo = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(m.Theme.Success)).
+			Render(" | Selected: #" + formatNumber(m.IssueList.Selected.Number))
+	}
+
+	// Build sort info
+	sortOrder := "▼"
+	if m.IssueList.SortDescending {
+		sortOrder = "▼" // Descending
+	} else {
+		sortOrder = "▲" // Ascending
+	}
+	sortInfo := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.Theme.StatusKey)).
+		Render(" | Sort: " + sort.GetSortFieldLabel(m.IssueList.SortField) + sortOrder)
+
+	markdownHint := ""
+	if m.DetailPanel != nil {
+		mode := "raw"
+		if m.DetailPanel.RenderMarkdown {
+			mode = "rendered"
+		}
+		markdownHint = " | m: toggle markdown (" + mode + ")"
+	}
+
+	// Build last sync info
+	lastSyncInfo := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.Theme.StatusKey)).
+		Render(" | Last synced: " + FormatRelativeTime(m.LastSync))
+
+	// Build error info for minor errors
+	errorInfo := ""
+	if m.Error.Active && m.Error.IsMinor() {
+		errorInfo = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(m.Theme.Error)).
+			Render(" | Error: " + m.Error.Message)
+	}
+
+	status := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.Theme.StatusBar)).
+		Render("Issues: " + formatNumber(issueCount) +
+			" | ↑↓/jk: navigate | PgUp/PgDn: scroll detail | s: sort | r: refresh | Enter: comments | Space: select | ?: help | q: quit" +
+			markdownHint + selectedInfo + sortInfo + lastSyncInfo + errorInfo)
+
+	return status
+}
+
+// renderCommentsView renders the comments view
+func (m Model) renderCommentsView() string {
+	if m.CommentsView == nil {
+		return "Error: Comments view is nil"
+	}
+
+	// Get the full view content
+	content := m.CommentsView.View(m.Theme)
+
+	// Build status bar for comments view
+	status := m.renderCommentsStatusBar()
+
+	return content + "\n" + status
+}
+
+// renderCommentsStatusBar renders the status bar for comments view
+func (m Model) renderCommentsStatusBar() string {
+	commentCount := len(m.CommentsView.Comments)
+
+	mode := "raw"
+	if m.CommentsView.RenderMarkdown {
+		mode = "rendered"
+	}
+
+	status := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.Theme.StatusBar)).
+		Render(fmt.Sprintf("Comments: %d | ↑↓/jk: scroll | m: toggle markdown (%s) | ?: help | Esc/q: back", commentCount, mode))
+
+	return status
+}
+
+// sumFixedWidths calculates the total width of fixed-width columns
+func sumFixedWidths(columns []Column) int {
+	total := 0
+	for _, col := range columns {
+		if col.Width > 0 {
+			total += col.Width
+		}
+	}
+	// Add spacing between columns (2 spaces per column separator)
+	if len(columns) > 0 {
+		total += (len(columns) - 1) * 2
+	}
+	return total
+}
+
+// updateDetailPanel updates the detail panel with the currently selected issue
+func (m *Model) updateDetailPanel() {
+	if len(m.IssueList.Issues) == 0 {
+		m.DetailPanel = nil
+		return
+	}
+
+	if m.IssueList.Cursor >= 0 && m.IssueList.Cursor < len(m.IssueList.Issues) {
+		issue := m.IssueList.Issues[m.IssueList.Cursor]
+		m.DetailPanel = NewDetailPanel(issue)
+	}
+}
+
+// renderSplitLayout renders the split layout with list and detail panels
+func (m Model) renderSplitLayout() string {
+	if len(m.IssueList.Issues) == 0 {
+		return "No issues found. Run 'ghissues sync' to fetch issues."
+	}
+
+	// Split width: 60% for list, 40% for detail
+	listWidth := m.Width * 6 / 10
+	detailWidth := m.Width - listWidth - 1 // -1 for separator
+
+	// Render issue list
+	listView := m.renderIssueList()
+
+	// Render detail panel
+	detailView := ""
+	if m.DetailPanel != nil {
+		detailView = m.DetailPanel.GetScrolledView(m.Theme)
+	} else {
+		detailView = "No issue selected"
+	}
+
+	// Combine with vertical separator
+	leftPanel := lipgloss.NewStyle().Width(listWidth).Height(m.Height - 3).Render(listView)
+	rightPanel := lipgloss.NewStyle().Width(detailWidth).Height(m.Height - 3).Render(detailView)
+	separator := lipgloss.NewStyle().Faint(true).Render("│")
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, separator, rightPanel)
+}
+
+// renderRefreshView renders the refresh progress overlay
+func (m Model) renderRefreshView() string {
+	// Build the refresh progress view
+	refreshContent := m.Refresh.View()
+
+	// Center the content
+	lines := strings.Split(refreshContent, "\n")
+	maxWidth := 0
+	for _, line := range lines {
+		if len(line) > maxWidth {
+			maxWidth = len(line)
+		}
+	}
+
+	var centeredLines []string
+	for _, line := range lines {
+		padding := (m.Width - len(line)) / 2
+		if padding > 0 {
+			centeredLines = append(centeredLines, strings.Repeat(" ", padding)+line)
+		} else {
+			centeredLines = append(centeredLines, line)
+		}
+	}
+
+	// Vertical centering
+	verticalPadding := (m.Height - len(lines)) / 2
+	if verticalPadding < 0 {
+		verticalPadding = 0
+	}
+
+	result := strings.Repeat("\n", verticalPadding)
+	result += strings.Join(centeredLines, "\n")
+
+	// Add hint at bottom
+	if m.Refresh.Complete && m.Refresh.Success {
+		result += "\n\nPress any key to continue..."
+	} else if m.Refresh.Complete && !m.Refresh.Success {
+		result += "\n\nPress any key to continue..."
+	}
+
+	return result
+}
+
+// renderErrorView renders the error modal
+func (m Model) renderErrorView() string {
+	return m.Error.View(m.Theme)
+}
