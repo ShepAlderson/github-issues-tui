@@ -14,9 +14,13 @@
         "User can re-run setup with ghissues config command"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "dependsOn": [],
-      "labels": ["setup", "config"]
+      "labels": [
+        "setup",
+        "config"
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-002",
@@ -29,9 +33,15 @@
         "Config file token is stored securely (file permissions 0600)"
       ],
       "priority": 1,
-      "passes": false,
-      "dependsOn": ["US-001"],
-      "labels": ["auth", "security"]
+      "passes": true,
+      "dependsOn": [
+        "US-001"
+      ],
+      "labels": [
+        "auth",
+        "security"
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-003",
@@ -46,9 +56,16 @@
         "Sync can be cancelled with Ctrl+C gracefully"
       ],
       "priority": 1,
-      "passes": false,
-      "dependsOn": ["US-002", "US-004"],
-      "labels": ["sync", "api"]
+      "passes": true,
+      "dependsOn": [
+        "US-002",
+        "US-004"
+      ],
+      "labels": [
+        "sync",
+        "api"
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-004",
@@ -62,9 +79,15 @@
         "Clear error if path is not writable"
       ],
       "priority": 1,
-      "passes": false,
-      "dependsOn": ["US-001"],
-      "labels": ["database", "config"]
+      "passes": true,
+      "dependsOn": [
+        "US-001"
+      ],
+      "labels": [
+        "database",
+        "config"
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-005",
@@ -79,9 +102,15 @@
         "Issue count shown in status area"
       ],
       "priority": 2,
-      "passes": false,
-      "dependsOn": ["US-003"],
-      "labels": ["tui", "list"]
+      "passes": true,
+      "dependsOn": [
+        "US-003"
+      ],
+      "labels": [
+        "tui",
+        "list"
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-006",
@@ -95,9 +124,15 @@
         "Sort preference persisted to config file"
       ],
       "priority": 2,
-      "passes": false,
-      "dependsOn": ["US-005"],
-      "labels": ["tui", "list"]
+      "passes": true,
+      "dependsOn": [
+        "US-005"
+      ],
+      "labels": [
+        "tui",
+        "list"
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-007",
@@ -113,9 +148,15 @@
         "Enter on issue list opens dedicated comments view"
       ],
       "priority": 2,
-      "passes": false,
-      "dependsOn": ["US-005"],
-      "labels": ["tui", "detail"]
+      "passes": true,
+      "dependsOn": [
+        "US-005"
+      ],
+      "labels": [
+        "tui",
+        "detail"
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-008",
@@ -131,9 +172,15 @@
         "Esc or q returns to issue list view"
       ],
       "priority": 2,
-      "passes": false,
-      "dependsOn": ["US-007"],
-      "labels": ["tui", "comments"]
+      "passes": true,
+      "dependsOn": [
+        "US-007"
+      ],
+      "labels": [
+        "tui",
+        "comments"
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-009",
@@ -148,9 +195,15 @@
         "Handles new comments on existing issues"
       ],
       "priority": 2,
-      "passes": false,
-      "dependsOn": ["US-003"],
-      "labels": ["sync", "api"]
+      "passes": true,
+      "dependsOn": [
+        "US-003"
+      ],
+      "labels": [
+        "sync",
+        "api"
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-010",
@@ -162,9 +215,15 @@
         "Updates after each successful sync"
       ],
       "priority": 3,
-      "passes": false,
-      "dependsOn": ["US-009"],
-      "labels": ["tui", "status"]
+      "passes": true,
+      "dependsOn": [
+        "US-009"
+      ],
+      "labels": [
+        "tui",
+        "status"
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-011",
@@ -177,9 +236,15 @@
         "Help overlay dismissible with ? or Esc"
       ],
       "priority": 3,
-      "passes": false,
-      "dependsOn": ["US-005"],
-      "labels": ["tui", "help"]
+      "passes": true,
+      "dependsOn": [
+        "US-005"
+      ],
+      "labels": [
+        "tui",
+        "help"
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-012",
@@ -192,9 +257,15 @@
         "Themes use lipgloss for consistent styling"
       ],
       "priority": 3,
-      "passes": false,
-      "dependsOn": ["US-005"],
-      "labels": ["tui", "theme"]
+      "passes": true,
+      "dependsOn": [
+        "US-005"
+      ],
+      "labels": [
+        "tui",
+        "theme"
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-013",
@@ -208,9 +279,15 @@
         "Network errors suggest checking connectivity and retrying"
       ],
       "priority": 2,
-      "passes": false,
-      "dependsOn": ["US-005"],
-      "labels": ["tui", "errors"]
+      "passes": true,
+      "dependsOn": [
+        "US-005"
+      ],
+      "labels": [
+        "tui",
+        "errors"
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-014",
@@ -224,9 +301,19 @@
         "ghissues repos lists configured repositories"
       ],
       "priority": 3,
-      "passes": false,
-      "dependsOn": ["US-001", "US-004"],
-      "labels": ["config", "multi-repo"]
+      "passes": true,
+      "dependsOn": [
+        "US-001",
+        "US-004"
+      ],
+      "labels": [
+        "config",
+        "multi-repo"
+      ],
+      "completionNotes": "Completed by agent"
     }
-  ]
+  ],
+  "metadata": {
+    "updatedAt": "2026-01-20T22:44:56.695Z"
+  }
 }
