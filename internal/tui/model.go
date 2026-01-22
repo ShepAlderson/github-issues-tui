@@ -959,45 +959,7 @@ func truncate(s string, maxLen int) string {
 
 // truncateLineWithANSI properly truncates a string containing ANSI codes to a visual width
 func truncateLineWithANSI(s string, width int) string {
-	visualWidth := ansi.StringWidth(s)
-	if visualWidth <= width {
-		return s
-	}
-	
-	// Need to truncate - iterate through the string to find where to cut
-	currentWidth := 0
-	var result strings.Builder
-	inEscape := false
-	escapeSeq := strings.Builder{}
-	
-	for _, r := range s {
-		if r == '\x1b' {
-			inEscape = true
-			escapeSeq.Reset()
-			escapeSeq.WriteRune(r)
-			continue
-		}
-		
-		if inEscape {
-			escapeSeq.WriteRune(r)
-			// End of escape sequence
-			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
-				result.WriteString(escapeSeq.String())
-				inEscape = false
-			}
-			continue
-		}
-		
-		// Regular character - check if we have room
-		if currentWidth >= width {
-			break
-		}
-		
-		result.WriteRune(r)
-		currentWidth++
-	}
-	
-	return result.String()
+	return ansi.Truncate(s, width, "")
 }
 
 // padLineWithANSI pads a string containing ANSI codes to a visual width
