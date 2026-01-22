@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/shepbook/github-issues-tui/internal/sync"
 	"github.com/shepbook/github-issues-tui/internal/theme"
 )
@@ -633,11 +634,14 @@ func (m Model) renderListPanel(width, height int) string {
 		}
 
 		line := fmt.Sprintf("%s %s", cursor, m.renderIssue(issue))
-		// Truncate to width
+		// Truncate to width before applying style (plain text, no ANSI yet)
 		if len(line) > width {
 			line = line[:width]
 		}
-		b.WriteString(style.Render(line))
+		// Apply style and ensure it fits width with padding
+		styledLine := style.Render(line)
+		styledLine = padLineWithANSI(styledLine, width)
+		b.WriteString(styledLine)
 		b.WriteString("\n")
 		linesRendered++
 	}
@@ -722,11 +726,9 @@ func (m Model) renderDetailPanel(width, height int) string {
 
 	scrolledLines := lines[startLine:endLine]
 
-	// Truncate each line to width
+	// Properly truncate and pad each line to width (accounting for ANSI codes)
 	for i, line := range scrolledLines {
-		if len(line) > width {
-			scrolledLines[i] = line[:width]
-		}
+		scrolledLines[i] = padLineWithANSI(line, width)
 	}
 
 	return strings.Join(scrolledLines, "\n")
@@ -953,6 +955,59 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// truncateLineWithANSI properly truncates a string containing ANSI codes to a visual width
+func truncateLineWithANSI(s string, width int) string {
+	visualWidth := ansi.StringWidth(s)
+	if visualWidth <= width {
+		return s
+	}
+	
+	// Need to truncate - iterate through the string to find where to cut
+	currentWidth := 0
+	var result strings.Builder
+	inEscape := false
+	escapeSeq := strings.Builder{}
+	
+	for _, r := range s {
+		if r == '\x1b' {
+			inEscape = true
+			escapeSeq.Reset()
+			escapeSeq.WriteRune(r)
+			continue
+		}
+		
+		if inEscape {
+			escapeSeq.WriteRune(r)
+			// End of escape sequence
+			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+				result.WriteString(escapeSeq.String())
+				inEscape = false
+			}
+			continue
+		}
+		
+		// Regular character - check if we have room
+		if currentWidth >= width {
+			break
+		}
+		
+		result.WriteRune(r)
+		currentWidth++
+	}
+	
+	return result.String()
+}
+
+// padLineWithANSI pads a string containing ANSI codes to a visual width
+func padLineWithANSI(s string, width int) string {
+	visualWidth := ansi.StringWidth(s)
+	if visualWidth >= width {
+		return truncateLineWithANSI(s, width)
+	}
+	padding := width - visualWidth
+	return s + strings.Repeat(" ", padding)
 }
 
 func min(a, b int) int {
