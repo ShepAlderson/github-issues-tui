@@ -1,0 +1,10 @@
+DEBUG: Starting minimal TUI...
+DEBUG: Options: 
+DEBUG: msg type=tea.WindowSizeMsg value={Width:217 Height:68}
+DEBUG: msg type=tea.KeyMsg value=down
+DEBUG: msg type=tea.KeyMsg value=up
+DEBUG: msg type=tea.KeyMsg value=left
+DEBUG: msg type=tea.KeyMsg value=right
+DEBUG: msg type=tea.KeyMsg value=k
+DEBUG: msg type=tea.KeyMsg value=j
+DEBUG: msg type=tea.KeyMsg value=q
