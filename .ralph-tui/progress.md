@@ -52,6 +52,14 @@ after each iteration and included in agent prompts for context.
 - Update progress bar using `tea.Msg` with progress data
 - Handle `tea.KeyCtrlC` for user cancellation
 
+### Issue List View Pattern
+- Use Config interface to decouple list package from config implementation
+- Validate columns against allowed set, filter out unknown columns gracefully
+- Store selected index, clamp to valid range during navigation
+- Render selection with highlighted style using lipgloss
+- Support both vim keys (j/k) and arrow keys for navigation
+- Show issue count in status area at bottom of view
+
 ---
 
 ## 2026-01-28 - US-001
@@ -100,7 +108,13 @@ after each iteration and included in agent prompts for context.
 **Status:** Completed
 
 **Notes:**
-68→  - Gotchas encountered\n    69→---\n    70→```\n    71→\n    72→If you discovered a **reusable pattern**, also add it to the `## Codebase Patterns` section at the TOP of progress.md.\n    73→\n    74→## Stop Condition\n    75→**IMPORTANT**: If the work is already complete (implemented in a previous iteration or already exists), verify it meets the acceptance criteria and signal completion immediately.\n    76→\n    77→When finished (or if already complete), signal completion with:\n    78→
+68→  - Gotchas encountered\n    69→---\n    70→```\n    71→\n    72→If you discovered a **reusable pattern**, also add it to the `## Codebase Patterns` section at the TOP of progress.md.
+
+## Stop Condition
+**IMPORTANT**: If the work is already complete (implemented in a previous iteration or already exists), verify it meets the acceptance criteria and signal completion immediately.
+
+When finished (or if already complete), signal completion with:
+
 
 ---
 ## ✓ Iteration 2 - US-002: GitHub Authentication
@@ -160,5 +174,44 @@ n 'ghissues config' to save a token to your config file\n3. Login with 'gh auth 
 **Notes:**
 ignature":""}],"model":"hf:moonshotai/Kimi-K2.5","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":27710,"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"context_management":null},"parent_tool_use_id":null,"session_id":"89be9b4d-9f0d-491b-94a3-c85e015bf603","uuid":"a495bd16-c031-406a-be5f-cb031c0ec0cd"}
 {"type":"assistant","message":{"id":"msg_6187ff4b-fd89-4d49-8f33-743145e8e69d","type":"message","role":"assistant","content":[{"type":"text","text":"
+
+---
+## ✓ Iteration 4 - US-003: Initial Issue Sync
+*2026-01-28T08:17:27.921Z (663s)*
+
+**Status:** Completed
+
+**Notes:**
+ignature":""}],"model":"hf:moonshotai/Kimi-K2.5","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":70659,"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"context_management":null},"parent_tool_use_id":null,"session_id":"76dcd9d5-8849-485e-899f-4702cfeadc61","uuid":"715dd73d-a3ff-4714-b4dd-c99ca2a240b4"}
+{"type":"assistant","message":{"id":"msg_a9361aa3-833b-4e81-833f-8b86bc12f8b1","type":"message","role":"assistant","content":[{"type":"text","text":"
+
+---
+
+## 2026-01-28 - US-005: Issue List View
+- Implemented issue list view with TUI navigation
+- Files changed:
+  - internal/database/schema.go - Add ListIssue, ListIssues, ListIssuesSorted, ListIssuesByState, FormatDate
+  - internal/database/list_test.go - Tests for list query functions
+  - internal/list/list.go - New TUI model for issue list
+  - internal/list/list_test.go - Tests for list TUI
+  - cmd/ghissues/main.go - Integrate list view with ConfigAdapter
+
+**Acceptance Criteria Met:**
+- ✅ Issues displayed in left panel (vertical split layout)
+- ✅ Configurable columns with defaults: number, title, author, date, comment count
+- ✅ Column configuration stored in config file under display.columns
+- ✅ Currently selected issue is highlighted
+- ✅ Vim keys (j/k) and arrow keys for navigation
+- ✅ Issue count shown in status area
+
+**New Pattern Added to Codebase:**
+- Issue List View Pattern with Config interface, column validation, and navigation
+
+**Learnings:**
+- Config interface decouples packages while allowing easy testing
+- validateColumns() filters invalid columns gracefully rather than erroring
+- Selection index clamping prevents out-of-bounds during navigation
+- Using `tea.WindowSizeMsg` to track terminal dimensions for layout
+- Status bar at bottom provides context and instructions
 
 ---

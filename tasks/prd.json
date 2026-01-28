@@ -102,14 +102,15 @@
         "Issue count shown in status area"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-003"
       ],
       "labels": [
         "tui",
         "list"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-006",
@@ -304,6 +305,6 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-01-28T08:17:27.859Z"
+    "updatedAt": "2026-01-28T08:27:32.380Z"
   }
 }
