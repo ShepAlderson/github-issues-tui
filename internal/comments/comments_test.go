@@ -336,6 +336,77 @@ func contains(s, substr string) bool {
 	return len(s) > 0 && len(substr) > 0 && findSubstr(s, substr)
 }
 
+func TestModel_HelpOverlay(t *testing.T) {
+	model := NewModel("/tmp/test.db", "owner/repo", 1, "Test Issue")
+	model.SetDimensions(80, 24)
+
+	t.Run("'?' key toggles help overlay on", func(t *testing.T) {
+		m := model
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}}
+		newModel, _ := m.Update(msg)
+		m = newModel.(Model)
+
+		if !m.IsShowingHelp() {
+			t.Error("expected IsShowingHelp to be true after '?' key")
+		}
+	})
+
+	t.Run("'?' key toggles help overlay off", func(t *testing.T) {
+		m := model
+		// First toggle on
+		m.ShowHelp()
+		// Then toggle off
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}}
+		newModel, _ := m.Update(msg)
+		m = newModel.(Model)
+
+		if m.IsShowingHelp() {
+			t.Error("expected IsShowingHelp to be false after second '?' key")
+		}
+	})
+
+	t.Run("Esc key closes help overlay", func(t *testing.T) {
+		m := model
+		// First show help
+		m.ShowHelp()
+		// Then press Esc
+		msg := tea.KeyMsg{Type: tea.KeyEsc}
+		newModel, _ := m.Update(msg)
+		m = newModel.(Model)
+
+		if m.IsShowingHelp() {
+			t.Error("expected IsShowingHelp to be false after Esc")
+		}
+	})
+
+	t.Run("help overlay shows when enabled", func(t *testing.T) {
+		m := model
+		m.ShowHelp()
+
+		view := m.View()
+		// Help overlay should be visible
+		if !contains(view, "Keybindings") {
+			t.Error("expected view to contain 'Keybindings' when help is shown")
+		}
+	})
+
+	t.Run("help overlay blocks other keybindings", func(t *testing.T) {
+		m := model
+		m.ShowHelp()
+		scrollOffset := m.scrollOffset
+
+		// Try to scroll down while help is showing
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+		newModel, _ := m.Update(msg)
+		m = newModel.(Model)
+
+		// Scroll offset should not change while help is showing
+		if m.scrollOffset != scrollOffset {
+			t.Error("expected scrollOffset to not change while help is showing")
+		}
+	})
+}
+
 func findSubstr(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {
 		if s[i:i+len(substr)] == substr {

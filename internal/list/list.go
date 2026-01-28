@@ -9,10 +9,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	apperror "github.com/shepbook/ghissues/internal/error"
 	"github.com/shepbook/ghissues/internal/comments"
 	"github.com/shepbook/ghissues/internal/database"
 	"github.com/shepbook/ghissues/internal/detail"
+	apperror "github.com/shepbook/ghissues/internal/error"
+	"github.com/shepbook/ghissues/internal/help"
 )
 
 // Config interface for accessing configuration
@@ -66,8 +67,10 @@ type Model struct {
 	token           string
 	lastSyncTime    string
 	// error fields
-	minorError      *ErrorInfo
-	criticalError   *apperror.AppError
+	minorError    *ErrorInfo
+	criticalError *apperror.AppError
+	// help fields
+	helpModel help.Model
 }
 
 // Styles for the list view
@@ -123,6 +126,7 @@ func NewModel(cfg Config, dbPath, configPath string) Model {
 		showingComments:     false,
 		commentsModel:       nil,
 		commentsOpenPending: false,
+		helpModel:           help.NewModel(),
 	}
 }
 
@@ -135,7 +139,24 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		// Clear minor error on any key press
+		// Handle help overlay first
+		if m.helpModel.IsShowing() {
+			// Help overlay is showing, only Esc and ? dismiss it
+			switch msg.Type {
+			case tea.KeyEsc:
+				m.helpModel.HideHelp()
+				return m, nil
+			case tea.KeyRunes:
+				if msg.String() == "?" {
+					m.helpModel.HideHelp()
+					return m, nil
+				}
+			}
+			// All other keys are blocked while help is showing
+			return m, nil
+		}
+
+		// Clear minor error on any key press (only when help not showing)
 		if m.HasMinorError() {
 			m.ClearMinorError()
 		}
@@ -155,6 +176,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "q", "Q":
 				return m, tea.Quit
+			case "?":
+				// Toggle help overlay
+				m.helpModel.ToggleHelp()
+				return m, nil
 			case "k":
 				if m.selected > 0 {
 					m.selected--
@@ -203,6 +228,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.helpModel.SetDimensions(msg.Width, msg.Height)
 
 	case issuesLoadedMsg:
 		m.issues = msg.issues
@@ -248,10 +274,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the split UI with issue list and detail panel
 func (m Model) View() string {
+	var view string
 	if !m.showDetail || m.detailModel == nil {
-		return m.renderListOnlyView()
+		view = m.renderListOnlyView()
+	} else {
+		view = m.renderSplitView()
 	}
-	return m.renderSplitView()
+
+	// If help overlay is showing, render it on top
+	if m.helpModel.IsShowing() {
+		helpView := m.helpModel.View()
+		if helpView != "" {
+			return helpView
+		}
+	}
+
+	return view
 }
 
 // renderListOnlyView renders just the issue list (when detail not available)
@@ -299,7 +337,7 @@ func (m Model) renderListOnlyView() string {
 			orderIcon = "↑"
 		}
 		lastSync := m.getLastSyncDisplay()
-		status := fmt.Sprintf("%d issues | sort:%s %s | %s | j/k to navigate | s to sort | q to quit", len(m.issues), m.sortField, orderIcon, lastSync)
+		status := fmt.Sprintf("%d issues | sort:%s %s | %s | j/k nav | s sort | ? help | q quit", len(m.issues), m.sortField, orderIcon, lastSync)
 		b.WriteString(statusStyle.Render(status))
 	}
 	b.WriteString("\n")
@@ -358,7 +396,7 @@ func (m Model) renderSplitView() string {
 			orderIcon = "↑"
 		}
 		lastSync := m.getLastSyncDisplay()
-		status := fmt.Sprintf("%d issues | sort:%s %s | %s | m markdown | r refresh | enter comments | q quit", len(m.issues), m.sortField, orderIcon, lastSync)
+		status := fmt.Sprintf("%d issues | sort:%s %s | %s | m markdown | r refresh | enter comments | ? help | q quit", len(m.issues), m.sortField, orderIcon, lastSync)
 		listBuilder.WriteString(statusStyle.Render(status))
 	}
 
@@ -729,6 +767,21 @@ func (m *Model) GetCriticalError() *apperror.AppError {
 // AcknowledgeCriticalError acknowledges and clears the critical error
 func (m *Model) AcknowledgeCriticalError() {
 	m.criticalError = nil
+}
+
+// IsShowingHelp returns whether the help overlay is showing
+func (m Model) IsShowingHelp() bool {
+	return m.helpModel.IsShowing()
+}
+
+// ShowHelp shows the help overlay
+func (m *Model) ShowHelp() {
+	m.helpModel.ShowHelp()
+}
+
+// HideHelp hides the help overlay
+func (m *Model) HideHelp() {
+	m.helpModel.HideHelp()
 }
 
 // getLastSyncDisplay returns a formatted string for the last sync status

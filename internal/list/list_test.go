@@ -812,6 +812,82 @@ func TestModel_MinorErrorStatus(t *testing.T) {
 	})
 }
 
+func TestModel_HelpOverlay(t *testing.T) {
+	cfg := &testConfig{columns: []string{"number", "title"}}
+	model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+	model.issues = []database.ListIssue{
+		{Number: 1, Title: "Issue 1", Author: "alice"},
+	}
+	model.width = 80
+	model.height = 24
+
+	t.Run("'?' key toggles help overlay on", func(t *testing.T) {
+		m := model
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}}
+		newModel, _ := m.Update(msg)
+		m = newModel.(Model)
+
+		if !m.IsShowingHelp() {
+			t.Error("expected IsShowingHelp to be true after '?' key")
+		}
+	})
+
+	t.Run("'?' key toggles help overlay off", func(t *testing.T) {
+		m := model
+		// First toggle on
+		m.ShowHelp()
+		// Then toggle off
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}}
+		newModel, _ := m.Update(msg)
+		m = newModel.(Model)
+
+		if m.IsShowingHelp() {
+			t.Error("expected IsShowingHelp to be false after second '?' key")
+		}
+	})
+
+	t.Run("Esc key closes help overlay", func(t *testing.T) {
+		m := model
+		// First show help
+		m.ShowHelp()
+		// Then press Esc
+		msg := tea.KeyMsg{Type: tea.KeyEsc}
+		newModel, _ := m.Update(msg)
+		m = newModel.(Model)
+
+		if m.IsShowingHelp() {
+			t.Error("expected IsShowingHelp to be false after Esc")
+		}
+	})
+
+	t.Run("help overlay shows when enabled", func(t *testing.T) {
+		m := model
+		m.ShowHelp()
+
+		view := m.View()
+		// Help overlay should be visible
+		if !contains(view, "Keybindings") {
+			t.Error("expected view to contain 'Keybindings' when help is shown")
+		}
+	})
+
+	t.Run("help overlay blocks other keybindings", func(t *testing.T) {
+		m := model
+		m.ShowHelp()
+		selected := m.selected
+
+		// Try to move down while help is showing
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+		newModel, _ := m.Update(msg)
+		m = newModel.(Model)
+
+		// Selection should not change while help is showing
+		if m.selected != selected {
+			t.Error("expected selection to not change while help is showing")
+		}
+	})
+}
+
 func TestModel_LastSyncDisplay(t *testing.T) {
 	cfg := &testConfig{columns: []string{"number", "title"}}
 

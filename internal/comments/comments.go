@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/shepbook/ghissues/internal/database"
+	"github.com/shepbook/ghissues/internal/help"
 )
 
 // Model represents the comments view TUI state
@@ -24,6 +25,7 @@ type Model struct {
 	scrollOffset int
 	renderedMode bool
 	db           *sql.DB // Will be set when loading
+	helpModel    help.Model
 }
 
 // Styles for the comments view
@@ -69,6 +71,7 @@ func NewModel(dbPath, repo string, issueNumber int, issueTitle string) Model {
 		height:       24,
 		scrollOffset: 0,
 		renderedMode: true,
+		helpModel:    help.NewModel(),
 	}
 }
 
@@ -81,6 +84,23 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Handle help overlay first
+		if m.helpModel.IsShowing() {
+			// Help overlay is showing, only Esc and ? dismiss it
+			switch msg.Type {
+			case tea.KeyEsc:
+				m.helpModel.HideHelp()
+				return m, nil
+			case tea.KeyRunes:
+				if msg.String() == "?" {
+					m.helpModel.HideHelp()
+					return m, nil
+				}
+			}
+			// All other keys are blocked while help is showing
+			return m, nil
+		}
+
 		switch msg.Type {
 		case tea.KeyCtrlC:
 			return m, tea.Quit
@@ -98,6 +118,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "q", "Q":
 				return m, tea.Quit
+			case "?":
+				// Toggle help overlay
+				m.helpModel.ToggleHelp()
+				return m, nil
 			case "j":
 				m.scrollOffset++
 			case "k":
@@ -112,6 +136,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.helpModel.SetDimensions(msg.Width, msg.Height)
 
 	case commentsLoadedMsg:
 		m.comments = msg.comments
@@ -122,6 +147,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the comments view
 func (m Model) View() string {
+	// If help overlay is showing, render it on top
+	if m.helpModel.IsShowing() {
+		helpView := m.helpModel.View()
+		if helpView != "" {
+			return helpView
+		}
+	}
+
 	var b strings.Builder
 
 	// Header with issue info
@@ -143,7 +176,7 @@ func (m Model) View() string {
 	if !m.renderedMode {
 		modeText = "raw"
 	}
-	footer := fmt.Sprintf("Mode: %s | m toggle | j/k scroll | q/esc back", modeText)
+	footer := fmt.Sprintf("Mode: %s | m toggle | j/k scroll | ? help | q/esc back", modeText)
 	b.WriteString(statusStyle.Render(footer))
 
 	return b.String()
@@ -292,4 +325,19 @@ func formatDate(dateStr string) string {
 		return dateStr
 	}
 	return t.Format("2006-01-02")
+}
+
+// IsShowingHelp returns whether the help overlay is showing
+func (m Model) IsShowingHelp() bool {
+	return m.helpModel.IsShowing()
+}
+
+// ShowHelp shows the help overlay
+func (m *Model) ShowHelp() {
+	m.helpModel.ShowHelp()
+}
+
+// HideHelp hides the help overlay
+func (m *Model) HideHelp() {
+	m.helpModel.HideHelp()
 }
