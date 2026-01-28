@@ -60,6 +60,15 @@ after each iteration and included in agent prompts for context.
 - Support both vim keys (j/k) and arrow keys for navigation
 - Show issue count in status area at bottom of view
 
+### Issue Sorting Pattern
+- Support multiple sort fields stored in ordered array for cycling
+- Use callback pattern (Config.SaveSort) for persistence to avoid circular imports
+- Default sort: most recently updated first ("updated" descending)
+- Cycle fields with 's' key, toggle order with 'S' key
+- When cycling fields, reset to descending order
+- Show current sort in status bar with icon (↓ or ↑)
+- Reload data immediately after sort change for instant feedback
+
 ---
 
 ## 2026-01-28 - US-001
@@ -222,5 +231,38 @@ ignature":""}],"model":"hf:moonshotai/Kimi-K2.5","stop_reason":null,"stop_sequen
 
 **Notes:**
 d in left panel (vertical split layout)\n- ✅ Configurable columns with defaults: number, title, author, date, comment count\n- ✅ Column configuration stored in config file under `display.columns`\n- ✅ Currently selected issue is highlighted\n- ✅ Vim keys (j/k) and arrow keys for navigation\n- ✅ Issue count shown in status area\n\n### New Pattern Added\n- **Issue List View Pattern** - Config interface for decoupling, column validation, selection index clamping, lipgloss styling for highlights\n\n
+
+---
+
+## ✓ Iteration - US-006: Issue Sorting
+*2026-01-28*
+
+**Status:** Completed
+
+**Notes:**
+- Implemented issue sorting with multiple sort fields
+- Files changed:
+  - internal/list/list.go - Sort state fields, key handlers, status bar, Config.SaveSort callback
+  - internal/list/list_test.go - Tests for sort cycling, toggling, persistence
+  - internal/database/schema.go - Added comment_count sort support
+  - internal/database/list_test.go - Tests for comment count sorting
+  - cmd/ghissues/main.go - ConfigAdapter SaveSort implementation, updated help text
+
+**Acceptance Criteria Met:**
+- ✅ Default sort: most recently updated first (updated_at DESC)
+- ✅ Available sort options: updated, created, number, comments
+- ✅ Sort order toggled with 's' to cycle fields, 'S' to reverse direction
+- ✅ Current sort shown in status bar with field name and ↑/↓ indicator
+- ✅ Sort preference persisted to config file when changed
+
+**New Pattern Added to Codebase:**
+- **Issue Sorting Pattern** - Multiple sort fields in array for cycling, callback pattern for persistence, default to updated/descending, status bar indicator
+
+**Learnings:**
+- Callback pattern (Config.SaveSort) avoids circular imports between packages
+- When cycling sort fields, reset to descending order for consistency
+- Use tea.Batch() to execute multiple commands (save + reload)
+- Status bar should show both sort field and direction indicator (↑/↓)
+- SQLite "comment_count" column for sorting by number of comments
 
 ---
