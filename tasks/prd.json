@@ -236,14 +236,15 @@
         "Help overlay dismissible with ? or Esc"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-005"
       ],
       "labels": [
         "tui",
         "help"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-012",
@@ -311,6 +312,6 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-01-28T09:22:57.340Z"
+    "updatedAt": "2026-01-28T09:34:02.811Z"
   }
 }

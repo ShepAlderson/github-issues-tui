@@ -534,3 +534,47 @@ ror/modal_test.go` (new) - Tests for error modal\n- `internal/list/list.go` - Ad
 - Tests should verify both the helper function output and the view rendering
 
 ---
+## ✓ Iteration 11 - US-010: Last Synced Indicator
+*2026-01-28T09:22:57.416Z (540s)*
+
+**Status:** Completed
+
+**Notes:**
+estamp)\n\n**Files Changed:**\n- `internal/database/schema.go` - Added `FormatRelativeTime()` function\n- `internal/database/schema_test.go` - Tests for `FormatRelativeTime()`\n- `internal/list/list.go` - Added last sync time tracking and display\n- `internal/list/list_test.go` - Tests for last sync display\n\n**New Pattern Added:**\n- **Last Synced Indicator Pattern** - Display relative time in status bar, handle edge cases (empty/invalid timestamps), fetch from database when loading issues\n\n
+
+---
+
+## ✓ Iteration 12 - US-011: Keybinding Help
+*2026-01-28*
+
+**Status:** Completed
+
+**Notes:**
+- Implemented help overlay with all keybindings organized by context
+- Files changed:
+  - `internal/help/help.go` (new) - Help overlay model and rendering
+  - `internal/help/help_test.go` (new) - Tests for help overlay
+  - `internal/list/list.go` - Integrated help overlay, updated footer with ? key
+  - `internal/list/list_test.go` - Tests for help overlay in list view
+  - `internal/comments/comments.go` - Integrated help overlay, updated footer with ? key
+  - `internal/comments/comments_test.go` - Tests for help overlay in comments view
+
+**Acceptance Criteria Met:**
+- ✅ **? opens help overlay with all keybindings organized by context** - Shows Navigation, List View, Detail View, Comments View sections
+- ✅ **Persistent footer shows context-sensitive common keys** - Footer shows ? for help in all views
+- ✅ **Footer updates based on current view (list, detail, comments)** - List: j/k nav, s sort, ? help, q quit; Split: + m markdown, r refresh, enter comments; Comments: m toggle, j/k scroll, ? help, q/esc back
+- ✅ **Help overlay dismissible with ? or Esc** - Both keys work to close the overlay
+
+**New Pattern Added to Codebase:**
+- **Help Overlay Pattern** - Modal overlay that blocks other keybindings, toggles with ? key, dismisses with ? or Esc, organized by context sections
+
+**Learnings:**
+- Overlay pattern for blocking input: Check `IsShowing()` first in Update(), handle Esc and ? to dismiss, return early to block other keys
+- Use lipgloss.Place() to center modal on screen
+- Context-sensitive footers: Add common keys (?, q) in all views, view-specific keys in their respective views
+- Help content organization: Group by context (Navigation, List, Detail, Comments) for discoverability
+- Testing overlays: Verify blocking behavior (keys don't change state while showing) and visibility toggles
+- Help model lifecycle: NewModel() -> ToggleHelp()/ShowHelp()/HideHelp() -> IsShowing() check -> View() renders when showing
+- Window size propagation: Update help model dimensions when parent model receives WindowSizeMsg
+
+---
