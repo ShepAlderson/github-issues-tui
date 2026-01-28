@@ -17,7 +17,7 @@ func TestNewModel(t *testing.T) {
 		UpdatedAt: "2024-01-16T14:00:00Z",
 	}
 
-	model := NewModel(issue, 60, 20)
+	model := NewModel(issue, 60, 20, "default")
 
 	if model.Issue.Number != 42 {
 		t.Errorf("expected issue number 42, got %d", model.Issue.Number)
@@ -48,7 +48,7 @@ func TestModel_ToggleRenderedMode(t *testing.T) {
 		UpdatedAt: "2024-01-15T10:00:00Z",
 	}
 
-	model := NewModel(issue, 60, 20)
+	model := NewModel(issue, 60, 20, "default")
 
 	// Initially in rendered mode
 	if !model.RenderedMode {
@@ -79,7 +79,7 @@ func TestRenderHeader(t *testing.T) {
 		Body:      "Issue body",
 	}
 
-	model := NewModel(issue, 60, 20)
+	model := NewModel(issue, 60, 20, "default")
 	header := model.renderHeader()
 
 	if header == "" {
@@ -119,7 +119,7 @@ func TestRenderHeader_WithClosedAt(t *testing.T) {
 		Body:      "Issue body",
 	}
 
-	model := NewModel(issue, 60, 20)
+	model := NewModel(issue, 60, 20, "default")
 	header := model.renderHeader()
 
 	// Check that header contains closed date
@@ -141,7 +141,7 @@ func TestRenderLabels(t *testing.T) {
 			Body:      "Body",
 		}
 
-		model := NewModel(issue, 60, 20)
+		model := NewModel(issue, 60, 20, "default")
 		labels := model.renderLabels()
 
 		if labels == "" {
@@ -169,7 +169,7 @@ func TestRenderLabels(t *testing.T) {
 			Body:      "Body",
 		}
 
-		model := NewModel(issue, 60, 20)
+		model := NewModel(issue, 60, 20, "default")
 		labels := model.renderLabels()
 
 		if labels != "" {
@@ -191,7 +191,7 @@ func TestRenderAssignees(t *testing.T) {
 			Body:      "Body",
 		}
 
-		model := NewModel(issue, 60, 20)
+		model := NewModel(issue, 60, 20, "default")
 		assignees := model.renderAssignees()
 
 		if assignees == "" {
@@ -219,7 +219,7 @@ func TestRenderAssignees(t *testing.T) {
 			Body:      "Body",
 		}
 
-		model := NewModel(issue, 60, 20)
+		model := NewModel(issue, 60, 20, "default")
 		assignees := model.renderAssignees()
 
 		if assignees != "" {
@@ -242,7 +242,7 @@ func TestModel_View(t *testing.T) {
 		Assignees:    []string{"alice"},
 	}
 
-	model := NewModel(issue, 60, 20)
+	model := NewModel(issue, 60, 20, "default")
 	view := model.View()
 
 	if view == "" {
@@ -276,7 +276,7 @@ func TestModel_View_RawMode(t *testing.T) {
 		Body:      "Raw **markdown** body",
 	}
 
-	model := NewModel(issue, 60, 20)
+	model := NewModel(issue, 60, 20, "default")
 	model.RenderedMode = false
 
 	view := model.View()
@@ -326,7 +326,7 @@ func TestSetDimensions(t *testing.T) {
 		Body:      "Body",
 	}
 
-	model := NewModel(issue, 60, 20)
+	model := NewModel(issue, 60, 20, "default")
 	model.SetDimensions(80, 30)
 
 	if model.Width != 80 {

@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/shepbook/ghissues/internal/database"
+	"github.com/shepbook/ghissues/internal/theme"
 )
 
 // Model represents the issue detail view
@@ -16,55 +17,24 @@ type Model struct {
 	Width        int
 	Height       int
 	RenderedMode bool
+	styles       *theme.ThemeStyles
 }
 
-// Styles for the detail view
-var (
-	titleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#7D56F4")).
-			MarginBottom(1)
-
-	headerStyle = lipgloss.NewStyle().
-			BorderStyle(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#7D56F4")).
-			Padding(1, 2).
-			MarginBottom(1)
-
-	metaStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#888888"))
-
-	stateOpenStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#238636")).
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Padding(0, 1)
-
-	stateClosedStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("#8957E5")).
-				Foreground(lipgloss.Color("#FFFFFF")).
-				Padding(0, 1)
-
-	labelStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#1F6FEB")).
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Padding(0, 1).
-			MarginRight(1)
-
-	bodyStyle = lipgloss.NewStyle().
-			Padding(1, 0)
-
-	footerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#888888")).
-			MarginTop(1)
-)
-
 // NewModel creates a new detail model
-func NewModel(issue database.IssueDetail, width, height int) Model {
+func NewModel(issue database.IssueDetail, width, height int, themeName string) Model {
+	// Get theme
+	if themeName == "" {
+		themeName = "default"
+	}
+	themeObj := theme.GetTheme(themeName)
+	styles := themeObj.Styles()
+
 	return Model{
 		Issue:        issue,
 		Width:        width,
 		Height:       height,
 		RenderedMode: true, // Default to rendered mode
+		styles:       styles,
 	}
 }
 
@@ -108,7 +78,7 @@ func (m Model) View() string {
 	if !m.RenderedMode {
 		modeText = "raw"
 	}
-	footer := footerStyle.Render(fmt.Sprintf("Mode: %s | m to toggle | q to quit", modeText))
+	footer := m.styles.Footer.Render(fmt.Sprintf("Mode: %s | m to toggle | q to quit", modeText))
 	b.WriteString(footer)
 
 	return b.String()
@@ -120,14 +90,14 @@ func (m Model) renderHeader() string {
 
 	// Title with issue number
 	title := fmt.Sprintf("#%d %s", m.Issue.Number, m.Issue.Title)
-	parts = append(parts, titleStyle.Render(title))
+	parts = append(parts, m.styles.Title.Render(title))
 
 	// State badge
 	var stateBadge string
 	if m.Issue.State == "open" {
-		stateBadge = stateOpenStyle.Render("● open")
+		stateBadge = m.styles.StateOpen.Render("● open")
 	} else {
-		stateBadge = stateClosedStyle.Render("● closed")
+		stateBadge = m.styles.StateClosed.Render("● closed")
 	}
 
 	// Meta line: author and dates
@@ -142,7 +112,12 @@ func (m Model) renderHeader() string {
 	}
 
 	parts = append(parts, stateBadge)
-	parts = append(parts, metaStyle.Render(meta))
+	parts = append(parts, m.styles.Meta.Render(meta))
+
+	headerStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		Padding(1, 2).
+		MarginBottom(1)
 
 	return headerStyle.Render(strings.Join(parts, "\n"))
 }
@@ -155,7 +130,7 @@ func (m Model) renderLabels() string {
 
 	var labels []string
 	for _, label := range m.Issue.Labels {
-		labels = append(labels, labelStyle.Render(label))
+		labels = append(labels, m.styles.Label.Render(label))
 	}
 
 	return strings.Join(labels, " ")
@@ -168,13 +143,13 @@ func (m Model) renderAssignees() string {
 	}
 
 	assigneesList := strings.Join(m.Issue.Assignees, ", ")
-	return metaStyle.Render(fmt.Sprintf("Assignees: %s", assigneesList))
+	return m.styles.Meta.Render(fmt.Sprintf("Assignees: %s", assigneesList))
 }
 
 // renderBody renders the issue body
 func (m Model) renderBody() string {
 	if m.Issue.Body == "" {
-		return bodyStyle.Render("*No description provided*")
+		return m.styles.Body.Render("*No description provided*")
 	}
 
 	// Calculate available height for body
@@ -194,21 +169,21 @@ func (m Model) renderBody() string {
 		if err != nil {
 			// Fall back to raw if glamour fails
 			body := truncateBody(m.Issue.Body, availableHeight)
-			return bodyStyle.Render(body)
+			return m.styles.Body.Render(body)
 		}
 
 		rendered, err := renderer.Render(m.Issue.Body)
 		if err != nil {
 			body := truncateBody(m.Issue.Body, availableHeight)
-			return bodyStyle.Render(body)
+			return m.styles.Body.Render(body)
 		}
 
-		return bodyStyle.Render(rendered)
+		return m.styles.Body.Render(rendered)
 	}
 
 	// Raw mode - show markdown as-is
 	body := truncateBody(m.Issue.Body, availableHeight)
-	return bodyStyle.Render(body)
+	return m.styles.Body.Render(body)
 }
 
 // formatDate formats a date string for display

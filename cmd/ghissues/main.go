@@ -44,6 +44,10 @@ func (a *ConfigAdapter) SaveSort(field string, descending bool) error {
 	return a.cfg.Save()
 }
 
+func (a *ConfigAdapter) GetTheme() string {
+	return a.cfg.Display.Theme
+}
+
 func main() {
 	// Parse global flags
 	var dbFlag string
@@ -58,6 +62,12 @@ func main() {
 		switch flag.Args()[0] {
 		case "config":
 			if err := runConfig(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			os.Exit(0)
+		case "themes":
+			if err := runThemes(); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
@@ -280,6 +290,38 @@ func runConfig() error {
 	return nil
 }
 
+func runThemes() error {
+	// Load current config to get the current theme
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	currentTheme := cfg.Display.Theme
+	if currentTheme == "" {
+		currentTheme = "default"
+	}
+
+	// Run the theme picker
+	selectedTheme, saved, err := config.RunThemePicker(currentTheme)
+	if err != nil {
+		return fmt.Errorf("failed to run theme picker: %w", err)
+	}
+
+	if !saved {
+		// User cancelled
+		return nil
+	}
+
+	// Save the selected theme to config
+	if err := config.SaveThemeToConfig(selectedTheme); err != nil {
+		return fmt.Errorf("failed to save theme: %w", err)
+	}
+
+	fmt.Printf("Theme set to: %s\n", selectedTheme)
+	return nil
+}
+
 func runSync(dbFlag string) error {
 	// Load config to get repository and database path
 	cfg, err := config.Load()
@@ -310,6 +352,7 @@ func printHelp() {
 Usage:
   ghissues              Run the application (setup if first run)
   ghissues config       Configure repository and authentication
+  ghissues themes       Preview and change color theme
   ghissues sync         Sync issues from configured repository
   ghissues help         Show this help message
   ghissues version      Show version

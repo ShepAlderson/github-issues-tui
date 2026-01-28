@@ -578,3 +578,53 @@ estamp)\n\n**Files Changed:**\n- `internal/database/schema.go` - Added `FormatRe
 - Window size propagation: Update help model dimensions when parent model receives WindowSizeMsg
 
 ---
+## ✓ Iteration 12 - US-011: Keybinding Help
+*2026-01-28T09:34:02.882Z (664s)*
+
+**Status:** Completed
+
+**Notes:**
+s based on current view**:\n  - List view: `j/k nav | s sort | ? help | q quit`\n  - Split view: `m markdown | r refresh | enter comments | ? help`\n  - Comments view: `m toggle | j/k scroll | ? help | q/esc back`\n- ✅ **Help overlay dismissible with ? or Esc**\n\n**New Pattern Added:**\n- **Help Overlay Pattern** - Modal overlay that blocks other keybindings while showing, centered with lipgloss.Place(), organized by context sections\n\nAll tests pass (47 new tests added, ~200 tests total).\n\n
+
+---
+
+---
+
+## ✓ Iteration 13 - US-012: Color Themes
+*2026-01-28*
+
+**Status:** Completed
+
+**Notes:**
+- Implemented color theme system with 6 built-in themes
+- Files changed:
+  - `internal/theme/theme.go` (new) - Theme definitions for all 6 themes
+  - `internal/theme/theme_test.go` (new) - Tests for theme package
+  - `internal/config/theme_cmd.go` (new) - Theme picker TUI
+  - `internal/config/theme_cmd_test.go` (new) - Tests for theme command
+  - `internal/list/list.go` - Updated to use theme styles
+  - `internal/list/list_test.go` - Added GetTheme() to testConfig
+  - `internal/detail/detail.go` - Updated to use theme styles
+  - `internal/detail/detail_test.go` - Updated NewModel calls with theme parameter
+  - `cmd/ghissues/main.go` - Added themes subcommand, ConfigAdapter.GetTheme()
+
+**Acceptance Criteria Met:**
+- ✅ **Multiple built-in themes: default, dracula, gruvbox, nord, solarized-dark, solarized-light** - All 6 themes defined with appropriate color palettes
+- ✅ **Theme selected via config file display.theme** - Config already had theme field, now used by UI
+- ✅ **Theme can be previewed/changed with command `ghissues themes`** - Interactive TUI for theme selection with live preview
+- ✅ **Themes use lipgloss for consistent styling** - Theme.Styles() returns ThemeStyles with all lipgloss.Style values
+
+**New Pattern Added to Codebase:**
+- **Theme System Pattern** - Theme struct with color definitions, ThemeStyles with lipgloss.Style values, GetTheme(name) for lookup, config integration for persistence
+
+**Learnings:**
+- Theme struct should define semantic color names (Primary, Secondary, Error, Success, Open, Closed, Label, etc.)
+- ThemeStyles struct contains lipgloss.Style values (not pointers) for easy copying
+- GetTheme() returns *Theme with fallback to default for unknown names
+- Config interface should expose GetTheme() so UI packages can retrieve current theme
+- Pass theme name through the model hierarchy (list -> detail) or store in parent model
+- TestConfig in tests needs to implement full Config interface including GetTheme()
+- Live preview in theme picker helps users visualize themes before selecting
+- Use theme colors for all UI elements: headers, status bars, badges, borders, errors
+- Keep theme picker simple: list with selection indicator, preview box showing theme colors
+

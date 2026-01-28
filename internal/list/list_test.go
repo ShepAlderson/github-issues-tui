@@ -468,6 +468,7 @@ type testConfig struct {
 	repo      string
 	sortField string
 	sortDesc  bool
+	theme     string
 }
 
 func (c *testConfig) GetDisplayColumns() []string {
@@ -484,6 +485,10 @@ func (c *testConfig) GetSortField() string {
 
 func (c *testConfig) GetSortDescending() bool {
 	return c.sortDesc
+}
+
+func (c *testConfig) GetTheme() string {
+	return c.theme
 }
 
 func (c *testConfig) SaveSort(field string, descending bool) error {

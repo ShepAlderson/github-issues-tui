@@ -14,6 +14,7 @@ import (
 	"github.com/shepbook/ghissues/internal/detail"
 	apperror "github.com/shepbook/ghissues/internal/error"
 	"github.com/shepbook/ghissues/internal/help"
+	"github.com/shepbook/ghissues/internal/theme"
 )
 
 // Config interface for accessing configuration
@@ -22,6 +23,7 @@ type Config interface {
 	GetDefaultRepository() string
 	GetSortField() string
 	GetSortDescending() bool
+	GetTheme() string
 	SaveSort(field string, descending bool) error
 }
 
@@ -71,28 +73,19 @@ type Model struct {
 	criticalError *apperror.AppError
 	// help fields
 	helpModel help.Model
+	// theme fields
+	styles    *theme.ThemeStyles
+	themeName string
 }
 
-// Styles for the list view
-var (
-	selectedStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#7D56F4")).
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Bold(true)
-
-	normalStyle = lipgloss.NewStyle()
-
-	headerStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#7D56F4"))
-
-	statusStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#888888"))
-
-	errorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FF6B6B")).
-			Bold(true)
-)
+// Styles for the list view - now dynamically set from theme
+type ListStyles struct {
+	Selected lipgloss.Style
+	Normal   lipgloss.Style
+	Header   lipgloss.Style
+	Status   lipgloss.Style
+	Error    lipgloss.Style
+}
 
 // NewModel creates a new list model
 func NewModel(cfg Config, dbPath, configPath string) Model {
@@ -106,6 +99,14 @@ func NewModel(cfg Config, dbPath, configPath string) Model {
 	if sortField == "" {
 		sortField = "updated"
 	}
+
+	// Get theme from config
+	themeName := cfg.GetTheme()
+	if themeName == "" {
+		themeName = "default"
+	}
+	themeObj := theme.GetTheme(themeName)
+	styles := themeObj.Styles()
 
 	return Model{
 		dbPath:              dbPath,
@@ -127,6 +128,8 @@ func NewModel(cfg Config, dbPath, configPath string) Model {
 		commentsModel:       nil,
 		commentsOpenPending: false,
 		helpModel:           help.NewModel(),
+		styles:              styles,
+		themeName:           themeName,
 	}
 }
 
@@ -262,7 +265,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					detailHeight = 5
 				}
 
-				detailModel := detail.NewModel(*m.detailIssue, detailWidth, detailHeight)
+				detailModel := detail.NewModel(*m.detailIssue, detailWidth, detailHeight, m.themeName)
 				detailModel.RenderedMode = m.renderedMode
 				m.detailModel = &detailModel
 			}
@@ -297,7 +300,7 @@ func (m Model) renderListOnlyView() string {
 	var b strings.Builder
 
 	// Title
-	b.WriteString(headerStyle.Render(fmt.Sprintf("📋 %s", m.repo)))
+	b.WriteString(m.styles.Header.Render(fmt.Sprintf("📋 %s", m.repo)))
 	b.WriteString("\n\n")
 
 	// Calculate available height
@@ -330,7 +333,7 @@ func (m Model) renderListOnlyView() string {
 	if m.HasMinorError() {
 		// Show error in status bar with guidance
 		errorStatus := fmt.Sprintf("⚠️  %s | %s | Press any key to dismiss", m.minorError.Message, m.minorError.Guidance)
-		b.WriteString(errorStyle.Render(errorStatus))
+		b.WriteString(m.styles.Error.Render(errorStatus))
 	} else {
 		orderIcon := "↓"
 		if !m.sortDesc {
@@ -338,7 +341,7 @@ func (m Model) renderListOnlyView() string {
 		}
 		lastSync := m.getLastSyncDisplay()
 		status := fmt.Sprintf("%d issues | sort:%s %s | %s | j/k nav | s sort | ? help | q quit", len(m.issues), m.sortField, orderIcon, lastSync)
-		b.WriteString(statusStyle.Render(status))
+		b.WriteString(m.styles.Status.Render(status))
 	}
 	b.WriteString("\n")
 
@@ -363,7 +366,7 @@ func (m Model) renderSplitView() string {
 	var listBuilder strings.Builder
 
 	// Title
-	listBuilder.WriteString(headerStyle.Render(fmt.Sprintf("📋 %s", m.repo)))
+	listBuilder.WriteString(m.styles.Header.Render(fmt.Sprintf("📋 %s", m.repo)))
 	listBuilder.WriteString("\n\n")
 
 	// Issue list
@@ -389,7 +392,7 @@ func (m Model) renderSplitView() string {
 	if m.HasMinorError() {
 		// Show error in status bar with guidance
 		errorStatus := fmt.Sprintf("⚠️  %s | %s", m.minorError.Message, m.minorError.Guidance)
-		listBuilder.WriteString(errorStyle.Render(errorStatus))
+		listBuilder.WriteString(m.styles.Error.Render(errorStatus))
 	} else {
 		orderIcon := "↓"
 		if !m.sortDesc {
@@ -397,7 +400,7 @@ func (m Model) renderSplitView() string {
 		}
 		lastSync := m.getLastSyncDisplay()
 		status := fmt.Sprintf("%d issues | sort:%s %s | %s | m markdown | r refresh | enter comments | ? help | q quit", len(m.issues), m.sortField, orderIcon, lastSync)
-		listBuilder.WriteString(statusStyle.Render(status))
+		listBuilder.WriteString(m.styles.Status.Render(status))
 	}
 
 	// Style the list panel with border
@@ -444,9 +447,9 @@ func (m Model) renderIssueLine(issue database.ListIssue, isSelected bool) string
 
 	// Add selection indicator
 	if isSelected {
-		return selectedStyle.Render("> " + line)
+		return m.styles.Selected.Render("> " + line)
 	}
-	return normalStyle.Render("  " + line)
+	return m.styles.Normal.Render("  " + line)
 }
 
 // renderColumns extracts and formats the requested columns from an issue
