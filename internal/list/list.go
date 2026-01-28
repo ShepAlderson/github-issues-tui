@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -63,6 +64,7 @@ type Model struct {
 	refreshPending  bool
 	refreshProgress string
 	token           string
+	lastSyncTime    string
 	// error fields
 	minorError      *ErrorInfo
 	criticalError   *apperror.AppError
@@ -204,6 +206,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case issuesLoadedMsg:
 		m.issues = msg.issues
+		m.lastSyncTime = msg.lastSyncTime
 		if m.selected >= len(m.issues) {
 			m.selected = 0
 		}
@@ -295,7 +298,8 @@ func (m Model) renderListOnlyView() string {
 		if !m.sortDesc {
 			orderIcon = "↑"
 		}
-		status := fmt.Sprintf("%d issues | sort:%s %s | j/k to navigate | s to sort | q to quit", len(m.issues), m.sortField, orderIcon)
+		lastSync := m.getLastSyncDisplay()
+		status := fmt.Sprintf("%d issues | sort:%s %s | %s | j/k to navigate | s to sort | q to quit", len(m.issues), m.sortField, orderIcon, lastSync)
 		b.WriteString(statusStyle.Render(status))
 	}
 	b.WriteString("\n")
@@ -339,7 +343,8 @@ func (m Model) renderSplitView() string {
 		}
 	}
 
-	// Status bar for list
+	// Status bar for list (if no issues, this is the only status shown)
+	_ = listContentHeight // Use the variable to avoid unused warning
 	listBuilder.WriteString("\n")
 
 	// Show minor error if present, otherwise show normal status
@@ -352,7 +357,8 @@ func (m Model) renderSplitView() string {
 		if !m.sortDesc {
 			orderIcon = "↑"
 		}
-		status := fmt.Sprintf("%d issues | sort:%s %s | m markdown | r refresh | enter comments | q quit", len(m.issues), m.sortField, orderIcon)
+		lastSync := m.getLastSyncDisplay()
+		status := fmt.Sprintf("%d issues | sort:%s %s | %s | m markdown | r refresh | enter comments | q quit", len(m.issues), m.sortField, orderIcon, lastSync)
 		listBuilder.WriteString(statusStyle.Render(status))
 	}
 
@@ -462,7 +468,8 @@ func validateColumns(columns []string) []string {
 
 // issuesLoadedMsg is sent when issues are loaded from the database
 type issuesLoadedMsg struct {
-	issues []database.ListIssue
+	issues       []database.ListIssue
+	lastSyncTime string
 }
 
 // loadIssues loads issues from the database with current sort settings
@@ -470,16 +477,22 @@ func (m Model) loadIssues() tea.Cmd {
 	return func() tea.Msg {
 		db, err := database.InitializeSchema(m.dbPath)
 		if err != nil {
-			return issuesLoadedMsg{issues: []database.ListIssue{}}
+			return issuesLoadedMsg{issues: []database.ListIssue{}, lastSyncTime: ""}
 		}
+		defer db.Close()
 
 		issues, err := database.ListIssuesSorted(db, m.repo, m.sortField, m.sortDesc)
 		if err != nil {
-			db.Close()
-			return issuesLoadedMsg{issues: []database.ListIssue{}}
+			return issuesLoadedMsg{issues: []database.ListIssue{}, lastSyncTime: ""}
 		}
 
-		return issuesLoadedMsg{issues: issues}
+		// Get last sync time
+		lastSync, err := database.GetLastSyncTime(db, m.repo)
+		if err != nil {
+			return issuesLoadedMsg{issues: issues, lastSyncTime: ""}
+		}
+
+		return issuesLoadedMsg{issues: issues, lastSyncTime: lastSync}
 	}
 }
 
@@ -716,4 +729,16 @@ func (m *Model) GetCriticalError() *apperror.AppError {
 // AcknowledgeCriticalError acknowledges and clears the critical error
 func (m *Model) AcknowledgeCriticalError() {
 	m.criticalError = nil
+}
+
+// getLastSyncDisplay returns a formatted string for the last sync status
+func (m Model) getLastSyncDisplay() string {
+	if m.lastSyncTime == "" {
+		return "Last synced: never"
+	}
+	t, err := time.Parse(time.RFC3339, m.lastSyncTime)
+	if err != nil {
+		return "Last synced: unknown"
+	}
+	return fmt.Sprintf("Last synced: %s", database.FormatRelativeTime(t, time.Now()))
 }

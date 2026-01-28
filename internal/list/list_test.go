@@ -2,6 +2,7 @@ package list
 
 import (
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/shepbook/ghissues/internal/database"
@@ -807,6 +808,74 @@ func TestModel_MinorErrorStatus(t *testing.T) {
 		view := m.View()
 		if contains(view, "Connection failed") {
 			t.Error("expected error to be cleared after successful operation")
+		}
+	})
+}
+
+func TestModel_LastSyncDisplay(t *testing.T) {
+	cfg := &testConfig{columns: []string{"number", "title"}}
+
+	t.Run("getLastSyncDisplay returns 'never' when empty", func(t *testing.T) {
+		model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+		model.lastSyncTime = ""
+
+		display := model.getLastSyncDisplay()
+		if !contains(display, "never") {
+			t.Errorf("expected 'never' in display, got %q", display)
+		}
+	})
+
+	t.Run("getLastSyncDisplay returns relative time for valid timestamp", func(t *testing.T) {
+		model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+		// Set a timestamp 5 minutes ago
+		model.lastSyncTime = time.Now().Add(-5 * time.Minute).Format(time.RFC3339)
+
+		display := model.getLastSyncDisplay()
+		if !contains(display, "Last synced") {
+			t.Errorf("expected 'Last synced' in display, got %q", display)
+		}
+		if !contains(display, "ago") {
+			t.Errorf("expected 'ago' in display, got %q", display)
+		}
+	})
+
+	t.Run("getLastSyncDisplay returns 'unknown' for invalid timestamp", func(t *testing.T) {
+		model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+		model.lastSyncTime = "invalid-timestamp"
+
+		display := model.getLastSyncDisplay()
+		if !contains(display, "unknown") {
+			t.Errorf("expected 'unknown' in display, got %q", display)
+		}
+	})
+
+	t.Run("view contains last synced info", func(t *testing.T) {
+		model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+		model.issues = []database.ListIssue{
+			{Number: 1, Title: "Issue 1", Author: "alice"},
+		}
+		model.width = 80
+		model.height = 24
+		model.lastSyncTime = time.Now().Add(-5 * time.Minute).Format(time.RFC3339)
+
+		view := model.View()
+		if !contains(view, "Last synced") {
+			t.Error("expected view to contain 'Last synced'")
+		}
+	})
+
+	t.Run("view shows 'never' when no sync time", func(t *testing.T) {
+		model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+		model.issues = []database.ListIssue{
+			{Number: 1, Title: "Issue 1", Author: "alice"},
+		}
+		model.width = 80
+		model.height = 24
+		model.lastSyncTime = ""
+
+		view := model.View()
+		if !contains(view, "Last synced") {
+			t.Error("expected view to contain 'Last synced'")
 		}
 	})
 }

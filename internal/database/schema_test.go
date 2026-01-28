@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestInitializeSchema(t *testing.T) {
@@ -424,6 +425,121 @@ func TestGetAllIssueNumbers(t *testing.T) {
 			if !expected[num] {
 				t.Errorf("Unexpected issue number: %d", num)
 			}
+		}
+	})
+}
+
+func TestFormatRelativeTime(t *testing.T) {
+	now := time.Date(2024, 1, 20, 12, 0, 0, 0, time.UTC)
+
+	t.Run("returns 'just now' for current time", func(t *testing.T) {
+		result := FormatRelativeTime(now, now)
+		if result != "just now" {
+			t.Errorf("Expected 'just now', got '%s'", result)
+		}
+	})
+
+	t.Run("returns 'just now' for less than a minute ago", func(t *testing.T) {
+		past := now.Add(-30 * time.Second)
+		result := FormatRelativeTime(past, now)
+		if result != "just now" {
+			t.Errorf("Expected 'just now', got '%s'", result)
+		}
+	})
+
+	t.Run("returns minutes ago", func(t *testing.T) {
+		past := now.Add(-5 * time.Minute)
+		result := FormatRelativeTime(past, now)
+		if result != "5 minutes ago" {
+			t.Errorf("Expected '5 minutes ago', got '%s'", result)
+		}
+	})
+
+	t.Run("returns single minute ago", func(t *testing.T) {
+		past := now.Add(-1 * time.Minute)
+		result := FormatRelativeTime(past, now)
+		if result != "1 minute ago" {
+			t.Errorf("Expected '1 minute ago', got '%s'", result)
+		}
+	})
+
+	t.Run("returns hours ago", func(t *testing.T) {
+		past := now.Add(-3 * time.Hour)
+		result := FormatRelativeTime(past, now)
+		if result != "3 hours ago" {
+			t.Errorf("Expected '3 hours ago', got '%s'", result)
+		}
+	})
+
+	t.Run("returns single hour ago", func(t *testing.T) {
+		past := now.Add(-1 * time.Hour)
+		result := FormatRelativeTime(past, now)
+		if result != "1 hour ago" {
+			t.Errorf("Expected '1 hour ago', got '%s'", result)
+		}
+	})
+
+	t.Run("returns days ago", func(t *testing.T) {
+		past := now.Add(-5 * 24 * time.Hour)
+		result := FormatRelativeTime(past, now)
+		if result != "5 days ago" {
+			t.Errorf("Expected '5 days ago', got '%s'", result)
+		}
+	})
+
+	t.Run("returns single day ago", func(t *testing.T) {
+		past := now.Add(-24 * time.Hour)
+		result := FormatRelativeTime(past, now)
+		if result != "1 day ago" {
+			t.Errorf("Expected '1 day ago', got '%s'", result)
+		}
+	})
+
+	t.Run("returns weeks ago", func(t *testing.T) {
+		past := now.Add(-21 * 24 * time.Hour) // 3 weeks
+		result := FormatRelativeTime(past, now)
+		if result != "3 weeks ago" {
+			t.Errorf("Expected '3 weeks ago', got '%s'", result)
+		}
+	})
+
+	t.Run("returns single week ago", func(t *testing.T) {
+		past := now.Add(-7 * 24 * time.Hour)
+		result := FormatRelativeTime(past, now)
+		if result != "1 week ago" {
+			t.Errorf("Expected '1 week ago', got '%s'", result)
+		}
+	})
+
+	t.Run("returns months ago", func(t *testing.T) {
+		past := now.Add(-90 * 24 * time.Hour) // ~3 months
+		result := FormatRelativeTime(past, now)
+		if result != "3 months ago" {
+			t.Errorf("Expected '3 months ago', got '%s'", result)
+		}
+	})
+
+	t.Run("returns single month ago", func(t *testing.T) {
+		past := now.Add(-30 * 24 * time.Hour)
+		result := FormatRelativeTime(past, now)
+		if result != "1 month ago" {
+			t.Errorf("Expected '1 month ago', got '%s'", result)
+		}
+	})
+
+	t.Run("returns years ago", func(t *testing.T) {
+		past := now.Add(-2 * 365 * 24 * time.Hour)
+		result := FormatRelativeTime(past, now)
+		if result != "2 years ago" {
+			t.Errorf("Expected '2 years ago', got '%s'", result)
+		}
+	})
+
+	t.Run("returns single year ago", func(t *testing.T) {
+		past := now.Add(-365 * 24 * time.Hour)
+		result := FormatRelativeTime(past, now)
+		if result != "1 year ago" {
+			t.Errorf("Expected '1 year ago', got '%s'", result)
 		}
 	})
 }
