@@ -17,10 +17,19 @@ import (
 	"github.com/shepbook/ghissues/internal/theme"
 )
 
+// RepositoryInfo represents a configured repository
+type RepositoryInfo struct {
+	Owner    string
+	Name     string
+	FullName string // owner/name format
+}
+
 // Config interface for accessing configuration
 type Config interface {
 	GetDisplayColumns() []string
 	GetDefaultRepository() string
+	GetRepositories() []RepositoryInfo
+	GetRepositoryDatabase(repo string) string
 	GetSortField() string
 	GetSortDescending() bool
 	GetTheme() string
@@ -785,6 +794,19 @@ func (m *Model) ShowHelp() {
 // HideHelp hides the help overlay
 func (m *Model) HideHelp() {
 	m.helpModel.HideHelp()
+}
+
+// SetRepository changes the current repository and reloads issues
+func (m *Model) SetRepository(repo string) {
+	m.repo = repo
+	m.selected = 0
+	m.detailModel = nil
+	m.detailIssue = nil
+}
+
+// GetRepository returns the current repository
+func (m Model) GetRepository() string {
+	return m.repo
 }
 
 // getLastSyncDisplay returns a formatted string for the last sync status

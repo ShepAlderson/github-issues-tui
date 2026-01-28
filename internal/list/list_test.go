@@ -464,11 +464,13 @@ func TestValidateColumns(t *testing.T) {
 
 // testConfig implements a minimal Config interface for testing
 type testConfig struct {
-	columns   []string
-	repo      string
-	sortField string
-	sortDesc  bool
-	theme     string
+	columns      []string
+	repo         string
+	repositories []RepositoryInfo
+	repoDBPaths  map[string]string
+	sortField    string
+	sortDesc     bool
+	theme        string
 }
 
 func (c *testConfig) GetDisplayColumns() []string {
@@ -477,6 +479,19 @@ func (c *testConfig) GetDisplayColumns() []string {
 
 func (c *testConfig) GetDefaultRepository() string {
 	return c.repo
+}
+
+func (c *testConfig) GetRepositories() []RepositoryInfo {
+	return c.repositories
+}
+
+func (c *testConfig) GetRepositoryDatabase(repo string) string {
+	if c.repoDBPaths != nil {
+		if dbPath, ok := c.repoDBPaths[repo]; ok {
+			return dbPath
+		}
+	}
+	return ""
 }
 
 func (c *testConfig) GetSortField() string {
@@ -633,6 +648,121 @@ func TestModel_ResetCommentsPending(t *testing.T) {
 	if m.ShouldOpenComments() {
 		t.Error("expected ShouldOpenComments to be false after reset")
 	}
+}
+
+func TestModel_SetRepository(t *testing.T) {
+	cfg := &testConfig{
+		columns: []string{"number", "title"},
+		repo:    "owner/repo1",
+	}
+	model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+
+	t.Run("initial repository from config", func(t *testing.T) {
+		if model.GetRepository() != "owner/repo1" {
+			t.Errorf("expected initial repo 'owner/repo1', got %q", model.GetRepository())
+		}
+	})
+
+	t.Run("set repository changes the current repo", func(t *testing.T) {
+		m := model
+		m.SetRepository("owner/repo2")
+
+		if m.GetRepository() != "owner/repo2" {
+			t.Errorf("expected repo 'owner/repo2', got %q", m.GetRepository())
+		}
+	})
+
+	t.Run("set repository resets selection", func(t *testing.T) {
+		m := model
+		m.issues = []database.ListIssue{
+			{Number: 1, Title: "Issue 1", Author: "alice"},
+			{Number: 2, Title: "Issue 2", Author: "bob"},
+		}
+		m.selected = 1
+
+		m.SetRepository("owner/repo2")
+
+		if m.selected != 0 {
+			t.Errorf("expected selection reset to 0, got %d", m.selected)
+		}
+	})
+
+	t.Run("set repository clears detail", func(t *testing.T) {
+		m := model
+		m.detailModel = nil // This would be set in normal operation
+
+		m.SetRepository("owner/repo2")
+
+		if m.detailModel != nil {
+			t.Error("expected detailModel to be nil after SetRepository")
+		}
+	})
+}
+
+func TestConfig_GetRepositories(t *testing.T) {
+	t.Run("empty repositories returns empty", func(t *testing.T) {
+		cfg := &testConfig{
+			columns:      []string{"number", "title"},
+			repositories: nil,
+		}
+
+		repos := cfg.GetRepositories()
+		if len(repos) != 0 {
+			t.Errorf("expected 0 repositories, got %d", len(repos))
+		}
+	})
+
+	t.Run("returns configured repositories", func(t *testing.T) {
+		cfg := &testConfig{
+			columns: []string{"number", "title"},
+			repositories: []RepositoryInfo{
+				{Owner: "owner1", Name: "repo1", FullName: "owner1/repo1"},
+				{Owner: "owner2", Name: "repo2", FullName: "owner2/repo2"},
+			},
+		}
+
+		repos := cfg.GetRepositories()
+		if len(repos) != 2 {
+			t.Errorf("expected 2 repositories, got %d", len(repos))
+		}
+
+		if repos[0].FullName != "owner1/repo1" {
+			t.Errorf("expected first repo 'owner1/repo1', got %q", repos[0].FullName)
+		}
+
+		if repos[1].FullName != "owner2/repo2" {
+			t.Errorf("expected second repo 'owner2/repo2', got %q", repos[1].FullName)
+		}
+	})
+}
+
+func TestConfig_GetRepositoryDatabase(t *testing.T) {
+	t.Run("returns empty when repo not found", func(t *testing.T) {
+		cfg := &testConfig{
+			columns:     []string{"number", "title"},
+			repoDBPaths: map[string]string{},
+		}
+
+		dbPath := cfg.GetRepositoryDatabase("owner/nonexistent")
+		if dbPath != "" {
+			t.Errorf("expected empty dbPath, got %q", dbPath)
+		}
+	})
+
+	t.Run("returns database path for repository", func(t *testing.T) {
+		cfg := &testConfig{
+			columns: []string{"number", "title"},
+			repoDBPaths: map[string]string{
+				"owner/repo1": "/path/to/repo1.db",
+				"owner/repo2": "/path/to/repo2.db",
+			},
+		}
+
+		dbPath := cfg.GetRepositoryDatabase("owner/repo1")
+		if dbPath != "/path/to/repo1.db" {
+			t.Errorf("expected dbPath '/path/to/repo1.db', got %q", dbPath)
+		}
+	})
 }
 
 func contains(s, substr string) bool {

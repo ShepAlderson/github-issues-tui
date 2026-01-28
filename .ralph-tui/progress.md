@@ -628,3 +628,44 @@ s based on current view**:\n  - List view: `j/k nav | s sort | ? help | q quit`\
 - Use theme colors for all UI elements: headers, status bars, badges, borders, errors
 - Keep theme picker simple: list with selection indicator, preview box showing theme colors
 
+## ✓ Iteration 13 - US-012: Color Themes
+*2026-01-28T09:51:24.880Z (1041s)*
+
+**Status:** Completed
+
+**Notes:**
+view\n   - Updated tests to include GetTheme() in Config interface\n\n4. **Main Application** (`cmd/ghissues/main.go`):\n   - Added `ghissues themes` subcommand\n   - ConfigAdapter implements GetTheme()\n\n**Acceptance Criteria Met:**\n- ✅ Multiple built-in themes: default, dracula, gruvbox, nord, solarized-dark, solarized-light\n- ✅ Theme selected via config file display.theme\n- ✅ Theme can be previewed/changed with command `ghissues themes`\n- ✅ Themes use lipgloss for consistent styling\n\n
+
+---
+
+## 2026-01-28 - US-014: Multi-Repository Configuration
+
+**Status:** Completed
+
+**Notes:**
+- Implemented multi-repository configuration support
+- Files changed:
+  - `internal/list/list.go` - Added `RepositoryInfo` struct, updated `Config` interface with `GetRepositories()` and `GetRepositoryDatabase()`, added `SetRepository()` and `GetRepository()` methods to Model
+  - `internal/list/list_test.go` - Added tests for `SetRepository()`, `GetRepositories()`, `GetRepositoryDatabase()`
+  - `cmd/ghissues/main.go` - Added `--repo` flag, `repos` subcommand, `runRepos()` function, updated `runListView()` to support repo override, `findRepoDatabase()` helper, updated `runSync()` to accept repo flag
+  - `cmd/ghissues/main_test.go` (new) - Tests for `ConfigAdapter.GetRepositories()`, `ConfigAdapter.GetRepositoryDatabase()`, `findRepoDatabase()`
+
+**Acceptance Criteria Met:**
+- ✅ **Config file supports multiple repository entries** - `[[repositories]]` array in TOML config with owner, name, and database fields
+- ✅ **Each repository has its own database file** - Per-repo database path via `repositories[].database` field
+- ✅ **ghissues --repo owner/repo selects which repo to view** - `--repo` flag overrides default repository
+- ✅ **Default repository can be set in config** - `[default]` section with `repository` field
+- ✅ **ghissues repos lists configured repositories** - New `repos` subcommand shows all configured repos with default indicator
+
+**New Pattern Added to Codebase:**
+- **Multi-Repository Pattern** - Config interface exposes repositories list, per-repo database paths, runtime repository switching via SetRepository(), CLI flag for temporary override
+
+**Learnings:**
+- Config interface extension: Add new methods to interface, implement in both real and test configs
+- Per-repo database: Store database path in repository config, resolve with priority: --db flag > per-repo path > default path
+- Repository switching: SetRepository() resets selection and detail view to ensure clean state
+- CLI flag handling: Parse before subcommands, pass through to functions that need it
+- Subcommand pattern: Add case in flag.Args() switch, implement runXxx() function
+- Listing repositories: Show default indicator (*) for the default repository
+
+---

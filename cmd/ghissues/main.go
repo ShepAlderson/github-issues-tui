@@ -48,10 +48,33 @@ func (a *ConfigAdapter) GetTheme() string {
 	return a.cfg.Display.Theme
 }
 
+func (a *ConfigAdapter) GetRepositories() []list.RepositoryInfo {
+	var repos []list.RepositoryInfo
+	for _, r := range a.cfg.Repositories {
+		repos = append(repos, list.RepositoryInfo{
+			Owner:    r.Owner,
+			Name:     r.Name,
+			FullName: r.Owner + "/" + r.Name,
+		})
+	}
+	return repos
+}
+
+func (a *ConfigAdapter) GetRepositoryDatabase(repo string) string {
+	for _, r := range a.cfg.Repositories {
+		if r.Owner+"/"+r.Name == repo {
+			return r.Database
+		}
+	}
+	return ""
+}
+
 func main() {
 	// Parse global flags
 	var dbFlag string
+	var repoFlag string
 	flag.StringVar(&dbFlag, "db", "", "Database file path (overrides config)")
+	flag.StringVar(&repoFlag, "repo", "", "Repository to view (owner/repo format, overrides default)")
 
 	// Custom flag parsing to allow subcommands
 	flag.CommandLine.SetOutput(os.Stdout)
@@ -73,7 +96,13 @@ func main() {
 			}
 			os.Exit(0)
 		case "sync":
-			if err := runSync(dbFlag); err != nil {
+			if err := runSync(dbFlag, repoFlag); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			os.Exit(0)
+		case "repos":
+			if err := runRepos(); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
@@ -103,7 +132,7 @@ func main() {
 		}
 
 		// Re-run with the new config
-		runListView(cfg, dbFlag)
+		runListView(cfg, dbFlag, "")
 		return
 	}
 
@@ -128,11 +157,39 @@ func main() {
 	}
 
 	// Run main application with issue list view
-	runListView(cfg, dbPath)
+	runListView(cfg, dbPath, repoFlag)
 }
 
-func runListView(cfg *config.Config, dbPath string) {
+func runListView(cfg *config.Config, dbPath string, overrideRepo string) {
 	adapter := &ConfigAdapter{cfg: cfg}
+
+	// Determine which repository to use
+	targetRepo := cfg.Default.Repository
+	if overrideRepo != "" {
+		// Validate the override repo format
+		if err := config.ValidateRepository(overrideRepo); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: invalid repository format: %v\n", err)
+			os.Exit(1)
+		}
+		targetRepo = overrideRepo
+	}
+
+	if targetRepo == "" {
+		fmt.Fprintf(os.Stderr, "Error: no repository configured. Run 'ghissues config' to set up.\n")
+		os.Exit(1)
+	}
+
+	// Check if the repository is configured
+	var repoDBPath string
+	if overrideRepo != "" {
+		// For override repo, check if it exists in config or use default database
+		repoDBPath = findRepoDatabase(cfg, targetRepo)
+		if repoDBPath == "" {
+			repoDBPath = dbPath
+		}
+	} else {
+		repoDBPath = dbPath
+	}
 
 	// Resolve authentication token
 	token, err := github.ResolveToken()
@@ -147,7 +204,7 @@ func runListView(cfg *config.Config, dbPath string) {
 	}
 
 	// Check if auto-refresh is needed
-	shouldRefresh, err := refresh.ShouldAutoRefresh(dbPath, cfg.Default.Repository)
+	shouldRefresh, err := refresh.ShouldAutoRefresh(repoDBPath, targetRepo)
 	if err != nil {
 		// Classify and handle error appropriately
 		appErr := apperror.Classify(err)
@@ -161,8 +218,8 @@ func runListView(cfg *config.Config, dbPath string) {
 	if shouldRefresh {
 		fmt.Println("🔄 Auto-refreshing issues...")
 		result, err := refresh.Perform(refresh.Options{
-			Repo:   cfg.Default.Repository,
-			DBPath: dbPath,
+			Repo:   targetRepo,
+			DBPath: repoDBPath,
 			Token:  token,
 		})
 		if err != nil {
@@ -180,7 +237,8 @@ func runListView(cfg *config.Config, dbPath string) {
 
 	// Main loop for switching between list and comments views
 	for {
-		model := list.NewModel(adapter, dbPath, config.ConfigPath())
+		model := list.NewModel(adapter, repoDBPath, config.ConfigPath())
+		model.SetRepository(targetRepo)
 		model.SetToken(token)
 		p := tea.NewProgram(model)
 		result, err := p.Run()
@@ -215,7 +273,7 @@ func runListView(cfg *config.Config, dbPath string) {
 			}
 
 			// Run comments view
-			if shouldReturnToList := runCommentsView(dbPath, cfg.Default.Repository, issueNumber, issueTitle); !shouldReturnToList {
+			if shouldReturnToList := runCommentsView(repoDBPath, targetRepo, issueNumber, issueTitle); !shouldReturnToList {
 				break
 			}
 			// Loop back to show list view
@@ -226,8 +284,8 @@ func runListView(cfg *config.Config, dbPath string) {
 		if finalModel.ShouldRefresh() {
 			fmt.Println("🔄 Refreshing issues...")
 			result, err := refresh.Perform(refresh.Options{
-				Repo:   cfg.Default.Repository,
-				DBPath: dbPath,
+				Repo:   targetRepo,
+				DBPath: repoDBPath,
 				Token:  token,
 			})
 			if err != nil {
@@ -248,6 +306,16 @@ func runListView(cfg *config.Config, dbPath string) {
 		// Normal exit
 		break
 	}
+}
+
+// findRepoDatabase finds the database path for a specific repository in the config
+func findRepoDatabase(cfg *config.Config, repo string) string {
+	for _, r := range cfg.Repositories {
+		if r.Owner+"/"+r.Name == repo {
+			return r.Database
+		}
+	}
+	return ""
 }
 
 func runCommentsView(dbPath, repo string, issueNumber int, issueTitle string) bool {
@@ -322,26 +390,82 @@ func runThemes() error {
 	return nil
 }
 
-func runSync(dbFlag string) error {
+func runSync(dbFlag string, repoFlag string) error {
 	// Load config to get repository and database path
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Get repository
-	repo := cfg.Default.Repository
-	if repo == "" {
-		return fmt.Errorf("no default repository configured. Run 'ghissues config' to set one up")
+	// Determine which repository to sync
+	targetRepo := cfg.Default.Repository
+	if repoFlag != "" {
+		targetRepo = repoFlag
 	}
 
-	// Resolve database path
+	if targetRepo == "" {
+		return fmt.Errorf("no repository specified. Use --repo flag or set a default repository with 'ghissues config'")
+	}
+
+	// Validate the repository format
+	if err := config.ValidateRepository(targetRepo); err != nil {
+		return fmt.Errorf("invalid repository format: %w", err)
+	}
+
+	// Find the database path for this repository, or use default
 	dbPath := database.ResolvePath(dbFlag, cfg.Database.Path)
+	if repoPath := findRepoDatabase(cfg, targetRepo); repoPath != "" {
+		// If a per-repo database is configured, use it
+		// but still allow the --db flag to override
+		if dbFlag == "" {
+			dbPath = database.ResolvePath(repoPath, cfg.Database.Path)
+		}
+	}
 
 	// Run the sync
-	if err := sync.RunSyncCLI(dbPath, repo, ""); err != nil {
+	if err := sync.RunSyncCLI(dbPath, targetRepo, ""); err != nil {
 		return err
 	}
+
+	return nil
+}
+
+func runRepos() error {
+	// Load config to get repositories
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	fmt.Println("Configured Repositories:")
+	fmt.Println()
+
+	if len(cfg.Repositories) == 0 {
+		fmt.Println("  No repositories configured.")
+		fmt.Println()
+		fmt.Println("  Run 'ghissues config' to add your first repository.")
+		return nil
+	}
+
+	// Find the default repository
+	defaultRepo := cfg.Default.Repository
+
+	for _, repo := range cfg.Repositories {
+		repoName := repo.Owner + "/" + repo.Name
+		marker := "  "
+		if repoName == defaultRepo {
+			marker = "* "
+		}
+		fmt.Printf("%s%s\n", marker, repoName)
+		if repo.Database != "" && repo.Database != cfg.Database.Path {
+			fmt.Printf("    Database: %s\n", repo.Database)
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("* = default repository")
+	fmt.Println()
+	fmt.Printf("Total: %d repositories\n", len(cfg.Repositories))
 
 	return nil
 }
@@ -350,22 +474,31 @@ func printHelp() {
 	help := `ghissues - A terminal UI for GitHub issues
 
 Usage:
-  ghissues              Run the application (setup if first run)
-  ghissues config       Configure repository and authentication
-  ghissues themes       Preview and change color theme
-  ghissues sync         Sync issues from configured repository
-  ghissues help         Show this help message
-  ghissues version      Show version
+  ghissues                    Run the application (setup if first run)
+  ghissues config             Configure repository and authentication
+  ghissues themes             Preview and change color theme
+  ghissues sync               Sync issues from configured repository
+  ghissues repos              List configured repositories
+  ghissues help               Show this help message
+  ghissues version            Show version
 
 Global Flags:
-  --db <path>           Override database file path (default: .ghissues.db)
+  --db <path>                 Override database file path (default: .ghissues.db)
+  --repo <owner/repo>         Override repository to view (e.g., ghissues --repo owner/repo)
 
 Configuration:
   The configuration is stored at ~/.config/ghissues/config.toml
   Database location priority:
     1. --db flag (highest priority)
-    2. database.path in config file
-    3. .ghissues.db in current directory (default)
+    2. Per-repo database path in repositories[].database
+    3. database.path in config file
+    4. .ghissues.db in current directory (default)
+
+Multiple Repositories:
+  Configure multiple repositories in config to view issues from different projects:
+  - Set default: [default] section in config
+  - Override temporarily: use --repo flag
+  - Each repository can have its own database file
 
 First-Time Setup:
   On first run, ghissues will prompt you for:
