@@ -3,7 +3,7 @@
   "sessionId": "798b71f4-3204-4d6a-b397-92b709728887",
   "status": "running",
   "startedAt": "2026-01-28T07:46:26.582Z",
-  "updatedAt": "2026-01-28T08:03:32.167Z",
+  "updatedAt": "2026-01-28T08:06:23.837Z",
   "currentIteration": 2,
   "maxIterations": 10,
   "tasksCompleted": 2,
@@ -124,8 +124,6 @@
   ],
   "skippedTaskIds": [],
   "cwd": "/Users/shepbook/git/github-issues-tui",
-  "activeTaskIds": [
-    "US-004"
-  ],
+  "activeTaskIds": [],
   "subagentPanelVisible": true
 }
