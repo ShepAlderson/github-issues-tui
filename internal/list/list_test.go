@@ -463,10 +463,10 @@ func TestValidateColumns(t *testing.T) {
 
 // testConfig implements a minimal Config interface for testing
 type testConfig struct {
-	columns      []string
-	repo         string
-	sortField    string
-	sortDesc     bool
+	columns   []string
+	repo      string
+	sortField string
+	sortDesc  bool
 }
 
 func (c *testConfig) GetDisplayColumns() []string {
@@ -531,6 +531,102 @@ func TestModel_EnterKey(t *testing.T) {
 			t.Error("expected view to contain issue title")
 		}
 	})
+}
+
+func TestModel_ShouldOpenComments(t *testing.T) {
+	cfg := &testConfig{columns: []string{"number", "title"}}
+	model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+	model.issues = []database.ListIssue{
+		{Number: 1, Title: "Issue 1", Author: "alice"},
+	}
+
+	t.Run("initially should not open comments", func(t *testing.T) {
+		if model.ShouldOpenComments() {
+			t.Error("expected ShouldOpenComments to be false initially")
+		}
+	})
+
+	t.Run("enter key sets comments pending flag", func(t *testing.T) {
+		m := model
+		msg := tea.KeyMsg{Type: tea.KeyEnter}
+		newModel, _ := m.Update(msg)
+		m = newModel.(Model)
+
+		if !m.ShouldOpenComments() {
+			t.Error("expected ShouldOpenComments to be true after Enter")
+		}
+	})
+}
+
+func TestModel_GetSelectedIssueForComments(t *testing.T) {
+	cfg := &testConfig{columns: []string{"number", "title"}}
+	model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+	model.issues = []database.ListIssue{
+		{Number: 42, Title: "Test Issue", Author: "alice"},
+		{Number: 1, Title: "Issue 1", Author: "bob"},
+	}
+
+	t.Run("returns selected issue info", func(t *testing.T) {
+		m := model
+		m.selected = 0
+
+		num, title, ok := m.GetSelectedIssueForComments()
+		if !ok {
+			t.Error("expected ok to be true")
+		}
+		if num != 42 {
+			t.Errorf("expected issue number 42, got %d", num)
+		}
+		if title != "Test Issue" {
+			t.Errorf("expected title 'Test Issue', got %q", title)
+		}
+	})
+
+	t.Run("returns false when no issues", func(t *testing.T) {
+		m := model
+		m.issues = []database.ListIssue{}
+		m.selected = 0
+
+		_, _, ok := m.GetSelectedIssueForComments()
+		if ok {
+			t.Error("expected ok to be false when no issues")
+		}
+	})
+
+	t.Run("returns false for invalid selection", func(t *testing.T) {
+		m := model
+		m.selected = -1
+
+		_, _, ok := m.GetSelectedIssueForComments()
+		if ok {
+			t.Error("expected ok to be false for invalid selection")
+		}
+	})
+}
+
+func TestModel_ResetCommentsPending(t *testing.T) {
+	cfg := &testConfig{columns: []string{"number", "title"}}
+	model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+	model.issues = []database.ListIssue{
+		{Number: 1, Title: "Issue 1", Author: "alice"},
+	}
+
+	m := model
+	// Trigger comments pending
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	newModel, _ := m.Update(msg)
+	m = newModel.(Model)
+
+	if !m.ShouldOpenComments() {
+		t.Fatal("expected ShouldOpenComments to be true")
+	}
+
+	// Reset
+	m.ResetCommentsPending()
+
+	if m.ShouldOpenComments() {
+		t.Error("expected ShouldOpenComments to be false after reset")
+	}
 }
 
 func contains(s, substr string) bool {

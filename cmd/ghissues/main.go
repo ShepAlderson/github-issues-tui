@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/shepbook/ghissues/internal/comments"
 	"github.com/shepbook/ghissues/internal/config"
 	"github.com/shepbook/ghissues/internal/database"
 	"github.com/shepbook/ghissues/internal/list"
@@ -119,12 +120,48 @@ func main() {
 
 func runListView(cfg *config.Config, dbPath string) {
 	adapter := &ConfigAdapter{cfg: cfg}
-	model := list.NewModel(adapter, dbPath, config.ConfigPath())
-	p := tea.NewProgram(model)
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error running application: %v\n", err)
-		os.Exit(1)
+
+	// Main loop for switching between list and comments views
+	for {
+		model := list.NewModel(adapter, dbPath, config.ConfigPath())
+		p := tea.NewProgram(model)
+		result, err := p.Run()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error running application: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Check if we should open comments view
+		finalModel := result.(list.Model)
+		if !finalModel.ShouldOpenComments() {
+			// Normal exit, no comments requested
+			break
+		}
+
+		// Get the selected issue and open comments view
+		issueNumber, issueTitle, ok := finalModel.GetSelectedIssueForComments()
+		if !ok {
+			break
+		}
+
+		// Run comments view
+		if shouldReturnToList := runCommentsView(dbPath, cfg.Default.Repository, issueNumber, issueTitle); !shouldReturnToList {
+			break
+		}
+		// Loop back to show list view
 	}
+}
+
+func runCommentsView(dbPath, repo string, issueNumber int, issueTitle string) bool {
+	model := comments.NewModel(dbPath, repo, issueNumber, issueTitle)
+	p := tea.NewProgram(model)
+	_, err := p.Run()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error running comments view: %v\n", err)
+		return false
+	}
+	// Return true to go back to list view
+	return true
 }
 
 func runConfig() error {

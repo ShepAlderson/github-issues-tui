@@ -465,6 +465,123 @@ func TestGetIssueDetail(t *testing.T) {
 	})
 }
 
+func TestGetCommentsForIssue(t *testing.T) {
+	// Create a temporary database
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := InitializeSchema(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to initialize schema: %v", err)
+	}
+	defer db.Close()
+
+	// Insert test issue
+	testIssue := Issue{
+		Number:    42,
+		Title:     "Test Issue",
+		Author:    "testuser",
+		State:     "open",
+		CreatedAt: "2024-01-15T10:00:00Z",
+		UpdatedAt: "2024-01-15T10:00:00Z",
+	}
+	if err := SaveIssue(db, "owner/repo", testIssue); err != nil {
+		t.Fatalf("Failed to save issue: %v", err)
+	}
+
+	// Insert test comments for the issue
+	testComments := []Comment{
+		{ID: 101, IssueNumber: 42, Body: "First comment", Author: "user1", CreatedAt: "2024-01-16T10:00:00Z", UpdatedAt: "2024-01-16T10:00:00Z"},
+		{ID: 102, IssueNumber: 42, Body: "Second comment", Author: "user2", CreatedAt: "2024-01-17T11:00:00Z", UpdatedAt: "2024-01-17T11:00:00Z"},
+		{ID: 103, IssueNumber: 42, Body: "Third comment", Author: "user3", CreatedAt: "2024-01-15T09:00:00Z", UpdatedAt: "2024-01-15T09:00:00Z"},
+	}
+
+	for _, comment := range testComments {
+		if err := SaveComment(db, "owner/repo", comment); err != nil {
+			t.Fatalf("Failed to save comment %d: %v", comment.ID, err)
+		}
+	}
+
+	t.Run("returns comments in chronological order", func(t *testing.T) {
+		comments, err := GetCommentsForIssue(db, "owner/repo", 42)
+		if err != nil {
+			t.Fatalf("GetCommentsForIssue failed: %v", err)
+		}
+
+		if len(comments) != 3 {
+			t.Errorf("expected 3 comments, got %d", len(comments))
+		}
+
+		// Check chronological order (oldest first)
+		if comments[0].ID != 103 {
+			t.Errorf("expected first comment ID 103 (oldest), got %d", comments[0].ID)
+		}
+		if comments[1].ID != 101 {
+			t.Errorf("expected second comment ID 101, got %d", comments[1].ID)
+		}
+		if comments[2].ID != 102 {
+			t.Errorf("expected third comment ID 102 (newest), got %d", comments[2].ID)
+		}
+	})
+
+	t.Run("returns empty slice for issue with no comments", func(t *testing.T) {
+		// Insert another issue without comments
+		issueNoComments := Issue{
+			Number:    99,
+			Title:     "No Comments Issue",
+			Author:    "testuser",
+			State:     "open",
+			CreatedAt: "2024-01-15T10:00:00Z",
+			UpdatedAt: "2024-01-15T10:00:00Z",
+		}
+		if err := SaveIssue(db, "owner/repo", issueNoComments); err != nil {
+			t.Fatalf("Failed to save issue: %v", err)
+		}
+
+		comments, err := GetCommentsForIssue(db, "owner/repo", 99)
+		if err != nil {
+			t.Fatalf("GetCommentsForIssue failed: %v", err)
+		}
+
+		if len(comments) != 0 {
+			t.Errorf("expected 0 comments, got %d", len(comments))
+		}
+	})
+
+	t.Run("returns error for non-existent issue", func(t *testing.T) {
+		comments, err := GetCommentsForIssue(db, "owner/repo", 999)
+		if err != nil {
+			t.Fatalf("GetCommentsForIssue failed: %v", err)
+		}
+
+		if len(comments) != 0 {
+			t.Errorf("expected 0 comments for non-existent issue, got %d", len(comments))
+		}
+	})
+
+	t.Run("comment data is correctly populated", func(t *testing.T) {
+		comments, err := GetCommentsForIssue(db, "owner/repo", 42)
+		if err != nil {
+			t.Fatalf("GetCommentsForIssue failed: %v", err)
+		}
+
+		if len(comments) < 1 {
+			t.Fatal("expected at least 1 comment")
+		}
+
+		firstComment := comments[0]
+		if firstComment.Body != "Third comment" {
+			t.Errorf("expected body 'Third comment', got '%s'", firstComment.Body)
+		}
+		if firstComment.Author != "user3" {
+			t.Errorf("expected author 'user3', got '%s'", firstComment.Author)
+		}
+		if firstComment.CreatedAt != "2024-01-15T09:00:00Z" {
+			t.Errorf("expected created_at '2024-01-15T09:00:00Z', got '%s'", firstComment.CreatedAt)
+		}
+	})
+}
+
 func TestListIssue_Validate(t *testing.T) {
 	tests := []struct {
 		name    string

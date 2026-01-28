@@ -396,6 +396,35 @@ func GetIssueDetail(db *sql.DB, repo string, number int) (*IssueDetail, error) {
 	return &detail, nil
 }
 
+// GetCommentsForIssue returns all comments for a specific issue, sorted chronologically
+func GetCommentsForIssue(db *sql.DB, repo string, issueNumber int) ([]Comment, error) {
+	query := `SELECT id, issue_number, body, author, created_at, updated_at
+		FROM comments
+		WHERE repo = ? AND issue_number = ?
+		ORDER BY created_at ASC`
+
+	rows, err := db.Query(query, repo, issueNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query comments: %w", err)
+	}
+	defer rows.Close()
+
+	var comments []Comment
+	for rows.Next() {
+		var comment Comment
+		if err := rows.Scan(&comment.ID, &comment.IssueNumber, &comment.Body, &comment.Author, &comment.CreatedAt, &comment.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan comment: %w", err)
+		}
+		comments = append(comments, comment)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating comments: %w", err)
+	}
+
+	return comments, nil
+}
+
 // FormatDate formats a date string for display
 func FormatDate(dateStr string) string {
 	if dateStr == "" {

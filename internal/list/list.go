@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/shepbook/ghissues/internal/comments"
 	"github.com/shepbook/ghissues/internal/database"
 	"github.com/shepbook/ghissues/internal/detail"
 )
@@ -23,44 +24,49 @@ type Config interface {
 
 // Model represents the issue list TUI state
 type Model struct {
-	dbPath              string
-	repo                string
-	columns             []string
-	issues              []database.ListIssue
-	selected            int
-	width               int
-	height              int
-	db                  *sql.DB
-	sortField           string
-	sortDesc            bool
-	sortFields          []string
-	configPath          string
+	dbPath     string
+	repo       string
+	columns    []string
+	issues     []database.ListIssue
+	selected   int
+	width      int
+	height     int
+	db         *sql.DB
+	sortField  string
+	sortDesc   bool
+	sortFields []string
+	configPath string
 	// saveSort is a callback to persist sort settings
-	saveSort            func(field string, descending bool) error
+	saveSort func(field string, descending bool) error
+	// openComments is a callback to open comments view for an issue
+	openComments func(issueNumber int, issueTitle string)
 	// detail fields
-	showDetail          bool
-	detailModel         *detail.Model
-	detailIssue         *database.IssueDetail
-	renderedMode        bool
+	showDetail   bool
+	detailModel  *detail.Model
+	detailIssue  *database.IssueDetail
+	renderedMode bool
+	// comments fields
+	// showingComments indicates if we're in the comments view
 	showingComments     bool
+	commentsModel       *comments.Model
+	commentsOpenPending bool
 }
 
 // Styles for the list view
 var (
 	selectedStyle = lipgloss.NewStyle().
-		Background(lipgloss.Color("#7D56F4")).
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true)
+			Background(lipgloss.Color("#7D56F4")).
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Bold(true)
 
 	normalStyle = lipgloss.NewStyle()
 
 	headerStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#7D56F4"))
+			Bold(true).
+			Foreground(lipgloss.Color("#7D56F4"))
 
 	statusStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#888888"))
-
+			Foreground(lipgloss.Color("#888888"))
 )
 
 // NewModel creates a new list model
@@ -77,20 +83,24 @@ func NewModel(cfg Config, dbPath, configPath string) Model {
 	}
 
 	return Model{
-		dbPath:       dbPath,
-		repo:         cfg.GetDefaultRepository(),
-		columns:      columns,
-		issues:       []database.ListIssue{},
-		selected:     0,
-		width:        80,
-		height:       24,
-		sortField:    sortField,
-		sortDesc:     cfg.GetSortDescending(),
-		sortFields:   []string{"updated", "created", "number", "comments"},
-		configPath:   configPath,
-		saveSort:     cfg.SaveSort,
-		showDetail:   true, // Default to showing detail panel
-		renderedMode: true, // Default to rendered markdown
+		dbPath:              dbPath,
+		repo:                cfg.GetDefaultRepository(),
+		columns:             columns,
+		issues:              []database.ListIssue{},
+		selected:            0,
+		width:               80,
+		height:              24,
+		sortField:           sortField,
+		sortDesc:            cfg.GetSortDescending(),
+		sortFields:          []string{"updated", "created", "number", "comments"},
+		configPath:          configPath,
+		saveSort:            cfg.SaveSort,
+		showDetail:          true, // Default to showing detail panel
+		renderedMode:        true, // Default to rendered markdown
+		openComments:        nil,  // Will be set by caller
+		showingComments:     false,
+		commentsModel:       nil,
+		commentsOpenPending: false,
 	}
 }
 
@@ -154,7 +164,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyEnter:
 			// Open comments view for selected issue
 			if m.selected >= 0 && m.selected < len(m.issues) {
-				return m, m.openCommentsView()
+				m.commentsOpenPending = true
+				return m, nil
 			}
 		}
 
@@ -318,7 +329,7 @@ func (m Model) renderSplitView() string {
 		detailContent := m.detailModel.View()
 
 		detailStyle := lipgloss.NewStyle().
-			Width(detailWidth - 2).
+			Width(detailWidth-2).
 			Height(m.height).
 			Padding(0, 1)
 
@@ -476,14 +487,24 @@ type detailLoadedMsg struct {
 	err   error
 }
 
-// openCommentsView returns a command to open the comments view
-func (m Model) openCommentsView() tea.Cmd {
+// ShouldOpenComments returns true if the user requested to open comments view
+func (m Model) ShouldOpenComments() bool {
+	return m.commentsOpenPending
+}
+
+// GetSelectedIssueForComments returns the selected issue number and title
+// Call ResetCommentsPending() after using this information
+func (m Model) GetSelectedIssueForComments() (int, string, bool) {
 	if m.selected < 0 || m.selected >= len(m.issues) {
-		return nil
+		return 0, "", false
 	}
-	// Placeholder for comments view - will be implemented in US-008
-	// For now, just returns nil
-	return nil
+	issue := m.issues[m.selected]
+	return issue.Number, issue.Title, true
+}
+
+// ResetCommentsPending resets the comments pending flag
+func (m *Model) ResetCommentsPending() {
+	m.commentsOpenPending = false
 }
 
 // SetDimensions updates the model dimensions
