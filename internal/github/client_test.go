@@ -20,28 +20,28 @@ func TestFetchIssues(t *testing.T) {
 		if r.URL.Path == "/repos/owner/repo/issues" {
 			issues := []map[string]interface{}{
 				{
-					"number":       1,
-					"title":        "Test Issue 1",
-					"body":         "This is issue 1",
-					"state":        "open",
-					"created_at":   "2024-01-15T10:00:00Z",
-					"updated_at":   "2024-01-16T14:00:00Z",
-					"comments":     2,
-					"user":         map[string]string{"login": "author1"},
-					"labels":       []map[string]string{{"name": "bug"}},
-					"assignees":    []map[string]string{{"login": "user1"}},
+					"number":     1,
+					"title":      "Test Issue 1",
+					"body":       "This is issue 1",
+					"state":      "open",
+					"created_at": "2024-01-15T10:00:00Z",
+					"updated_at": "2024-01-16T14:00:00Z",
+					"comments":   2,
+					"user":       map[string]string{"login": "author1"},
+					"labels":     []map[string]string{{"name": "bug"}},
+					"assignees":  []map[string]string{{"login": "user1"}},
 				},
 				{
-					"number":       2,
-					"title":        "Test Issue 2",
-					"body":         "This is issue 2",
-					"state":        "open",
-					"created_at":   "2024-01-14T09:00:00Z",
-					"updated_at":   "2024-01-15T13:00:00Z",
-					"comments":     0,
-					"user":         map[string]string{"login": "author2"},
-					"labels":       []map[string]string{{"name": "feature"}, {"name": "help wanted"}},
-					"assignees":    []map[string]string{},
+					"number":     2,
+					"title":      "Test Issue 2",
+					"body":       "This is issue 2",
+					"state":      "open",
+					"created_at": "2024-01-14T09:00:00Z",
+					"updated_at": "2024-01-15T13:00:00Z",
+					"comments":   0,
+					"user":       map[string]string{"login": "author2"},
+					"labels":     []map[string]string{{"name": "feature"}, {"name": "help wanted"}},
+					"assignees":  []map[string]string{},
 				},
 			}
 			json.NewEncoder(w).Encode(issues)
@@ -231,46 +231,46 @@ func TestFetchComments(t *testing.T) {
 
 func TestParseGitHubRepoURL(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
+		name      string
+		input     string
 		wantOwner string
-		wantName string
-		wantErr  bool
+		wantName  string
+		wantErr   bool
 	}{
 		{
-			name:     "valid owner/repo format",
-			input:    "owner/repo",
+			name:      "valid owner/repo format",
+			input:     "owner/repo",
 			wantOwner: "owner",
-			wantName: "repo",
-			wantErr:  false,
+			wantName:  "repo",
+			wantErr:   false,
 		},
 		{
-			name:     "valid owner/repo with hyphens",
-			input:    "my-org/my-repo",
+			name:      "valid owner/repo with hyphens",
+			input:     "my-org/my-repo",
 			wantOwner: "my-org",
-			wantName: "my-repo",
-			wantErr:  false,
+			wantName:  "my-repo",
+			wantErr:   false,
 		},
 		{
-			name:     "valid with numbers",
-			input:    "org123/repo456",
+			name:      "valid with numbers",
+			input:     "org123/repo456",
 			wantOwner: "org123",
-			wantName: "repo456",
-			wantErr:  false,
+			wantName:  "repo456",
+			wantErr:   false,
 		},
 		{
-			name:     "invalid - missing slash",
-			input:    "ownerrepo",
+			name:      "invalid - missing slash",
+			input:     "ownerrepo",
 			wantOwner: "",
-			wantName: "",
-			wantErr:  true,
+			wantName:  "",
+			wantErr:   true,
 		},
 		{
-			name:     "invalid - empty",
-			input:    "",
+			name:      "invalid - empty",
+			input:     "",
 			wantOwner: "",
-			wantName: "",
-			wantErr:  true,
+			wantName:  "",
+			wantErr:   true,
 		},
 	}
 

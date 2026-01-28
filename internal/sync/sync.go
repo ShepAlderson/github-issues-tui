@@ -65,20 +65,20 @@ type syncMsg struct {
 // Styles
 var (
 	titleStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#7D56F4"))
+			Bold(true).
+			Foreground(lipgloss.Color("#7D56F4"))
 
 	subtitleStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#888888"))
+			Foreground(lipgloss.Color("#888888"))
 
 	statusStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#00D4AA"))
+			Foreground(lipgloss.Color("#00D4AA"))
 
 	errorStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FF6B6B"))
+			Foreground(lipgloss.Color("#FF6B6B"))
 
 	progressStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#7D56F4"))
+			Foreground(lipgloss.Color("#7D56F4"))
 )
 
 // NewSyncModel creates a new sync model
@@ -233,7 +233,7 @@ func (m SyncModel) initializeDatabase() tea.Cmd {
 		}
 		m.db = db
 		return syncMsg{
-			status: StatusIdle,
+			status:  StatusIdle,
 			current: "Database ready",
 		}
 	}
@@ -245,7 +245,7 @@ func (m SyncModel) startSync() tea.Cmd {
 		if m.db == nil {
 			// Database not ready yet, will retry
 			return syncMsg{
-				status: StatusIdle,
+				status:  StatusIdle,
 				current: "Waiting for database...",
 			}
 		}

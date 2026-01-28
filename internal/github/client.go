@@ -20,8 +20,8 @@ const (
 
 // Client handles GitHub API requests
 type Client struct {
-	token  string
-	client *http.Client
+	token   string
+	client  *http.Client
 	BaseURL string
 }
 
@@ -34,18 +34,18 @@ type FetchProgress struct {
 
 // GitHubIssue represents the GitHub API response for an issue
 type GitHubIssue struct {
-	Number    int                    `json:"number"`
-	Title     string                 `json:"title"`
-	Body      string                 `json:"body"`
-	State     string                 `json:"state"`
-	CreatedAt string                 `json:"created_at"`
-	UpdatedAt string                 `json:"updated_at"`
-	ClosedAt  string                 `json:"closed_at"`
-	Comments  int                    `json:"comments"`
+	Number    int    `json:"number"`
+	Title     string `json:"title"`
+	Body      string `json:"body"`
+	State     string `json:"state"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+	ClosedAt  string `json:"closed_at"`
+	Comments  int    `json:"comments"`
 	User      struct {
 		Login string `json:"login"`
 	} `json:"user"`
-	Labels    []struct {
+	Labels []struct {
 		Name string `json:"name"`
 	} `json:"labels"`
 	Assignees []struct {

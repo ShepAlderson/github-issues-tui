@@ -323,3 +323,51 @@ ort options: updated, created, number, comments\n- ✅ Sort order toggled with '
 - tea.Msg handlers pattern: loadDetailIssue() returns tea.Cmd that fetches async
 - detailLoadedMsg carries the fetched issue or error back to Update()
 
+## ✓ Iteration 7 - US-007: Issue Detail View
+*2026-01-28T08:40:40.344Z (413s)*
+
+**Status:** Completed
+
+**Notes:**
+"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"context_management":null},"parent_tool_use_id":null,"session_id":"26d74d1c-6b2b-4ac8-844b-02850622f1c1","uuid":"95cdc169-9b20-4c3c-92ee-cb1ec2da8cc7"}
+{"type":"assistant","message":{"id":"msg_89eef43c-853f-42e0-83b5-194bcf7cf979","type":"message","role":"assistant","content":[{"type":"text","text":"                                                         All tasks completed successfully. Let me signal completion.\n\n
+
+---
+
+## ✓ Iteration 8 - US-008: Comments View
+*2026-01-28T08:48:00Z*
+
+**Status:** Completed
+
+**Notes:**
+- Implemented comments view for viewing issue discussion
+- Files changed:
+  - internal/database/schema.go - Added GetCommentsForIssue() function
+  - internal/database/list_test.go - Tests for GetCommentsForIssue
+  - internal/comments/comments.go (new) - Comments view TUI model
+  - internal/comments/comments_test.go (new) - Tests for comments package
+  - internal/list/list.go - Integration with comments view (ShouldOpenComments, GetSelectedIssueForComments, ResetCommentsPending)
+  - internal/list/list_test.go - Tests for comments integration
+  - cmd/ghissues/main.go - Main loop for switching between list and comments views
+
+**Acceptance Criteria Met:**
+- ✅ Drill-down view replaces main interface when activated (via main loop)
+- ✅ Shows issue title/number as header
+- ✅ Comments displayed chronologically (sorted by created_at ASC)
+- ✅ Each comment shows: author, date, body (markdown rendered)
+- ✅ Toggle markdown rendering with 'm' key
+- ✅ Scrollable comment list (j/k, up/down arrow keys)
+- ✅ Esc or q returns to issue list view
+
+**New Pattern Added to Codebase:**
+- **Comments View Pattern** - Drill-down view with main loop pattern for switching between views
+
+**Learnings:**
+- Main loop pattern: Use for loop in main to switch between views
+- ShouldOpenComments() flag pattern to signal view switch from within tea.Program
+- GetSelectedIssueForComments() to extract issue data before switching
+- ResetCommentsPending() to clear state after processing
+- Comments displayed chronologically (oldest first) for discussion thread view
+- Glamour renderer for markdown with WordWrap for terminal width
+
+---

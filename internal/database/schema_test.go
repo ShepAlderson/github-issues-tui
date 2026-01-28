@@ -35,17 +35,17 @@ func TestSaveIssue(t *testing.T) {
 	defer db.Close()
 
 	issue := Issue{
-		Number:      123,
-		Title:       "Test Issue",
-		Body:        "This is a test issue body",
-		State:       "open",
-		Author:      "testuser",
-		CreatedAt:   "2024-01-15T10:30:00Z",
-		UpdatedAt:   "2024-01-16T14:20:00Z",
-		ClosedAt:    "",
+		Number:       123,
+		Title:        "Test Issue",
+		Body:         "This is a test issue body",
+		State:        "open",
+		Author:       "testuser",
+		CreatedAt:    "2024-01-15T10:30:00Z",
+		UpdatedAt:    "2024-01-16T14:20:00Z",
+		ClosedAt:     "",
 		CommentCount: 5,
-		Labels:      []string{"bug", "help wanted"},
-		Assignees:   []string{"user1", "user2"},
+		Labels:       []string{"bug", "help wanted"},
+		Assignees:    []string{"user1", "user2"},
 	}
 
 	t.Run("saves issue successfully", func(t *testing.T) {
@@ -88,12 +88,12 @@ func TestSaveComment(t *testing.T) {
 	}
 
 	comment := Comment{
-		ID:        1001,
+		ID:          1001,
 		IssueNumber: 456,
-		Body:      "This is a test comment",
-		Author:    "commenter",
-		CreatedAt: "2024-01-15T11:00:00Z",
-		UpdatedAt: "2024-01-15T11:00:00Z",
+		Body:        "This is a test comment",
+		Author:      "commenter",
+		CreatedAt:   "2024-01-15T11:00:00Z",
+		UpdatedAt:   "2024-01-15T11:00:00Z",
 	}
 
 	t.Run("saves comment successfully", func(t *testing.T) {

@@ -40,9 +40,9 @@ var (
 			Padding(0, 1)
 
 	stateClosedStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#8957E5")).
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Padding(0, 1)
+				Background(lipgloss.Color("#8957E5")).
+				Foreground(lipgloss.Color("#FFFFFF")).
+				Padding(0, 1)
 
 	labelStyle = lipgloss.NewStyle().
 			Background(lipgloss.Color("#1F6FEB")).
