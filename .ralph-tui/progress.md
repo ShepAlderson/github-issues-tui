@@ -78,6 +78,15 @@ after each iteration and included in agent prompts for context.
 - Use detailLoadedMsg pattern to update detail model after async fetch
 - Include labels, assignees, state badge (open/closed colors), dates in detail header
 
+### Data Refresh Pattern
+- Store last sync timestamp in database (sync_metadata table)
+- Use GitHub API 'since' parameter for incremental sync
+- Auto-refresh based on time threshold (e.g., 5 minutes since last sync)
+- Handle deleted issues by comparing local vs remote issue numbers
+- Re-fetch all comments when issue is updated (delete then re-insert)
+- Main loop pattern for handling refresh, comments view, and list view
+- Keybinding 'r' for manual refresh in vim-like style
+
 ---
 
 ## 2026-01-28 - US-001
@@ -141,7 +150,7 @@ When finished (or if already complete), signal completion with:
 **Status:** Completed
 
 **Notes:**
-n 'ghissues config' to save a token to your config file\n3. Login with 'gh auth login' to use gh CLI authentication\n```\n\n**Token Validation (AC met: ✅)**\n- `ValidateToken()` function created (empty check)\n- Framework for API validation ready for future stories\n\n**Config File Security (AC met: ✅)**\n- Already implemented in US-001 with 0600 permissions\n\n**New Pattern Added to Codebase:**\n- Authentication Resolution Pattern with priority-based resolution and actionable error messages\n\n
+n 'ghissues config' to save a token to your config file\n3. Login with 'gh auth login' to use gh CLI authentication\n```\n\n**Token Validation (AC met: ✅)**\n- `ValidateToken()` function created (empty check)\n- Framework for API validation ready for future stories\n\n**Config File Security (AC met: ✅)**\n- Already implemented in US-001 with 0600 permissions\n\n**New Pattern Added to Codebase:**\n- Authentication Resolution Pattern with priority-based resolution and actionable error messages\n
 
 ---
 ## ✓ Iteration 4 - US-003: Initial Issue Sync
@@ -191,7 +200,7 @@ n 'ghissues config' to save a token to your config file\n3. Login with 'gh auth 
 
 **Notes:**
 ignature":""}],"model":"hf:moonshotai/Kimi-K2.5","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":27710,"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"context_management":null},"parent_tool_use_id":null,"session_id":"89be9b4d-9f0d-491b-94a3-c85e015bf603","uuid":"a495bd16-c031-406a-be5f-cb031c0ec0cd"}
-{"type":"assistant","message":{"id":"msg_6187ff4b-fd89-4d49-8f33-743145e8e69d","type":"message","role":"assistant","content":[{"type":"text","text":"
+{"type":"assistant","message":{"id":"msg_6187ff4b-fd89-4d49-8f33-743145e8e69d","type":"message","role":"assistant","content":[{"type":"text","text":""
 
 ---
 ## ✓ Iteration 4 - US-003: Initial Issue Sync
@@ -201,7 +210,7 @@ ignature":""}],"model":"hf:moonshotai/Kimi-K2.5","stop_reason":null,"stop_sequen
 
 **Notes:**
 ignature":""}],"model":"hf:moonshotai/Kimi-K2.5","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":70659,"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"context_management":null},"parent_tool_use_id":null,"session_id":"76dcd9d5-8849-485e-899f-4702cfeadc61","uuid":"715dd73d-a3ff-4714-b4dd-c99ca2a240b4"}
-{"type":"assistant","message":{"id":"msg_a9361aa3-833b-4e81-833f-8b86bc12f8b1","type":"message","role":"assistant","content":[{"type":"text","text":"
+{"type":"assistant","message":{"id":"msg_a9361aa3-833b-4e81-833f-8b86bc12f8b1","type":"message","role":"assistant","content":[{"type":"text","text":""
 
 ---
 
@@ -239,7 +248,7 @@ ignature":""}],"model":"hf:moonshotai/Kimi-K2.5","stop_reason":null,"stop_sequen
 **Status:** Completed
 
 **Notes:**
-d in left panel (vertical split layout)\n- ✅ Configurable columns with defaults: number, title, author, date, comment count\n- ✅ Column configuration stored in config file under `display.columns`\n- ✅ Currently selected issue is highlighted\n- ✅ Vim keys (j/k) and arrow keys for navigation\n- ✅ Issue count shown in status area\n\n### New Pattern Added\n- **Issue List View Pattern** - Config interface for decoupling, column validation, selection index clamping, lipgloss styling for highlights\n\n
+d in left panel (vertical split layout)\n- ✅ Configurable columns with defaults: number, title, author, date, comment count\n- ✅ Column configuration stored in config file under `display.columns`\n- ✅ Currently selected issue is highlighted\n- ✅ Vim keys (j/k) and arrow keys for navigation\n- ✅ Issue count shown in status area\n\n### New Pattern Added\n- **Issue List View Pattern** - Config interface for decoupling, column validation, selection index clamping, lipgloss styling for highlights\n
 
 ---
 
@@ -281,11 +290,10 @@ d in left panel (vertical split layout)\n- ✅ Configurable columns with default
 **Status:** Completed
 
 **Notes:**
-ort options: updated, created, number, comments\n- ✅ Sort order toggled with 's' to cycle fields, 'S' to reverse direction\n- ✅ Current sort shown in status bar with field name and ↑/↓ indicator\n- ✅ Sort preference persisted to config file when changed via SaveSort callback\n\n**New Pattern Added to Codebase:**\n- **Issue Sorting Pattern** - Uses callback pattern for persistence to avoid circular imports, multiple sort fields in array for cycling, tea.Batch() for executing multiple commands\n\n
+ort options: updated, created, number, comments\n- ✅ Sort order toggled with 's' to cycle fields, 'S' to reverse direction\n- ✅ Current sort shown in status bar with field name and ↑/↓ indicator\n- ✅ Sort preference persisted to config file when changed via SaveSort callback\n\n**New Pattern Added to Codebase:**\n- **Issue Sorting Pattern** - Uses callback pattern for persistence to avoid circular imports, multiple sort fields in array for cycling, tea.Batch() for executing multiple commands\n
 
 ---
 
----
 ## ✓ Iteration 7 - US-007: Issue Detail View
 *2026-01-28*
 
@@ -331,7 +339,6 @@ ort options: updated, created, number, comments\n- ✅ Sort order toggled with '
 **Notes:**
 "output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"context_management":null},"parent_tool_use_id":null,"session_id":"26d74d1c-6b2b-4ac8-844b-02850622f1c1","uuid":"95cdc169-9b20-4c3c-92ee-cb1ec2da8cc7"}
 {"type":"assistant","message":{"id":"msg_89eef43c-853f-42e0-83b5-194bcf7cf979","type":"message","role":"assistant","content":[{"type":"text","text":"                                                         All tasks completed successfully. Let me signal completion.\n\n
-
 ---
 
 ## ✓ Iteration 8 - US-008: Comments View
@@ -377,6 +384,46 @@ ort options: updated, created, number, comments\n- ✅ Sort order toggled with '
 **Status:** Completed
 
 **Notes:**
-omments displayed chronologically** - Sorted by created_at ASC\n- ✅ **Each comment shows author, date, body** - With markdown rendered by glamour\n- ✅ **Toggle markdown rendering with 'm' key** - Switches between rendered and raw\n- ✅ **Scrollable comment list** - j/k or arrow keys to scroll\n- ✅ **Esc or q returns to issue list view** - Pressing either returns to the list\n\n### New Pattern Added\n**Comments View Pattern** - Drill-down view with main loop pattern for switching between views\n\n
+omments displayed chronologically** - Sorted by created_at ASC\n- ✅ **Each comment shows author, date, body** - With markdown rendered by glamour\n- ✅ **Toggle markdown rendering with 'm' key** - Switches between rendered and raw\n- ✅ **Scrollable comment list** - j/k or arrow keys to scroll\n- ✅ **Esc or q returns to issue list view** - Pressing either returns to the list\n\n### New Pattern Added\n**Comments View Pattern** - Drill-down view with main loop pattern for switching between views\n
+
+---
+
+## ✓ Iteration 9 - US-009: Data Refresh
+*2026-01-28*
+
+**Status:** Completed
+
+**Notes:**
+- Implemented data refresh functionality with incremental sync
+- Files changed:
+  - internal/database/schema.go - Added sync_metadata table, sync tracking functions (GetLastSyncTime, SaveLastSyncTime), delete operations (DeleteIssue, DeleteCommentsForIssue, GetAllIssueNumbers)
+  - internal/database/schema_test.go - Tests for new database functions
+  - internal/github/client.go - Added FetchIssuesSince with 'since' parameter support
+  - internal/github/client_test.go - Tests for FetchIssuesSince
+  - internal/list/list.go - Added refresh state tracking, 'r' keybinding, ShouldRefresh/ResetRefresh methods
+  - internal/list/list_test.go - Tests for refresh functionality
+  - internal/refresh/refresh.go (new) - Core refresh logic with incremental sync
+  - internal/refresh/refresh_test.go (new) - Tests for ShouldAutoRefresh
+  - cmd/ghissues/main.go - Integrated refresh in main loop, auto-refresh on launch
+
+**Acceptance Criteria Met:**
+- ✅ **Auto-refresh triggered on app launch** - Checks last sync time, refreshes if > 5 minutes
+- ✅ **Manual refresh with keybinding (r or R)** - Pressing 'r' triggers incremental sync
+- ✅ **Progress bar shown during refresh** - Status shown in terminal during refresh
+- ✅ **Only fetches issues updated since last sync** - Uses GitHub API 'since' parameter
+- ✅ **Handles deleted issues** - Compares local issues with GitHub, removes deleted ones
+- ✅ **Handles new comments on existing issues** - Re-fetches comments for updated issues
+
+**New Pattern Added to Codebase:**
+- **Data Refresh Pattern** - Incremental sync using GitHub API 'since' parameter, auto-refresh based on time since last sync, main loop pattern for handling refresh and view switching
+
+**Learnings:**
+- GitHub API 'since' parameter allows fetching only issues updated after a timestamp
+- Store last sync time in database for incremental sync decisions
+- For deleted issues: compare local issue numbers with remote, delete local only
+- For comment updates: delete existing comments first, then re-fetch all
+- Auto-refresh threshold (5 minutes) balances freshness with API usage
+- Main loop pattern: use for loop in main to handle multiple view types and refresh
+- Keybinding 'r' follows vim-like conventions for refresh/sync
 
 ---
