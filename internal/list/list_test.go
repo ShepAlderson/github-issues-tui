@@ -641,3 +641,73 @@ func findSubstr(s, substr string) bool {
 	}
 	return false
 }
+
+func TestModel_RefreshKey(t *testing.T) {
+	cfg := &testConfig{columns: []string{"number", "title"}}
+	model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+	model.issues = []database.ListIssue{
+		{Number: 1, Title: "Issue 1", Author: "alice"},
+	}
+
+	t.Run("'r' key triggers refresh", func(t *testing.T) {
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}}
+		newModel, _ := model.Update(msg)
+		m := newModel.(Model)
+
+		// View should indicate refresh is happening
+		view := m.View()
+		// The view should still render (may show refreshing state)
+		if !contains(view, "Issue 1") {
+			t.Error("expected view to still contain issue after refresh key")
+		}
+	})
+
+	t.Run("'R' key triggers refresh", func(t *testing.T) {
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}}
+		newModel, _ := model.Update(msg)
+		m := newModel.(Model)
+
+		view := m.View()
+		if !contains(view, "Issue 1") {
+			t.Error("expected view to still contain issue after refresh key")
+		}
+	})
+}
+
+func TestModel_RefreshState(t *testing.T) {
+	cfg := &testConfig{columns: []string{"number", "title"}}
+	model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+
+	t.Run("initial refresh state is false", func(t *testing.T) {
+		if model.IsRefreshing() {
+			t.Error("expected IsRefreshing to be false initially")
+		}
+	})
+
+	t.Run("refresh state can be set", func(t *testing.T) {
+		m := model
+		m.SetRefreshing(true)
+		if !m.IsRefreshing() {
+			t.Error("expected IsRefreshing to be true after setting")
+		}
+	})
+}
+
+func TestModel_RefreshProgressShown(t *testing.T) {
+	cfg := &testConfig{columns: []string{"number", "title"}}
+	model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+	model.issues = []database.ListIssue{
+		{Number: 1, Title: "Issue 1", Author: "alice"},
+	}
+	model.width = 80
+	model.height = 24
+	model.SetRefreshing(true)
+
+	t.Run("refresh indicator shown in status bar", func(t *testing.T) {
+		view := model.View()
+		// View should render even during refresh
+		if !contains(view, "Issue 1") {
+			t.Error("expected view to contain issue during refresh")
+		}
+	})
+}

@@ -90,7 +90,7 @@ func InitializeSchema(dbPath string) (*sql.DB, error) {
 		created_at TEXT NOT NULL,
 		updated_at TEXT NOT NULL,
 		PRIMARY KEY (repo, id),
-		FOREIGN KEY (repo, issue_number) REFERENCES issues(repo, number)
+		FOREIGN KEY (repo, issue_number) REFERENCES issues(repo, number) ON DELETE CASCADE
 	);
 	CREATE INDEX IF NOT EXISTS idx_comments_issue ON comments(repo, issue_number);
 	`
@@ -98,6 +98,19 @@ func InitializeSchema(dbPath string) (*sql.DB, error) {
 	if _, err := db.Exec(createCommentsTable); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to create comments table: %w", err)
+	}
+
+	// Create sync_metadata table for tracking last sync time
+	createSyncMetadataTable := `
+	CREATE TABLE IF NOT EXISTS sync_metadata (
+		repo TEXT NOT NULL PRIMARY KEY,
+		last_sync_at TEXT NOT NULL
+	);
+	`
+
+	if _, err := db.Exec(createSyncMetadataTable); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to create sync_metadata table: %w", err)
 	}
 
 	return db, nil
@@ -436,4 +449,84 @@ func FormatDate(dateStr string) string {
 		return dateStr
 	}
 	return t.Format("2006-01-02")
+}
+
+// GetLastSyncTime returns the last sync timestamp for a repository
+// Returns empty string if no sync has been performed
+func GetLastSyncTime(db *sql.DB, repo string) (string, error) {
+	var lastSync string
+	row := db.QueryRow("SELECT last_sync_at FROM sync_metadata WHERE repo = ?", repo)
+	err := row.Scan(&lastSync)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to get last sync time: %w", err)
+	}
+	return lastSync, nil
+}
+
+// SaveLastSyncTime saves or updates the last sync timestamp for a repository
+func SaveLastSyncTime(db *sql.DB, repo string, timestamp string) error {
+	query := `
+		INSERT INTO sync_metadata (repo, last_sync_at)
+		VALUES (?, ?)
+		ON CONFLICT(repo) DO UPDATE SET
+			last_sync_at = excluded.last_sync_at
+	`
+	_, err := db.Exec(query, repo, timestamp)
+	if err != nil {
+		return fmt.Errorf("failed to save last sync time: %w", err)
+	}
+	return nil
+}
+
+// DeleteIssue removes an issue and its comments from the database
+func DeleteIssue(db *sql.DB, repo string, issueNumber int) error {
+	// Delete comments first (due to foreign key constraint)
+	_, err := db.Exec("DELETE FROM comments WHERE repo = ? AND issue_number = ?", repo, issueNumber)
+	if err != nil {
+		return fmt.Errorf("failed to delete comments: %w", err)
+	}
+
+	// Delete the issue
+	_, err = db.Exec("DELETE FROM issues WHERE repo = ? AND number = ?", repo, issueNumber)
+	if err != nil {
+		return fmt.Errorf("failed to delete issue: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteCommentsForIssue removes all comments for a specific issue
+func DeleteCommentsForIssue(db *sql.DB, repo string, issueNumber int) error {
+	_, err := db.Exec("DELETE FROM comments WHERE repo = ? AND issue_number = ?", repo, issueNumber)
+	if err != nil {
+		return fmt.Errorf("failed to delete comments: %w", err)
+	}
+	return nil
+}
+
+// GetAllIssueNumbers returns all issue numbers for a repository
+func GetAllIssueNumbers(db *sql.DB, repo string) ([]int, error) {
+	rows, err := db.Query("SELECT number FROM issues WHERE repo = ?", repo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query issue numbers: %w", err)
+	}
+	defer rows.Close()
+
+	var numbers []int
+	for rows.Next() {
+		var num int
+		if err := rows.Scan(&num); err != nil {
+			return nil, fmt.Errorf("failed to scan issue number: %w", err)
+		}
+		numbers = append(numbers, num)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating issue numbers: %w", err)
+	}
+
+	return numbers, nil
 }

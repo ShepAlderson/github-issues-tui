@@ -10,7 +10,9 @@ import (
 	"github.com/shepbook/ghissues/internal/comments"
 	"github.com/shepbook/ghissues/internal/config"
 	"github.com/shepbook/ghissues/internal/database"
+	"github.com/shepbook/ghissues/internal/github"
 	"github.com/shepbook/ghissues/internal/list"
+	"github.com/shepbook/ghissues/internal/refresh"
 	"github.com/shepbook/ghissues/internal/sync"
 )
 
@@ -121,9 +123,37 @@ func main() {
 func runListView(cfg *config.Config, dbPath string) {
 	adapter := &ConfigAdapter{cfg: cfg}
 
+	// Resolve authentication token
+	token, err := github.ResolveToken()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Authentication error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Check if auto-refresh is needed
+	shouldRefresh, err := refresh.ShouldAutoRefresh(dbPath, cfg.Default.Repository)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not check last sync time: %v\n", err)
+	}
+
+	if shouldRefresh {
+		fmt.Println("🔄 Auto-refreshing issues...")
+		result, err := refresh.Perform(refresh.Options{
+			Repo:   cfg.Default.Repository,
+			DBPath: dbPath,
+			Token:  token,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: auto-refresh failed: %v\n", err)
+		} else {
+			fmt.Printf("✅ Refreshed %d issues and %d comments\n", result.IssuesFetched, result.CommentsFetched)
+		}
+	}
+
 	// Main loop for switching between list and comments views
 	for {
 		model := list.NewModel(adapter, dbPath, config.ConfigPath())
+		model.SetToken(token)
 		p := tea.NewProgram(model)
 		result, err := p.Run()
 		if err != nil {
@@ -133,22 +163,40 @@ func runListView(cfg *config.Config, dbPath string) {
 
 		// Check if we should open comments view
 		finalModel := result.(list.Model)
-		if !finalModel.ShouldOpenComments() {
-			// Normal exit, no comments requested
-			break
+		if finalModel.ShouldOpenComments() {
+			// Get the selected issue and open comments view
+			issueNumber, issueTitle, ok := finalModel.GetSelectedIssueForComments()
+			if !ok {
+				break
+			}
+
+			// Run comments view
+			if shouldReturnToList := runCommentsView(dbPath, cfg.Default.Repository, issueNumber, issueTitle); !shouldReturnToList {
+				break
+			}
+			// Loop back to show list view
+			continue
 		}
 
-		// Get the selected issue and open comments view
-		issueNumber, issueTitle, ok := finalModel.GetSelectedIssueForComments()
-		if !ok {
-			break
+		// Check if refresh was requested
+		if finalModel.ShouldRefresh() {
+			fmt.Println("🔄 Refreshing issues...")
+			result, err := refresh.Perform(refresh.Options{
+				Repo:   cfg.Default.Repository,
+				DBPath: dbPath,
+				Token:  token,
+			})
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: refresh failed: %v\n", err)
+			} else {
+				fmt.Printf("✅ Refreshed %d issues and %d comments\n", result.IssuesFetched, result.CommentsFetched)
+			}
+			// Loop back to show list view with updated data
+			continue
 		}
 
-		// Run comments view
-		if shouldReturnToList := runCommentsView(dbPath, cfg.Default.Repository, issueNumber, issueTitle); !shouldReturnToList {
-			break
-		}
-		// Loop back to show list view
+		// Normal exit
+		break
 	}
 }
 
@@ -232,12 +280,20 @@ Sync:
   Supports Ctrl+C to cancel gracefully. All fetched data is stored locally
   in the SQLite database at the configured path.
 
+Data Refresh:
+  - Auto-refresh: App auto-refreshes if data is older than 5 minutes
+  - Manual refresh: Press 'r' to refresh issues and comments
+  - Incremental: Only fetches issues updated since last sync
+  - Deleted issues: Removed from local cache during refresh
+  - New comments: Re-fetched during refresh for updated issues
+
 Keybindings (Issue List):
   j, ↓    Move down
   k, ↑    Move up
   s       Cycle sort field (updated → created → number → comments)
   S       Toggle sort order (ascending/descending)
   m       Toggle between rendered and raw markdown
+  r       Refresh issues (incremental sync)
   Enter   Open comments view for selected issue
   ?       Show help
   q       Quit

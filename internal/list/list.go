@@ -50,6 +50,11 @@ type Model struct {
 	showingComments     bool
 	commentsModel       *comments.Model
 	commentsOpenPending bool
+	// refresh fields
+	refreshing      bool
+	refreshPending  bool
+	refreshProgress string
+	token           string
 }
 
 // Styles for the list view
@@ -160,6 +165,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.detailModel != nil {
 					m.detailModel.ToggleRenderedMode()
 				}
+			case "r", "R":
+				// Trigger refresh
+				m.refreshPending = true
+				return m, m.startRefresh()
 			}
 		case tea.KeyEnter:
 			// Open comments view for selected issue
@@ -308,7 +317,7 @@ func (m Model) renderSplitView() string {
 	if !m.sortDesc {
 		orderIcon = "↑"
 	}
-	status := fmt.Sprintf("%d issues | sort:%s %s | m markdown | enter comments | q quit", len(m.issues), m.sortField, orderIcon)
+	status := fmt.Sprintf("%d issues | sort:%s %s | m markdown | r refresh | enter comments | q quit", len(m.issues), m.sortField, orderIcon)
 	listBuilder.WriteString(statusStyle.Render(status))
 
 	// Style the list panel with border
@@ -589,3 +598,41 @@ func (m Model) saveSortConfig() tea.Cmd {
 type sortSavedMsg struct {
 	err error
 }
+
+// IsRefreshing returns whether the model is currently refreshing
+func (m Model) IsRefreshing() bool {
+	return m.refreshing
+}
+
+// SetRefreshing sets the refreshing state
+func (m *Model) SetRefreshing(refreshing bool) {
+	m.refreshing = refreshing
+}
+
+// SetToken sets the GitHub token for refresh operations
+func (m *Model) SetToken(token string) {
+	m.token = token
+}
+
+// ShouldRefresh returns true if the user requested a refresh
+func (m Model) ShouldRefresh() bool {
+	return m.refreshPending
+}
+
+// ResetRefresh resets the refresh pending flag
+func (m *Model) ResetRefresh() {
+	m.refreshPending = false
+}
+
+// startRefresh starts the refresh process
+func (m Model) startRefresh() tea.Cmd {
+	return func() tea.Msg {
+		// This is a placeholder - the actual refresh will be handled
+		// by the main loop which has access to the GitHub client
+		m.refreshing = true
+		return refreshStartedMsg{}
+	}
+}
+
+// refreshStartedMsg is sent when refresh starts
+type refreshStartedMsg struct{}

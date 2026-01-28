@@ -76,6 +76,12 @@ func NewClient(token string) *Client {
 // FetchIssues fetches all open issues from a repository
 // Supports cancellation through the cancel channel
 func (c *Client) FetchIssues(repo string, progress chan<- FetchProgress) ([]database.Issue, error) {
+	return c.FetchIssuesSince(repo, "", progress)
+}
+
+// FetchIssuesSince fetches issues updated since a given timestamp
+// If since is empty, fetches all open issues
+func (c *Client) FetchIssuesSince(repo string, since string, progress chan<- FetchProgress) ([]database.Issue, error) {
 	owner, name, err := ParseGitHubRepoURL(repo)
 	if err != nil {
 		return nil, err
@@ -94,10 +100,15 @@ func (c *Client) FetchIssues(repo string, progress chan<- FetchProgress) ([]data
 			}
 		}
 
-		url := fmt.Sprintf("%s/repos/%s/%s/issues?state=open&per_page=%d&page=%d",
+		// Build URL with optional since parameter
+		urlStr := fmt.Sprintf("%s/repos/%s/%s/issues?state=open&per_page=%d&page=%d",
 			c.BaseURL, owner, name, PerPage, page)
+		if since != "" {
+			// URL encode the timestamp
+			urlStr = urlStr + "&since=" + url.QueryEscape(since)
+		}
 
-		issues, hasMore, err := c.fetchIssuesPage(url)
+		issues, hasMore, err := c.fetchIssuesPage(urlStr)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch page %d: %w", page, err)
 		}

@@ -290,3 +290,95 @@ func TestParseGitHubRepoURL(t *testing.T) {
 		})
 	}
 }
+
+func TestFetchIssuesSince(t *testing.T) {
+	// Create a test server that checks for the 'since' parameter
+	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		// Check for since parameter
+		sinceParam := r.URL.Query().Get("since")
+		if sinceParam == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{
+				"message": "Missing since parameter",
+			})
+			return
+		}
+
+		// Verify path
+		if r.URL.Path == "/repos/owner/repo/issues" {
+			// Return only issues updated since the given time
+			issues := []map[string]interface{}{
+				{
+					"number":     3,
+					"title":      "Recently Updated Issue",
+					"body":       "This issue was updated",
+					"state":      "open",
+					"created_at": "2024-01-15T10:00:00Z",
+					"updated_at": "2024-01-20T16:00:00Z",
+					"comments":   1,
+					"user":       map[string]string{"login": "author3"},
+					"labels":     []map[string]string{},
+					"assignees":  []map[string]string{},
+				},
+			}
+			json.NewEncoder(w).Encode(issues)
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer testServer.Close()
+
+	t.Run("fetches only issues updated since given timestamp", func(t *testing.T) {
+		client := NewClient("test_token")
+		client.BaseURL = testServer.URL
+
+		sinceTime := "2024-01-20T00:00:00Z"
+		issues, err := client.FetchIssuesSince("owner/repo", sinceTime, nil)
+		if err != nil {
+			t.Fatalf("FetchIssuesSince failed: %v", err)
+		}
+
+		if len(issues) != 1 {
+			t.Errorf("Expected 1 issue, got %d", len(issues))
+		}
+
+		if issues[0].Number != 3 {
+			t.Errorf("Expected issue number 3, got %d", issues[0].Number)
+		}
+
+		if issues[0].Title != "Recently Updated Issue" {
+			t.Errorf("Expected title 'Recently Updated Issue', got %s", issues[0].Title)
+		}
+	})
+
+	t.Run("returns empty when no issues updated since time", func(t *testing.T) {
+		emptyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") == "" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+
+			// Return empty array
+			json.NewEncoder(w).Encode([]map[string]interface{}{})
+		}))
+		defer emptyServer.Close()
+
+		client := NewClient("test_token")
+		client.BaseURL = emptyServer.URL
+
+		sinceTime := "2024-01-25T00:00:00Z"
+		issues, err := client.FetchIssuesSince("owner/repo", sinceTime, nil)
+		if err != nil {
+			t.Fatalf("FetchIssuesSince failed: %v", err)
+		}
+
+		if len(issues) != 0 {
+			t.Errorf("Expected 0 issues, got %d", len(issues))
+		}
+	})
+}

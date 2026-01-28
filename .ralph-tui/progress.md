@@ -371,3 +371,12 @@ ort options: updated, created, number, comments\n- ✅ Sort order toggled with '
 - Glamour renderer for markdown with WordWrap for terminal width
 
 ---
+## ✓ Iteration 8 - US-008: Comments View
+*2026-01-28T08:47:42.975Z (422s)*
+
+**Status:** Completed
+
+**Notes:**
+omments displayed chronologically** - Sorted by created_at ASC\n- ✅ **Each comment shows author, date, body** - With markdown rendered by glamour\n- ✅ **Toggle markdown rendering with 'm' key** - Switches between rendered and raw\n- ✅ **Scrollable comment list** - j/k or arrow keys to scroll\n- ✅ **Esc or q returns to issue list view** - Pressing either returns to the list\n\n### New Pattern Added\n**Comments View Pattern** - Drill-down view with main loop pattern for switching between views\n\n
+
+---
