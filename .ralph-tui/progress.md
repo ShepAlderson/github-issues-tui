@@ -96,6 +96,15 @@ after each iteration and included in agent prompts for context.
 - Integrate error state into list model: `HasCriticalError()`, `GetCriticalError()`, `SetMinorError()`, `ClearMinorError()`
 - Main loop checks for critical errors and displays modal before returning to list view
 
+### Last Synced Indicator Pattern
+- Store last sync timestamp in database (sync_metadata table) - implemented in US-009
+- Create `FormatRelativeTime()` function for human-readable relative time (e.g., "5 minutes ago")
+- Add `lastSyncTime` field to list model to track when data was last updated
+- Fetch last sync time when loading issues via `database.GetLastSyncTime()`
+- Display in status bar: "Last synced: <relative time>" or "Last synced: never" if empty
+- Handle edge cases: empty string ("never"), invalid timestamp ("unknown")
+- Updates after each successful sync (sync logic already updates database)
+
 ---
 
 ## 2026-01-28 - US-001
@@ -482,5 +491,46 @@ omments displayed chronologically** - Sorted by created_at ASC\n- ✅ **Each com
 - Error guidance should be specific: "Check your internet connection and try again" vs generic "An error occurred"
 - Network errors should suggest retry capability when applicable
 - Database corruption errors should suggest database file removal
+
+---
+## ✓ Iteration 10 - US-013: Error Handling
+*2026-01-28T09:13:56.571Z (680s)*
+
+**Status:** Completed
+
+**Notes:**
+ror/modal_test.go` (new) - Tests for error modal\n- `internal/list/list.go` - Added error state handling with `SetMinorError()`, `HasCriticalError()`, etc.\n- `internal/list/list_test.go` - Tests for error handling integration\n- `cmd/ghissues/main.go` - Integration with main loop for modal error display\n\n### New Pattern Added:\n**Error Handling Pattern** - Classify errors by severity, display minor in status bar, display critical in modals, provide actionable guidance for all error types.\n\n
+
+---
+
+## ✓ Iteration 11 - US-010: Last Synced Indicator
+*2026-01-28*
+
+**Status:** Completed
+
+**Notes:**
+- Implemented last synced indicator in status bar with relative time display
+- Files changed:
+  - `internal/database/schema.go` - Added `FormatRelativeTime()` function for human-readable time differences
+  - `internal/database/schema_test.go` - Tests for `FormatRelativeTime()`
+  - `internal/list/list.go` - Added `lastSyncTime` field, `getLastSyncDisplay()` helper, updated status bar rendering
+  - `internal/list/list_test.go` - Tests for last sync display functionality
+
+**Acceptance Criteria Met:**
+- ✅ **Status bar shows Last synced: <relative time>** - Shows "Last synced: 5 minutes ago" or similar relative time
+- ✅ **Status bar shows "Last synced: never" when no sync time exists** - Shows "never" if empty string from database
+- ✅ **Timestamp stored in database metadata table** - Already implemented in US-009 (sync_metadata table)
+- ✅ **Updates after each successful sync** - Sync logic in `cmd/ghissues/main.go` already saves timestamp after sync
+
+**New Pattern Added to Codebase:**
+- **Last Synced Indicator Pattern** - Display relative time in status bar, handle empty/invalid timestamps gracefully, fetch from database when loading issues
+
+**Learnings:**
+- `FormatRelativeTime()` function pattern: Take both the time to format and current reference time for testability
+- Relative time formatting: minutes/hours/days/weeks/months/years with proper singular/plural handling
+- Status bar integration: Add to both `renderListOnlyView()` and `renderSplitView()` for consistency
+- Edge cases to handle: empty sync time ("never"), invalid timestamp ("unknown"), valid timestamp (relative time)
+- Building on existing `sync_metadata` table from US-009 means no database schema changes needed
+- Tests should verify both the helper function output and the view rendering
 
 ---
