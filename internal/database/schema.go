@@ -1,0 +1,240 @@
+package database
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"path/filepath"
+	"strings"
+
+	_ "github.com/mattn/go-sqlite3"
+)
+
+// Issue represents a GitHub issue
+type Issue struct {
+	Number       int      `json:"number"`
+	Title        string   `json:"title"`
+	Body         string   `json:"body"`
+	State        string   `json:"state"`
+	Author       string   `json:"author"`
+	CreatedAt    string   `json:"created_at"`
+	UpdatedAt    string   `json:"updated_at"`
+	ClosedAt     string   `json:"closed_at"`
+	CommentCount int      `json:"comment_count"`
+	Labels       []string `json:"labels"`
+	Assignees    []string `json:"assignees"`
+}
+
+// Comment represents a GitHub issue comment
+type Comment struct {
+	ID          int    `json:"id"`
+	IssueNumber int    `json:"issue_number"`
+	Body        string `json:"body"`
+	Author      string `json:"author"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+// InitializeSchema creates the database schema if it doesn't exist
+// Returns a database connection
+func InitializeSchema(dbPath string) (*sql.DB, error) {
+	// Ensure the path has the correct scheme for libsql
+	absPath, err := filepath.Abs(dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve database path: %w", err)
+	}
+
+	// Use the libsql:// scheme for local files
+	connectionString := fmt.Sprintf("file:%s", absPath)
+
+	db, err := sql.Open("sqlite3", connectionString)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+
+	// Create issues table
+	createIssuesTable := `
+	CREATE TABLE IF NOT EXISTS issues (
+		repo TEXT NOT NULL,
+		number INTEGER NOT NULL,
+		title TEXT NOT NULL,
+		body TEXT,
+		state TEXT NOT NULL,
+		author TEXT NOT NULL,
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL,
+		closed_at TEXT,
+		comment_count INTEGER DEFAULT 0,
+		labels TEXT,
+		assignees TEXT,
+		PRIMARY KEY (repo, number)
+	);
+	CREATE INDEX IF NOT EXISTS idx_issues_state ON issues(repo, state);
+	CREATE INDEX IF NOT EXISTS idx_issues_updated ON issues(repo, updated_at);
+	`
+
+	if _, err := db.Exec(createIssuesTable); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to create issues table: %w", err)
+	}
+
+	// Create comments table
+	createCommentsTable := `
+	CREATE TABLE IF NOT EXISTS comments (
+		repo TEXT NOT NULL,
+		id INTEGER NOT NULL,
+		issue_number INTEGER NOT NULL,
+		body TEXT,
+		author TEXT NOT NULL,
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL,
+		PRIMARY KEY (repo, id),
+		FOREIGN KEY (repo, issue_number) REFERENCES issues(repo, number)
+	);
+	CREATE INDEX IF NOT EXISTS idx_comments_issue ON comments(repo, issue_number);
+	`
+
+	if _, err := db.Exec(createCommentsTable); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to create comments table: %w", err)
+	}
+
+	return db, nil
+}
+
+// SaveIssue saves or updates an issue in the database
+func SaveIssue(db *sql.DB, repo string, issue Issue) error {
+	// Convert labels and assignees to JSON
+	labelsJSON, err := json.Marshal(issue.Labels)
+	if err != nil {
+		return fmt.Errorf("failed to marshal labels: %w", err)
+	}
+
+	assigneesJSON, err := json.Marshal(issue.Assignees)
+	if err != nil {
+		return fmt.Errorf("failed to marshal assignees: %w", err)
+	}
+
+	query := `
+		INSERT INTO issues (
+			repo, number, title, body, state, author, created_at, updated_at, closed_at, comment_count, labels, assignees
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(repo, number) DO UPDATE SET
+			title = excluded.title,
+			body = excluded.body,
+			state = excluded.state,
+			author = excluded.author,
+			created_at = excluded.created_at,
+			updated_at = excluded.updated_at,
+			closed_at = excluded.closed_at,
+			comment_count = excluded.comment_count,
+			labels = excluded.labels,
+			assignees = excluded.assignees
+	`
+
+	_, err = db.Exec(
+		query,
+		repo,
+		issue.Number,
+		issue.Title,
+		issue.Body,
+		issue.State,
+		issue.Author,
+		issue.CreatedAt,
+		issue.UpdatedAt,
+		issue.ClosedAt,
+		issue.CommentCount,
+		string(labelsJSON),
+		string(assigneesJSON),
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to save issue %d: %w", issue.Number, err)
+	}
+
+	return nil
+}
+
+// SaveComment saves or updates a comment in the database
+func SaveComment(db *sql.DB, repo string, comment Comment) error {
+	query := `
+		INSERT INTO comments (
+			repo, id, issue_number, body, author, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(repo, id) DO UPDATE SET
+			body = excluded.body,
+			author = excluded.author,
+			created_at = excluded.created_at,
+			updated_at = excluded.updated_at
+	`
+
+	_, err := db.Exec(
+		query,
+		repo,
+		comment.ID,
+		comment.IssueNumber,
+		comment.Body,
+		comment.Author,
+		comment.CreatedAt,
+		comment.UpdatedAt,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to save comment %d: %w", comment.ID, err)
+	}
+
+	return nil
+}
+
+// GetIssueCount returns the number of issues for a repository
+func GetIssueCount(db *sql.DB, repo string) (int, error) {
+	var count int
+	row := db.QueryRow("SELECT COUNT(*) FROM issues WHERE repo = ?", repo)
+	err := row.Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count issues: %w", err)
+	}
+	return count, nil
+}
+
+// GetCommentCount returns the number of comments for a repository
+func GetCommentCount(db *sql.DB, repo string) (int, error) {
+	var count int
+	row := db.QueryRow("SELECT COUNT(*) FROM comments WHERE repo = ?", repo)
+	err := row.Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count comments: %w", err)
+	}
+	return count, nil
+}
+
+// parseLabels converts a JSON string to a slice of labels
+func parseLabels(jsonData string) []string {
+	if jsonData == "" {
+		return []string{}
+	}
+
+	var labels []string
+	if err := json.Unmarshal([]byte(jsonData), &labels); err != nil {
+		return []string{}
+	}
+	return labels
+}
+
+// parseAssignees converts a JSON string to a slice of assignees
+func parseAssignees(jsonData string) []string {
+	if jsonData == "" {
+		return []string{}
+	}
+
+	var assignees []string
+	if err := json.Unmarshal([]byte(jsonData), &assignees); err != nil {
+		return []string{}
+	}
+	return assignees
+}
+
+// joinStrings joins a slice of strings with a separator
+func joinStrings(strs []string, sep string) string {
+	return strings.Join(strs, sep)
+}

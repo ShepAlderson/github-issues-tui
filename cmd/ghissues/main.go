@@ -9,6 +9,7 @@ import (
 
 	"github.com/shepbook/ghissues/internal/config"
 	"github.com/shepbook/ghissues/internal/database"
+	"github.com/shepbook/ghissues/internal/sync"
 )
 
 // MainModel represents the main application state
@@ -61,6 +62,12 @@ func main() {
 		switch flag.Args()[0] {
 		case "config":
 			if err := runConfig(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			os.Exit(0)
+		case "sync":
+			if err := runSync(dbFlag); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
@@ -140,12 +147,37 @@ func runConfig() error {
 	return nil
 }
 
+func runSync(dbFlag string) error {
+	// Load config to get repository and database path
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Get repository
+	repo := cfg.Default.Repository
+	if repo == "" {
+		return fmt.Errorf("no default repository configured. Run 'ghissues config' to set one up")
+	}
+
+	// Resolve database path
+	dbPath := database.ResolvePath(dbFlag, cfg.Database.Path)
+
+	// Run the sync
+	if err := sync.RunSyncCLI(dbPath, repo, ""); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func printHelp() {
 	help := `ghissues - A terminal UI for GitHub issues
 
 Usage:
   ghissues              Run the application (setup if first run)
   ghissues config       Configure repository and authentication
+  ghissues sync         Sync issues from configured repository
   ghissues help         Show this help message
   ghissues version      Show version
 
@@ -163,6 +195,11 @@ First-Time Setup:
   On first run, ghissues will prompt you for:
   1. The GitHub repository (owner/repo format)
   2. Authentication method (environment variable or config file token)
+
+Sync:
+  The sync command fetches all open issues from your configured repository.
+  Supports Ctrl+C to cancel gracefully. All fetched data is stored locally
+  in the SQLite database at the configured path.
 
 Keybindings (when TUI is ready):
   j, ↓    Move down
