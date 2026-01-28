@@ -266,3 +266,12 @@ d in left panel (vertical split layout)\n- ✅ Configurable columns with default
 - SQLite "comment_count" column for sorting by number of comments
 
 ---
+## ✓ Iteration 6 - US-006: Issue Sorting
+*2026-01-28T08:33:46.296Z (373s)*
+
+**Status:** Completed
+
+**Notes:**
+ort options: updated, created, number, comments\n- ✅ Sort order toggled with 's' to cycle fields, 'S' to reverse direction\n- ✅ Current sort shown in status bar with field name and ↑/↓ indicator\n- ✅ Sort preference persisted to config file when changed via SaveSort callback\n\n**New Pattern Added to Codebase:**\n- **Issue Sorting Pattern** - Uses callback pattern for persistence to avoid circular imports, multiple sort fields in array for cycling, tea.Batch() for executing multiple commands\n\n
+
+---

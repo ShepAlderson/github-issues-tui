@@ -334,6 +334,137 @@ func TestFormatDate(t *testing.T) {
 	}
 }
 
+func TestGetIssueDetail(t *testing.T) {
+	// Create a temporary database
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := InitializeSchema(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to initialize schema: %v", err)
+	}
+	defer db.Close()
+
+	testIssue := Issue{
+		Number:       42,
+		Title:        "Test Issue with Full Details",
+		Body:         "This is the body of the issue with **markdown** support.",
+		State:        "open",
+		Author:       "testuser",
+		CreatedAt:    "2024-01-15T10:00:00Z",
+		UpdatedAt:    "2024-01-16T14:00:00Z",
+		ClosedAt:     "",
+		CommentCount: 3,
+		Labels:       []string{"bug", "enhancement"},
+		Assignees:    []string{"user1", "user2"},
+	}
+
+	if err := SaveIssue(db, "owner/repo", testIssue); err != nil {
+		t.Fatalf("Failed to save issue: %v", err)
+	}
+
+	t.Run("returns issue with all fields", func(t *testing.T) {
+		issue, err := GetIssueDetail(db, "owner/repo", 42)
+		if err != nil {
+			t.Fatalf("GetIssueDetail failed: %v", err)
+		}
+
+		if issue.Number != 42 {
+			t.Errorf("expected number 42, got %d", issue.Number)
+		}
+		if issue.Title != "Test Issue with Full Details" {
+			t.Errorf("expected title 'Test Issue with Full Details', got '%s'", issue.Title)
+		}
+		if issue.Body != "This is the body of the issue with **markdown** support." {
+			t.Errorf("expected body 'This is the body of the issue with **markdown** support.', got '%s'", issue.Body)
+		}
+		if issue.State != "open" {
+			t.Errorf("expected state 'open', got '%s'", issue.State)
+		}
+		if issue.Author != "testuser" {
+			t.Errorf("expected author 'testuser', got '%s'", issue.Author)
+		}
+		if issue.CreatedAt != "2024-01-15T10:00:00Z" {
+			t.Errorf("expected created_at '2024-01-15T10:00:00Z', got '%s'", issue.CreatedAt)
+		}
+		if issue.UpdatedAt != "2024-01-16T14:00:00Z" {
+			t.Errorf("expected updated_at '2024-01-16T14:00:00Z', got '%s'", issue.UpdatedAt)
+		}
+		if issue.ClosedAt != "" {
+			t.Errorf("expected closed_at to be empty, got '%s'", issue.ClosedAt)
+		}
+		if issue.CommentCount != 3 {
+			t.Errorf("expected comment count 3, got %d", issue.CommentCount)
+		}
+	})
+
+	t.Run("includes labels", func(t *testing.T) {
+		issue, err := GetIssueDetail(db, "owner/repo", 42)
+		if err != nil {
+			t.Fatalf("GetIssueDetail failed: %v", err)
+		}
+
+		if len(issue.Labels) != 2 {
+			t.Errorf("expected 2 labels, got %d", len(issue.Labels))
+		}
+		if issue.Labels[0] != "bug" || issue.Labels[1] != "enhancement" {
+			t.Errorf("expected labels ['bug', 'enhancement'], got %v", issue.Labels)
+		}
+	})
+
+	t.Run("includes assignees", func(t *testing.T) {
+		issue, err := GetIssueDetail(db, "owner/repo", 42)
+		if err != nil {
+			t.Fatalf("GetIssueDetail failed: %v", err)
+		}
+
+		if len(issue.Assignees) != 2 {
+			t.Errorf("expected 2 assignees, got %d", len(issue.Assignees))
+		}
+		if issue.Assignees[0] != "user1" || issue.Assignees[1] != "user2" {
+			t.Errorf("expected assignees ['user1', 'user2'], got %v", issue.Assignees)
+		}
+	})
+
+	t.Run("returns error for non-existent issue", func(t *testing.T) {
+		_, err := GetIssueDetail(db, "owner/repo", 999)
+		if err == nil {
+			t.Error("expected error for non-existent issue, got nil")
+		}
+	})
+
+	t.Run("returns error for non-existent repo", func(t *testing.T) {
+		_, err := GetIssueDetail(db, "other/repo", 42)
+		if err == nil {
+			t.Error("expected error for non-existent repo, got nil")
+		}
+	})
+
+	t.Run("returns closed_at for closed issues", func(t *testing.T) {
+		closedIssue := Issue{
+			Number:    101,
+			Title:     "Closed Issue",
+			State:     "closed",
+			Author:    "testuser",
+			CreatedAt: "2024-01-15T10:00:00Z",
+			UpdatedAt: "2024-01-17T10:00:00Z",
+			ClosedAt:  "2024-01-17T09:00:00Z",
+		}
+		if err := SaveIssue(db, "owner/repo", closedIssue); err != nil {
+			t.Fatalf("Failed to save closed issue: %v", err)
+		}
+
+		issue, err := GetIssueDetail(db, "owner/repo", 101)
+		if err != nil {
+			t.Fatalf("GetIssueDetail failed: %v", err)
+		}
+
+		if issue.ClosedAt != "2024-01-17T09:00:00Z" {
+			t.Errorf("expected closed_at '2024-01-17T09:00:00Z', got '%s'", issue.ClosedAt)
+		}
+	})
+}
+
 func TestListIssue_Validate(t *testing.T) {
 	tests := []struct {
 		name    string

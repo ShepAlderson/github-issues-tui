@@ -491,6 +491,48 @@ func (c *testConfig) SaveSort(field string, descending bool) error {
 	return nil
 }
 
+func TestModel_MarkdownToggle(t *testing.T) {
+	cfg := &testConfig{columns: []string{"number", "title"}}
+	model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+	model.issues = []database.ListIssue{
+		{Number: 1, Title: "Issue 1", Author: "alice"},
+	}
+	model.width = 100
+	model.height = 24
+
+	t.Run("'m' key is handled without error", func(t *testing.T) {
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}}
+		newModel, _ := model.Update(msg)
+		m := newModel.(Model)
+
+		// View should still render
+		view := m.View()
+		if !contains(view, "Issue 1") {
+			t.Error("expected view to contain issue title")
+		}
+	})
+}
+
+func TestModel_EnterKey(t *testing.T) {
+	cfg := &testConfig{columns: []string{"number", "title"}}
+	model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+	model.issues = []database.ListIssue{
+		{Number: 1, Title: "Issue 1", Author: "alice"},
+	}
+
+	t.Run("enter key is handled without error", func(t *testing.T) {
+		msg := tea.KeyMsg{Type: tea.KeyEnter}
+		newModel, _ := model.Update(msg)
+		m := newModel.(Model)
+
+		// View should still render
+		view := m.View()
+		if !contains(view, "Issue 1") {
+			t.Error("expected view to contain issue title")
+		}
+	})
+}
+
 func contains(s, substr string) bool {
 	return len(s) > 0 && len(substr) > 0 && findSubstr(s, substr)
 }

@@ -356,6 +356,46 @@ func ListIssuesByState(db *sql.DB, repo string, state string) ([]ListIssue, erro
 	return issues, nil
 }
 
+// IssueDetail represents an issue with all details for the detail view
+type IssueDetail struct {
+	Number       int
+	Title        string
+	Body         string
+	State        string
+	Author       string
+	CreatedAt    string
+	UpdatedAt    string
+	ClosedAt     string
+	CommentCount int
+	Labels       []string
+	Assignees    []string
+}
+
+// GetIssueDetail returns a single issue with full details
+func GetIssueDetail(db *sql.DB, repo string, number int) (*IssueDetail, error) {
+	query := `SELECT number, title, body, state, author, created_at, updated_at, closed_at, comment_count, labels, assignees
+		FROM issues WHERE repo = ? AND number = ?`
+
+	row := db.QueryRow(query, repo, number)
+
+	var detail IssueDetail
+	var labelsJSON, assigneesJSON string
+	err := row.Scan(&detail.Number, &detail.Title, &detail.Body, &detail.State, &detail.Author,
+		&detail.CreatedAt, &detail.UpdatedAt, &detail.ClosedAt, &detail.CommentCount, &labelsJSON, &assigneesJSON)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("issue #%d not found in %s", number, repo)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to query issue: %w", err)
+	}
+
+	detail.Labels = parseLabels(labelsJSON)
+	detail.Assignees = parseAssignees(assigneesJSON)
+
+	return &detail, nil
+}
+
 // FormatDate formats a date string for display
 func FormatDate(dateStr string) string {
 	if dateStr == "" {

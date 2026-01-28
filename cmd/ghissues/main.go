@@ -200,6 +200,8 @@ Keybindings (Issue List):
   k, ↑    Move up
   s       Cycle sort field (updated → created → number → comments)
   S       Toggle sort order (ascending/descending)
+  m       Toggle between rendered and raw markdown
+  Enter   Open comments view for selected issue
   ?       Show help
   q       Quit
 `
