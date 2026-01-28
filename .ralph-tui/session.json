@@ -3,10 +3,10 @@
   "sessionId": "798b71f4-3204-4d6a-b397-92b709728887",
   "status": "running",
   "startedAt": "2026-01-28T07:46:26.582Z",
-  "updatedAt": "2026-01-28T09:34:02.812Z",
-  "currentIteration": 11,
+  "updatedAt": "2026-01-28T09:51:24.806Z",
+  "currentIteration": 12,
   "maxIterations": 10,
-  "tasksCompleted": 11,
+  "tasksCompleted": 12,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -77,8 +77,8 @@
       {
         "id": "US-011",
         "title": "Keybinding Help",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-012",
@@ -210,6 +210,16 @@
       "durationMs": 539760,
       "startedAt": "2026-01-28T09:13:57.579Z",
       "endedAt": "2026-01-28T09:22:57.339Z"
+    },
+    {
+      "iteration": 12,
+      "status": "completed",
+      "taskId": "US-011",
+      "taskTitle": "Keybinding Help",
+      "taskCompleted": true,
+      "durationMs": 664388,
+      "startedAt": "2026-01-28T09:22:58.422Z",
+      "endedAt": "2026-01-28T09:34:02.810Z"
     }
   ],
   "skippedTaskIds": [],
