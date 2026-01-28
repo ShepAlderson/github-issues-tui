@@ -185,6 +185,65 @@ func TestListIssuesSortByNumber(t *testing.T) {
 	})
 }
 
+func TestListIssuesSortByCommentCount(t *testing.T) {
+	// Create a temporary database
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := InitializeSchema(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to initialize schema: %v", err)
+	}
+	defer db.Close()
+
+	// Insert test issues with different comment counts
+	testIssues := []Issue{
+		{Number: 1, Title: "No comments", Author: "alice", CreatedAt: "2024-01-01T10:00:00Z", UpdatedAt: "2024-01-01T10:00:00Z", State: "open", CommentCount: 0},
+		{Number: 2, Title: "Most comments", Author: "bob", CreatedAt: "2024-01-01T10:00:00Z", UpdatedAt: "2024-01-01T10:00:00Z", State: "open", CommentCount: 10},
+		{Number: 3, Title: "Few comments", Author: "charlie", CreatedAt: "2024-01-01T10:00:00Z", UpdatedAt: "2024-01-01T10:00:00Z", State: "open", CommentCount: 3},
+	}
+
+	for _, issue := range testIssues {
+		if err := SaveIssue(db, "owner/repo", issue); err != nil {
+			t.Fatalf("Failed to save issue %d: %v", issue.Number, err)
+		}
+	}
+
+	t.Run("sorts by comment count descending", func(t *testing.T) {
+		issues, err := ListIssuesSorted(db, "owner/repo", "comments", true)
+		if err != nil {
+			t.Fatalf("ListIssuesSorted failed: %v", err)
+		}
+
+		if issues[0].CommentCount != 10 {
+			t.Errorf("expected first issue to have 10 comments, got %d", issues[0].CommentCount)
+		}
+		if issues[1].CommentCount != 3 {
+			t.Errorf("expected second issue to have 3 comments, got %d", issues[1].CommentCount)
+		}
+		if issues[2].CommentCount != 0 {
+			t.Errorf("expected third issue to have 0 comments, got %d", issues[2].CommentCount)
+		}
+	})
+
+	t.Run("sorts by comment count ascending", func(t *testing.T) {
+		issues, err := ListIssuesSorted(db, "owner/repo", "comments", false)
+		if err != nil {
+			t.Fatalf("ListIssuesSorted failed: %v", err)
+		}
+
+		if issues[0].CommentCount != 0 {
+			t.Errorf("expected first issue to have 0 comments, got %d", issues[0].CommentCount)
+		}
+		if issues[1].CommentCount != 3 {
+			t.Errorf("expected second issue to have 3 comments, got %d", issues[1].CommentCount)
+		}
+		if issues[2].CommentCount != 10 {
+			t.Errorf("expected third issue to have 10 comments, got %d", issues[2].CommentCount)
+		}
+	})
+}
+
 func TestListIssuesFiltersByState(t *testing.T) {
 	// Create a temporary database
 	tmpDir := t.TempDir()

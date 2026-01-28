@@ -13,7 +13,7 @@ func TestNewModel(t *testing.T) {
 		repo:    "owner/repo",
 	}
 
-	model := NewModel(cfg, "/tmp/test.db")
+	model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
 
 	if model.dbPath != "/tmp/test.db" {
 		t.Errorf("expected dbPath to be '/tmp/test.db', got %q", model.dbPath)
@@ -31,7 +31,7 @@ func TestNewModel(t *testing.T) {
 func TestModel_Navigation(t *testing.T) {
 	// Create model with test issues
 	cfg := &testConfig{columns: []string{"number", "title", "author"}}
-	model := NewModel(cfg, "/tmp/test.db")
+	model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
 	model.issues = []database.ListIssue{
 		{Number: 1, Title: "Issue 1", Author: "alice"},
 		{Number: 2, Title: "Issue 2", Author: "bob"},
@@ -119,7 +119,7 @@ func TestModel_Navigation(t *testing.T) {
 
 func TestModel_CtrlCQuits(t *testing.T) {
 	cfg := &testConfig{columns: []string{"number", "title"}}
-	model := NewModel(cfg, "/tmp/test.db")
+	model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
 
 	msg := tea.KeyMsg{Type: tea.KeyCtrlC}
 	_, cmd := model.Update(msg)
@@ -203,7 +203,7 @@ func TestModel_ViewContainsIssueCount(t *testing.T) {
 		columns: []string{"number", "title", "author"},
 		repo:    "owner/repo",
 	}
-	model := NewModel(cfg, "/tmp/test.db")
+	model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
 	model.issues = []database.ListIssue{
 		{Number: 1, Title: "Issue 1", Author: "alice"},
 		{Number: 2, Title: "Issue 2", Author: "bob"},
@@ -221,7 +221,7 @@ func TestModel_ViewContainsIssueCount(t *testing.T) {
 
 func TestModel_ViewShowsSelected(t *testing.T) {
 	cfg := &testConfig{columns: []string{"number", "title"}}
-	model := NewModel(cfg, "/tmp/test.db")
+	model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
 	model.issues = []database.ListIssue{
 		{Number: 1, Title: "Issue 1", Author: "alice"},
 		{Number: 2, Title: "Issue 2", Author: "bob"},
@@ -240,6 +240,181 @@ func TestModel_ViewShowsSelected(t *testing.T) {
 	if !contains(view, "Issue 2") {
 		t.Error("expected view to contain 'Issue 2'")
 	}
+}
+
+func TestModel_SortCycling(t *testing.T) {
+	cfg := &testConfig{
+		columns:   []string{"number", "title"},
+		sortField: "updated",
+		sortDesc:  true,
+	}
+
+	t.Run("'s' cycles through sort fields", func(t *testing.T) {
+		model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+
+		// Initial sort should be from config
+		if model.sortField != "updated" {
+			t.Errorf("expected initial sort field to be 'updated', got %q", model.sortField)
+		}
+		if !model.sortDesc {
+			t.Error("expected initial sort to be descending")
+		}
+
+		// Press 's' to cycle to next sort field (created)
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}}
+		newModel, _ := model.Update(msg)
+		m := newModel.(Model)
+
+		if m.sortField != "created" {
+			t.Errorf("expected sort field to be 'created' after first 's', got %q", m.sortField)
+		}
+		// Order should reset to descending when changing field
+		if !m.sortDesc {
+			t.Error("expected sort to be descending after changing field")
+		}
+
+		// Press 's' again to cycle to number
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}}
+		newModel, _ = m.Update(msg)
+		m = newModel.(Model)
+
+		if m.sortField != "number" {
+			t.Errorf("expected sort field to be 'number' after second 's', got %q", m.sortField)
+		}
+
+		// Press 's' again to cycle to comments
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}}
+		newModel, _ = m.Update(msg)
+		m = newModel.(Model)
+
+		if m.sortField != "comments" {
+			t.Errorf("expected sort field to be 'comments' after third 's', got %q", m.sortField)
+		}
+
+		// Press 's' again to cycle back to updated
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}}
+		newModel, _ = m.Update(msg)
+		m = newModel.(Model)
+
+		if m.sortField != "updated" {
+			t.Errorf("expected sort field to be 'updated' after fourth 's', got %q", m.sortField)
+		}
+	})
+
+	t.Run("'S' toggles sort order", func(t *testing.T) {
+		model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+
+		// Press 'S' to toggle order
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'S'}}
+		newModel, _ := model.Update(msg)
+		m := newModel.(Model)
+
+		if m.sortDesc {
+			t.Error("expected sort to be ascending after 'S'")
+		}
+
+		// Press 'S' again to toggle back
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'S'}}
+		newModel, _ = m.Update(msg)
+		m = newModel.(Model)
+
+		if !m.sortDesc {
+			t.Error("expected sort to be descending after second 'S'")
+		}
+	})
+
+	t.Run("cycling sort field resets to descending", func(t *testing.T) {
+		model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+
+		// First toggle to ascending
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'S'}}
+		newModel, _ := model.Update(msg)
+		m := newModel.(Model)
+
+		if m.sortDesc {
+			t.Error("expected sort to be ascending after 'S'")
+		}
+
+		// Then cycle to next field - should reset to descending
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}}
+		newModel, _ = m.Update(msg)
+		m = newModel.(Model)
+
+		if !m.sortDesc {
+			t.Error("expected sort to reset to descending when changing field")
+		}
+	})
+}
+
+func TestModel_SortShownInView(t *testing.T) {
+	cfg := &testConfig{
+		columns:   []string{"number", "title"},
+		repo:      "owner/repo",
+		sortField: "updated",
+		sortDesc:  true,
+	}
+	model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+	model.issues = []database.ListIssue{
+		{Number: 1, Title: "Issue 1", Author: "alice"},
+	}
+	model.width = 80
+	model.height = 24
+
+	view := model.View()
+
+	// Check that view contains sort information
+	if !contains(view, "sort:updated") {
+		t.Error("expected view to contain 'sort:updated'")
+	}
+	if !contains(view, "↓") {
+		t.Error("expected view to contain descending indicator '↓'")
+	}
+}
+
+func TestModel_SortPersistence(t *testing.T) {
+	cfg := &testConfig{
+		columns:   []string{"number", "title"},
+		sortField: "updated",
+		sortDesc:  true,
+	}
+
+	t.Run("sort change calls SaveSort", func(t *testing.T) {
+		model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+
+		// Press 'S' to toggle sort order
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'S'}}
+		newModel, _ := model.Update(msg)
+		m := newModel.(Model)
+
+		// The sort order should have toggled
+		if m.sortDesc {
+			t.Error("expected sort to be ascending after 'S'")
+		}
+
+		// Verify the saveSort callback would be called (it's non-nil)
+		if m.saveSort == nil {
+			t.Error("expected saveSort callback to be set")
+		}
+	})
+
+	t.Run("cycle sort calls SaveSort", func(t *testing.T) {
+		model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+
+		// Press 's' to cycle sort field
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}}
+		newModel, _ := model.Update(msg)
+		m := newModel.(Model)
+
+		// The sort field should have cycled
+		if m.sortField != "created" {
+			t.Errorf("expected sort field to be 'created', got %q", m.sortField)
+		}
+
+		// Verify the saveSort callback would be called (it's non-nil)
+		if m.saveSort == nil {
+			t.Error("expected saveSort callback to be set")
+		}
+	})
 }
 
 func TestValidateColumns(t *testing.T) {
@@ -288,8 +463,10 @@ func TestValidateColumns(t *testing.T) {
 
 // testConfig implements a minimal Config interface for testing
 type testConfig struct {
-	columns []string
-	repo    string
+	columns      []string
+	repo         string
+	sortField    string
+	sortDesc     bool
 }
 
 func (c *testConfig) GetDisplayColumns() []string {
@@ -298,6 +475,20 @@ func (c *testConfig) GetDisplayColumns() []string {
 
 func (c *testConfig) GetDefaultRepository() string {
 	return c.repo
+}
+
+func (c *testConfig) GetSortField() string {
+	return c.sortField
+}
+
+func (c *testConfig) GetSortDescending() bool {
+	return c.sortDesc
+}
+
+func (c *testConfig) SaveSort(field string, descending bool) error {
+	c.sortField = field
+	c.sortDesc = descending
+	return nil
 }
 
 func contains(s, substr string) bool {

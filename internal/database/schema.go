@@ -283,6 +283,8 @@ func ListIssuesSorted(db *sql.DB, repo string, sortField string, descending bool
 		orderBy = "created_at"
 	case "updated", "":
 		orderBy = "updated_at"
+	case "comments":
+		orderBy = "comment_count"
 	default:
 		orderBy = "updated_at"
 	}

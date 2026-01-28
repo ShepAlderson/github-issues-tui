@@ -26,6 +26,20 @@ func (a *ConfigAdapter) GetDefaultRepository() string {
 	return a.cfg.Default.Repository
 }
 
+func (a *ConfigAdapter) GetSortField() string {
+	return a.cfg.Sort.Field
+}
+
+func (a *ConfigAdapter) GetSortDescending() bool {
+	return a.cfg.Sort.Descending
+}
+
+func (a *ConfigAdapter) SaveSort(field string, descending bool) error {
+	a.cfg.Sort.Field = field
+	a.cfg.Sort.Descending = descending
+	return a.cfg.Save()
+}
+
 func main() {
 	// Parse global flags
 	var dbFlag string
@@ -105,7 +119,7 @@ func main() {
 
 func runListView(cfg *config.Config, dbPath string) {
 	adapter := &ConfigAdapter{cfg: cfg}
-	model := list.NewModel(adapter, dbPath)
+	model := list.NewModel(adapter, dbPath, config.ConfigPath())
 	p := tea.NewProgram(model)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running application: %v\n", err)
@@ -181,9 +195,11 @@ Sync:
   Supports Ctrl+C to cancel gracefully. All fetched data is stored locally
   in the SQLite database at the configured path.
 
-Keybindings (when TUI is ready):
+Keybindings (Issue List):
   j, ↓    Move down
   k, ↑    Move up
+  s       Cycle sort field (updated → created → number → comments)
+  S       Toggle sort order (ascending/descending)
   ?       Show help
   q       Quit
 `

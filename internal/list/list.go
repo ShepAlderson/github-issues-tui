@@ -15,18 +15,27 @@ import (
 type Config interface {
 	GetDisplayColumns() []string
 	GetDefaultRepository() string
+	GetSortField() string
+	GetSortDescending() bool
+	SaveSort(field string, descending bool) error
 }
 
 // Model represents the issue list TUI state
 type Model struct {
-	dbPath   string
-	repo     string
-	columns  []string
-	issues   []database.ListIssue
-	selected int
-	width    int
-	height   int
-	db       *sql.DB
+	dbPath      string
+	repo        string
+	columns     []string
+	issues      []database.ListIssue
+	selected    int
+	width       int
+	height      int
+	db          *sql.DB
+	sortField   string
+	sortDesc    bool
+	sortFields  []string
+	configPath  string
+	// saveSort is a callback to persist sort settings
+	saveSort func(field string, descending bool) error
 }
 
 // Styles for the list view
@@ -48,20 +57,31 @@ var (
 )
 
 // NewModel creates a new list model
-func NewModel(cfg Config, dbPath string) Model {
+func NewModel(cfg Config, dbPath, configPath string) Model {
 	columns := validateColumns(cfg.GetDisplayColumns())
 	if len(columns) == 0 {
 		columns = []string{"number", "title", "author", "updated", "comments"}
 	}
 
+	// Validate sort field from config
+	sortField := cfg.GetSortField()
+	if sortField == "" {
+		sortField = "updated"
+	}
+
 	return Model{
-		dbPath:   dbPath,
-		repo:     cfg.GetDefaultRepository(),
-		columns:  columns,
-		issues:   []database.ListIssue{},
-		selected: 0,
-		width:    80,
-		height:   24,
+		dbPath:     dbPath,
+		repo:       cfg.GetDefaultRepository(),
+		columns:    columns,
+		issues:     []database.ListIssue{},
+		selected:   0,
+		width:      80,
+		height:     24,
+		sortField:  sortField,
+		sortDesc:   cfg.GetSortDescending(),
+		sortFields: []string{"updated", "created", "number", "comments"},
+		configPath: configPath,
+		saveSort:   cfg.SaveSort,
 	}
 }
 
@@ -97,6 +117,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.selected < len(m.issues)-1 {
 					m.selected++
 				}
+			case "s":
+				// Cycle to next sort field
+				m.cycleSortField()
+				// Save sort preference and reload issues
+				return m, tea.Batch(
+					m.saveSortConfig(),
+					m.loadIssues(),
+				)
+			case "S":
+				// Toggle sort order
+				m.sortDesc = !m.sortDesc
+				// Save sort preference and reload issues
+				return m, tea.Batch(
+					m.saveSortConfig(),
+					m.loadIssues(),
+				)
 			}
 		}
 
@@ -149,7 +185,11 @@ func (m Model) View() string {
 
 	// Status bar at the bottom
 	b.WriteString("\n")
-	status := fmt.Sprintf("%d issues | j/k or ↑/↓ to navigate | q to quit", len(m.issues))
+	orderIcon := "↓"
+	if !m.sortDesc {
+		orderIcon = "↑"
+	}
+	status := fmt.Sprintf("%d issues | sort:%s %s | j/k to navigate | s to sort | q to quit", len(m.issues), m.sortField, orderIcon)
 	b.WriteString(statusStyle.Render(status))
 	b.WriteString("\n")
 
@@ -236,7 +276,7 @@ type issuesLoadedMsg struct {
 	issues []database.ListIssue
 }
 
-// loadIssues loads issues from the database
+// loadIssues loads issues from the database with current sort settings
 func (m Model) loadIssues() tea.Cmd {
 	return func() tea.Msg {
 		db, err := database.InitializeSchema(m.dbPath)
@@ -244,7 +284,7 @@ func (m Model) loadIssues() tea.Cmd {
 			return issuesLoadedMsg{issues: []database.ListIssue{}}
 		}
 
-		issues, err := database.ListIssues(db, m.repo)
+		issues, err := database.ListIssuesSorted(db, m.repo, m.sortField, m.sortDesc)
 		if err != nil {
 			db.Close()
 			return issuesLoadedMsg{issues: []database.ListIssue{}}
@@ -266,4 +306,49 @@ func (m Model) Selected() *database.ListIssue {
 func (m *Model) SetDimensions(width, height int) {
 	m.width = width
 	m.height = height
+}
+
+// cycleSortField moves to the next sort field in the cycle
+func (m *Model) cycleSortField() {
+	for i, field := range m.sortFields {
+		if field == m.sortField {
+			// Move to next field
+			nextIndex := (i + 1) % len(m.sortFields)
+			m.sortField = m.sortFields[nextIndex]
+			// Reset to descending when changing field
+			m.sortDesc = true
+			return
+		}
+	}
+	// If current sort field not in list, start from beginning
+	m.sortField = m.sortFields[0]
+	m.sortDesc = true
+}
+
+// GetSortField returns the current sort field
+func (m Model) GetSortField() string {
+	return m.sortField
+}
+
+// GetSortDescending returns whether sort is descending
+func (m Model) GetSortDescending() bool {
+	return m.sortDesc
+}
+
+// saveSortConfig returns a command that saves the sort configuration
+func (m Model) saveSortConfig() tea.Cmd {
+	return func() tea.Msg {
+		if m.saveSort != nil {
+			if err := m.saveSort(m.sortField, m.sortDesc); err != nil {
+				// Log error but don't fail - we can continue without persistence
+				return sortSavedMsg{err: err}
+			}
+		}
+		return sortSavedMsg{}
+	}
+}
+
+// sortSavedMsg indicates that sort preferences were saved (or failed)
+type sortSavedMsg struct {
+	err error
 }

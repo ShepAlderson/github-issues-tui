@@ -215,3 +215,12 @@ ignature":""}],"model":"hf:moonshotai/Kimi-K2.5","stop_reason":null,"stop_sequen
 - Status bar at bottom provides context and instructions
 
 ---
+## ✓ Iteration 5 - US-005: Issue List View
+*2026-01-28T08:27:32.455Z (603s)*
+
+**Status:** Completed
+
+**Notes:**
+d in left panel (vertical split layout)\n- ✅ Configurable columns with defaults: number, title, author, date, comment count\n- ✅ Column configuration stored in config file under `display.columns`\n- ✅ Currently selected issue is highlighted\n- ✅ Vim keys (j/k) and arrow keys for navigation\n- ✅ Issue count shown in status area\n\n### New Pattern Added\n- **Issue List View Pattern** - Config interface for decoupling, column validation, selection index clamping, lipgloss styling for highlights\n\n
+
+---
