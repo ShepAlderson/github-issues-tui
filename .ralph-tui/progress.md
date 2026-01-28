@@ -69,6 +69,15 @@ after each iteration and included in agent prompts for context.
 - Show current sort in status bar with icon (↓ or ↑)
 - Reload data immediately after sort change for instant feedback
 
+### Issue Detail View Pattern
+- Use split layout: lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+- List panel: ~40% width (min 30, max 50), detail panel: remaining width
+- Use glamour.NewTermRenderer() for markdown rendering with auto styling
+- Toggle rendered/raw mode with 'm' key via detailModel.ToggleRenderedMode()
+- Fetch issue details asynchronously via tea.Cmd for non-blocking UI
+- Use detailLoadedMsg pattern to update detail model after async fetch
+- Include labels, assignees, state badge (open/closed colors), dates in detail header
+
 ---
 
 ## 2026-01-28 - US-001
@@ -275,3 +284,42 @@ d in left panel (vertical split layout)\n- ✅ Configurable columns with default
 ort options: updated, created, number, comments\n- ✅ Sort order toggled with 's' to cycle fields, 'S' to reverse direction\n- ✅ Current sort shown in status bar with field name and ↑/↓ indicator\n- ✅ Sort preference persisted to config file when changed via SaveSort callback\n\n**New Pattern Added to Codebase:**\n- **Issue Sorting Pattern** - Uses callback pattern for persistence to avoid circular imports, multiple sort fields in array for cycling, tea.Batch() for executing multiple commands\n\n
 
 ---
+
+---
+## ✓ Iteration 7 - US-007: Issue Detail View
+*2026-01-28*
+
+**Status:** Completed
+
+**Notes:**
+- Implemented issue detail view with split layout
+- Files changed:
+  - internal/database/schema.go - Added GetIssueDetail() function and IssueDetail struct
+  - internal/database/list_test.go - Tests for GetIssueDetail()
+  - internal/detail/detail.go (new) - Detail view TUI model
+  - internal/detail/detail_test.go (new) - Tests for detail package
+  - internal/list/list.go - Integrated detail panel, 'm' key handler, Enter key handler
+  - internal/list/list_test.go - Tests for new keybindings
+  - cmd/ghissues/main.go - Updated help text with new keybindings
+
+**Acceptance Criteria Met:**
+- ✅ Right panel shows selected issue details
+- ✅ Header shows: issue number, title, author, status, dates
+- ✅ Body rendered with glamour (charmbracelet markdown renderer)
+- ✅ Toggle between raw markdown and rendered with keybinding (m)
+- ✅ Labels and assignees displayed if present
+- ✅ Scrollable if content exceeds panel height (handled by glamour)
+- ✅ Enter on issue list opens dedicated comments view (placeholder for US-008)
+
+**New Pattern Added to Codebase:**
+- **Detail View Pattern** - Split layout with lipgloss.JoinHorizontal, glamour for markdown rendering
+
+**Learnings:**
+- glamour.NewTermRenderer() takes options like glamour.WithAutoStyle() for terminal-friendly output
+- lipgloss.JoinHorizontal(lipgloss.Top, left, right) creates side-by-side panels
+- Split layout: list panel 40% width (min 30, max 50), detail panel remaining width
+- detail.NewModel() wraps IssueDetail for the detail view
+- detail.ToggleRenderedMode() switches between raw and rendered markdown
+- tea.Msg handlers pattern: loadDetailIssue() returns tea.Cmd that fetches async
+- detailLoadedMsg carries the fetched issue or error back to Update()
+
