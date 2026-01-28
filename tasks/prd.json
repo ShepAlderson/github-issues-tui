@@ -124,14 +124,15 @@
         "Sort preference persisted to config file"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-005"
       ],
       "labels": [
         "tui",
         "list"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-007",
@@ -305,6 +306,6 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-01-28T08:27:33.462Z"
+    "updatedAt": "2026-01-28T08:33:46.163Z"
   }
 }
