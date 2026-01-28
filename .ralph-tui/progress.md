@@ -24,6 +24,13 @@ after each iteration and included in agent prompts for context.
 - Use `os.UserHomeDir()` for cross-platform home directory detection
 - Fallback gracefully if not available
 
+### Authentication Resolution Pattern
+- Define priority order clearly (env var -> config file -> external CLI)
+- Each source should return (value, found) tuple pattern
+- Provide actionable error messages with all configuration options
+- Use `exec.LookPath()` before attempting to execute external commands
+- Store token source information for debugging authentication issues
+
 ---
 
 ## 2026-01-28 - US-001
@@ -39,3 +46,24 @@ after each iteration and included in agent prompts for context.
   - Setup flow: state machine pattern works well for multi-step wizards
 ---
 
+## 2026-01-28 - US-002
+- Implemented GitHub authentication resolver with priority-based token resolution
+- Files changed: internal/github/auth.go, internal/github/auth_test.go
+- **Learnings:**
+  - Authentication priority order: GITHUB_TOKEN env var -> config file -> gh CLI
+  - Use `exec.LookPath("gh")` to check if gh CLI is available before executing
+  - `os/exec.Command().Output()` returns combined stdout/stderr, use separately if needed
+  - Multi-source configuration requires clear error messages when none are available
+  - Testing with PATH modification: save/restore PATH to simulate missing commands
+  - Writing tests first ensures edge cases (empty strings, missing files) are handled
+---
+
+## ✓ Iteration 1 - US-001: First-Time Setup
+*2026-01-28T07:53:50.015Z (433s)*
+
+**Status:** Completed
+
+**Notes:**
+68→  - Gotchas encountered\n    69→---\n    70→```\n    71→\n    72→If you discovered a **reusable pattern**, also add it to the `## Codebase Patterns` section at the TOP of progress.md.\n    73→\n    74→## Stop Condition\n    75→**IMPORTANT**: If the work is already complete (implemented in a previous iteration or already exists), verify it meets the acceptance criteria and signal completion immediately.\n    76→\n    77→When finished (or if already complete), signal completion with:\n    78→
+
+---

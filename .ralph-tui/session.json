@@ -3,10 +3,10 @@
   "sessionId": "798b71f4-3204-4d6a-b397-92b709728887",
   "status": "running",
   "startedAt": "2026-01-28T07:46:26.582Z",
-  "updatedAt": "2026-01-28T07:53:49.868Z",
-  "currentIteration": 0,
+  "updatedAt": "2026-01-28T08:03:31.086Z",
+  "currentIteration": 1,
   "maxIterations": 10,
-  "tasksCompleted": 0,
+  "tasksCompleted": 1,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -17,8 +17,8 @@
       {
         "id": "US-001",
         "title": "First-Time Setup",
-        "status": "open",
-        "completedInSession": false
+        "status": "completed",
+        "completedInSession": true
       },
       {
         "id": "US-002",
@@ -100,7 +100,18 @@
       }
     ]
   },
-  "iterations": [],
+  "iterations": [
+    {
+      "iteration": 1,
+      "status": "completed",
+      "taskId": "US-001",
+      "taskTitle": "First-Time Setup",
+      "taskCompleted": true,
+      "durationMs": 433104,
+      "startedAt": "2026-01-28T07:46:36.761Z",
+      "endedAt": "2026-01-28T07:53:49.865Z"
+    }
+  ],
   "skippedTaskIds": [],
   "cwd": "/Users/shepbook/git/github-issues-tui",
   "activeTaskIds": [],
