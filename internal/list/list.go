@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	apperror "github.com/shepbook/ghissues/internal/error"
 	"github.com/shepbook/ghissues/internal/comments"
 	"github.com/shepbook/ghissues/internal/database"
 	"github.com/shepbook/ghissues/internal/detail"
@@ -20,6 +21,13 @@ type Config interface {
 	GetSortField() string
 	GetSortDescending() bool
 	SaveSort(field string, descending bool) error
+}
+
+// ErrorInfo represents an error to be displayed to the user
+type ErrorInfo struct {
+	Message   string
+	Guidance  string
+	Retryable bool
 }
 
 // Model represents the issue list TUI state
@@ -55,6 +63,9 @@ type Model struct {
 	refreshPending  bool
 	refreshProgress string
 	token           string
+	// error fields
+	minorError      *ErrorInfo
+	criticalError   *apperror.AppError
 }
 
 // Styles for the list view
@@ -72,6 +83,10 @@ var (
 
 	statusStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#888888"))
+
+	errorStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FF6B6B")).
+			Bold(true)
 )
 
 // NewModel creates a new list model
@@ -118,6 +133,11 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Clear minor error on any key press
+		if m.HasMinorError() {
+			m.ClearMinorError()
+		}
+
 		switch msg.Type {
 		case tea.KeyCtrlC:
 			return m, tea.Quit
@@ -264,12 +284,20 @@ func (m Model) renderListOnlyView() string {
 
 	// Status bar
 	b.WriteString("\n")
-	orderIcon := "↓"
-	if !m.sortDesc {
-		orderIcon = "↑"
+
+	// Show minor error if present, otherwise show normal status
+	if m.HasMinorError() {
+		// Show error in status bar with guidance
+		errorStatus := fmt.Sprintf("⚠️  %s | %s | Press any key to dismiss", m.minorError.Message, m.minorError.Guidance)
+		b.WriteString(errorStyle.Render(errorStatus))
+	} else {
+		orderIcon := "↓"
+		if !m.sortDesc {
+			orderIcon = "↑"
+		}
+		status := fmt.Sprintf("%d issues | sort:%s %s | j/k to navigate | s to sort | q to quit", len(m.issues), m.sortField, orderIcon)
+		b.WriteString(statusStyle.Render(status))
 	}
-	status := fmt.Sprintf("%d issues | sort:%s %s | j/k to navigate | s to sort | q to quit", len(m.issues), m.sortField, orderIcon)
-	b.WriteString(statusStyle.Render(status))
 	b.WriteString("\n")
 
 	return b.String()
@@ -313,12 +341,20 @@ func (m Model) renderSplitView() string {
 
 	// Status bar for list
 	listBuilder.WriteString("\n")
-	orderIcon := "↓"
-	if !m.sortDesc {
-		orderIcon = "↑"
+
+	// Show minor error if present, otherwise show normal status
+	if m.HasMinorError() {
+		// Show error in status bar with guidance
+		errorStatus := fmt.Sprintf("⚠️  %s | %s", m.minorError.Message, m.minorError.Guidance)
+		listBuilder.WriteString(errorStyle.Render(errorStatus))
+	} else {
+		orderIcon := "↓"
+		if !m.sortDesc {
+			orderIcon = "↑"
+		}
+		status := fmt.Sprintf("%d issues | sort:%s %s | m markdown | r refresh | enter comments | q quit", len(m.issues), m.sortField, orderIcon)
+		listBuilder.WriteString(statusStyle.Render(status))
 	}
-	status := fmt.Sprintf("%d issues | sort:%s %s | m markdown | r refresh | enter comments | q quit", len(m.issues), m.sortField, orderIcon)
-	listBuilder.WriteString(statusStyle.Render(status))
 
 	// Style the list panel with border
 	listStyle := lipgloss.NewStyle().
@@ -636,3 +672,48 @@ func (m Model) startRefresh() tea.Cmd {
 
 // refreshStartedMsg is sent when refresh starts
 type refreshStartedMsg struct{}
+
+// SetMinorError sets a minor error to be shown in the status bar
+func (m *Model) SetMinorError(message, guidance string) {
+	m.minorError = &ErrorInfo{
+		Message:  message,
+		Guidance: guidance,
+	}
+}
+
+// ClearMinorError clears the current minor error
+func (m *Model) ClearMinorError() {
+	m.minorError = nil
+}
+
+// HasMinorError returns true if there's a minor error to display
+func (m *Model) HasMinorError() bool {
+	return m.minorError != nil
+}
+
+// SetCriticalError sets a critical error that requires modal display
+func (m *Model) SetCriticalError(display, guidance string) {
+	m.criticalError = &apperror.AppError{
+		Original:   nil,
+		Severity:   apperror.SeverityCritical,
+		Display:    display,
+		Guidance:   guidance,
+		Actionable: true,
+		Retryable:  false,
+	}
+}
+
+// HasCriticalError returns true if there's a critical error to display
+func (m *Model) HasCriticalError() bool {
+	return m.criticalError != nil
+}
+
+// GetCriticalError returns the critical error info
+func (m *Model) GetCriticalError() *apperror.AppError {
+	return m.criticalError
+}
+
+// AcknowledgeCriticalError acknowledges and clears the critical error
+func (m *Model) AcknowledgeCriticalError() {
+	m.criticalError = nil
+}

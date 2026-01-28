@@ -711,3 +711,102 @@ func TestModel_RefreshProgressShown(t *testing.T) {
 		}
 	})
 }
+
+func TestModel_ErrorHandling(t *testing.T) {
+	cfg := &testConfig{columns: []string{"number", "title"}}
+	model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+	model.issues = []database.ListIssue{
+		{Number: 1, Title: "Issue 1", Author: "alice"},
+	}
+	model.width = 80
+	model.height = 24
+
+	t.Run("minor error shown in status bar", func(t *testing.T) {
+		m := model
+		m.SetMinorError("Network timeout", "Check connection")
+
+		view := m.View()
+		// Error message should appear in status bar
+		if !contains(view, "Network timeout") {
+			t.Error("expected view to contain error message in status bar")
+		}
+	})
+
+	t.Run("minor error can be cleared", func(t *testing.T) {
+		m := model
+		m.SetMinorError("Network timeout", "Check connection")
+		m.ClearMinorError()
+
+		view := m.View()
+		// Error should be cleared
+		if contains(view, "Network timeout") {
+			t.Error("expected error message to be cleared")
+		}
+	})
+
+	t.Run("critical error triggers modal", func(t *testing.T) {
+		m := model
+		m.SetCriticalError("Database error", "Database corrupted")
+
+		if !m.HasCriticalError() {
+			t.Error("expected HasCriticalError to be true")
+		}
+	})
+
+	t.Run("critical error returns error info", func(t *testing.T) {
+		m := model
+		m.SetCriticalError("Database error", "Database corrupted")
+
+		errInfo := m.GetCriticalError()
+		if errInfo == nil {
+			t.Fatal("expected GetCriticalError to return error info")
+		}
+		if errInfo.Display != "Database error" {
+			t.Errorf("expected display 'Database error', got %s", errInfo.Display)
+		}
+	})
+
+	t.Run("critical error can be acknowledged", func(t *testing.T) {
+		m := model
+		m.SetCriticalError("Database error", "Database corrupted")
+		m.AcknowledgeCriticalError()
+
+		if m.HasCriticalError() {
+			t.Error("expected HasCriticalError to be false after acknowledgment")
+		}
+	})
+}
+
+func TestModel_MinorErrorStatus(t *testing.T) {
+	cfg := &testConfig{columns: []string{"number", "title"}}
+	model := NewModel(cfg, "/tmp/test.db", "/tmp/test.toml")
+	model.issues = []database.ListIssue{
+		{Number: 1, Title: "Issue 1", Author: "alice"},
+	}
+	model.width = 80
+	model.height = 24
+
+	t.Run("error shown in status bar format", func(t *testing.T) {
+		m := model
+		m.SetMinorError("Connection failed", "Retry with 'r'")
+
+		view := m.View()
+		// Should contain error indicator
+		if !contains(view, "Connection failed") {
+			t.Error("expected view to contain error message")
+		}
+	})
+
+	t.Run("error cleared on successful operation", func(t *testing.T) {
+		m := model
+		m.SetMinorError("Connection failed", "Retry with 'r'")
+
+		// Simulate successful operation
+		m.ClearMinorError()
+
+		view := m.View()
+		if contains(view, "Connection failed") {
+			t.Error("expected error to be cleared after successful operation")
+		}
+	})
+}

@@ -10,6 +10,7 @@ import (
 	"github.com/shepbook/ghissues/internal/comments"
 	"github.com/shepbook/ghissues/internal/config"
 	"github.com/shepbook/ghissues/internal/database"
+	apperror "github.com/shepbook/ghissues/internal/error"
 	"github.com/shepbook/ghissues/internal/github"
 	"github.com/shepbook/ghissues/internal/list"
 	"github.com/shepbook/ghissues/internal/refresh"
@@ -126,6 +127,11 @@ func runListView(cfg *config.Config, dbPath string) {
 	// Resolve authentication token
 	token, err := github.ResolveToken()
 	if err != nil {
+		// Show critical error modal for authentication issues
+		appErr := apperror.Classify(err)
+		if appErr.Severity.IsCritical() {
+			runErrorModal(appErr)
+		}
 		fmt.Fprintf(os.Stderr, "Authentication error: %v\n", err)
 		os.Exit(1)
 	}
@@ -133,7 +139,13 @@ func runListView(cfg *config.Config, dbPath string) {
 	// Check if auto-refresh is needed
 	shouldRefresh, err := refresh.ShouldAutoRefresh(dbPath, cfg.Default.Repository)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not check last sync time: %v\n", err)
+		// Classify and handle error appropriately
+		appErr := apperror.Classify(err)
+		if appErr.Severity.IsCritical() {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		} else {
+			fmt.Fprintf(os.Stderr, "Warning: could not check last sync time: %v\n", err)
+		}
 	}
 
 	if shouldRefresh {
@@ -144,7 +156,13 @@ func runListView(cfg *config.Config, dbPath string) {
 			Token:  token,
 		})
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: auto-refresh failed: %v\n", err)
+			// Classify the error
+			appErr := apperror.Classify(err)
+			if appErr.Severity.IsCritical() {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			} else {
+				fmt.Fprintf(os.Stderr, "Warning: auto-refresh failed: %v\n", err)
+			}
 		} else {
 			fmt.Printf("✅ Refreshed %d issues and %d comments\n", result.IssuesFetched, result.CommentsFetched)
 		}
@@ -157,12 +175,28 @@ func runListView(cfg *config.Config, dbPath string) {
 		p := tea.NewProgram(model)
 		result, err := p.Run()
 		if err != nil {
+			// Classify and handle error
+			appErr := apperror.Classify(err)
+			if appErr.Severity.IsCritical() {
+				runErrorModal(appErr)
+			}
 			fmt.Fprintf(os.Stderr, "Error running application: %v\n", err)
 			os.Exit(1)
 		}
 
 		// Check if we should open comments view
 		finalModel := result.(list.Model)
+
+		// Check for critical error that needs modal display
+		if finalModel.HasCriticalError() {
+			errInfo := finalModel.GetCriticalError()
+			if errInfo != nil {
+				runErrorModal(*errInfo)
+			}
+			// Continue to show list view after acknowledgment
+			continue
+		}
+
 		if finalModel.ShouldOpenComments() {
 			// Get the selected issue and open comments view
 			issueNumber, issueTitle, ok := finalModel.GetSelectedIssueForComments()
@@ -187,7 +221,13 @@ func runListView(cfg *config.Config, dbPath string) {
 				Token:  token,
 			})
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: refresh failed: %v\n", err)
+				// Classify the error
+				appErr := apperror.Classify(err)
+				if appErr.Severity.IsCritical() {
+					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				} else {
+					fmt.Fprintf(os.Stderr, "Warning: refresh failed: %v\n", err)
+				}
 			} else {
 				fmt.Printf("✅ Refreshed %d issues and %d comments\n", result.IssuesFetched, result.CommentsFetched)
 			}
@@ -210,6 +250,20 @@ func runCommentsView(dbPath, repo string, issueNumber int, issueTitle string) bo
 	}
 	// Return true to go back to list view
 	return true
+}
+
+func runErrorModal(appErr apperror.AppError) {
+	// Create and run the error modal
+	model := apperror.RunModal(appErr)
+	p := tea.NewProgram(model)
+	_, err := p.Run()
+	if err != nil {
+		// If modal fails, just log the error to stderr
+		fmt.Fprintf(os.Stderr, "Error: %s\n", appErr.Display)
+		if appErr.Guidance != "" {
+			fmt.Fprintf(os.Stderr, "%s\n", appErr.Guidance)
+		}
+	}
 }
 
 func runConfig() error {
