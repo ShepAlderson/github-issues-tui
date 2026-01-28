@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -237,4 +238,131 @@ func parseAssignees(jsonData string) []string {
 // joinStrings joins a slice of strings with a separator
 func joinStrings(strs []string, sep string) string {
 	return strings.Join(strs, sep)
+}
+
+// ListIssue represents an issue for display in the list view
+type ListIssue struct {
+	Number       int
+	Title        string
+	Author       string
+	CreatedAt    string
+	UpdatedAt    string
+	State        string
+	CommentCount int
+	Labels       []string
+	Assignees    []string
+}
+
+// Validate checks if the issue has valid data
+func (i ListIssue) Validate() error {
+	if i.Number == 0 {
+		return fmt.Errorf("issue number cannot be zero")
+	}
+	if i.Title == "" {
+		return fmt.Errorf("issue title cannot be empty")
+	}
+	if i.Author == "" {
+		return fmt.Errorf("issue author cannot be empty")
+	}
+	return nil
+}
+
+// ListIssues returns all issues for a repository
+func ListIssues(db *sql.DB, repo string) ([]ListIssue, error) {
+	return ListIssuesSorted(db, repo, "updated", true)
+}
+
+// ListIssuesSorted returns issues sorted by the specified field
+func ListIssuesSorted(db *sql.DB, repo string, sortField string, descending bool) ([]ListIssue, error) {
+	// Map sort field to column name
+	var orderBy string
+	switch sortField {
+	case "number":
+		orderBy = "number"
+	case "created":
+		orderBy = "created_at"
+	case "updated", "":
+		orderBy = "updated_at"
+	default:
+		orderBy = "updated_at"
+	}
+
+	// Build order direction
+	direction := "ASC"
+	if descending {
+		direction = "DESC"
+	}
+
+	query := fmt.Sprintf(
+		"SELECT number, title, author, created_at, updated_at, state, comment_count, labels, assignees FROM issues WHERE repo = ? ORDER BY %s %s",
+		orderBy,
+		direction,
+	)
+
+	rows, err := db.Query(query, repo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query issues: %w", err)
+	}
+	defer rows.Close()
+
+	var issues []ListIssue
+	for rows.Next() {
+		var issue ListIssue
+		var labelsJSON, assigneesJSON string
+		if err := rows.Scan(&issue.Number, &issue.Title, &issue.Author, &issue.CreatedAt, &issue.UpdatedAt, &issue.State, &issue.CommentCount, &labelsJSON, &assigneesJSON); err != nil {
+			return nil, fmt.Errorf("failed to scan issue: %w", err)
+		}
+		issue.Labels = parseLabels(labelsJSON)
+		issue.Assignees = parseAssignees(assigneesJSON)
+		issues = append(issues, issue)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating issues: %w", err)
+	}
+
+	return issues, nil
+}
+
+// ListIssuesByState returns issues filtered by state
+func ListIssuesByState(db *sql.DB, repo string, state string) ([]ListIssue, error) {
+	query := `SELECT number, title, author, created_at, updated_at, state, comment_count, labels, assignees
+		FROM issues WHERE repo = ? AND state = ? ORDER BY updated_at DESC`
+
+	rows, err := db.Query(query, repo, state)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query issues: %w", err)
+	}
+	defer rows.Close()
+
+	var issues []ListIssue
+	for rows.Next() {
+		var issue ListIssue
+		var labelsJSON, assigneesJSON string
+		if err := rows.Scan(&issue.Number, &issue.Title, &issue.Author, &issue.CreatedAt, &issue.UpdatedAt, &issue.State, &issue.CommentCount, &labelsJSON, &assigneesJSON); err != nil {
+			return nil, fmt.Errorf("failed to scan issue: %w", err)
+		}
+		issue.Labels = parseLabels(labelsJSON)
+		issue.Assignees = parseAssignees(assigneesJSON)
+		issues = append(issues, issue)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating issues: %w", err)
+	}
+
+	return issues, nil
+}
+
+// FormatDate formats a date string for display
+func FormatDate(dateStr string) string {
+	if dateStr == "" {
+		return ""
+	}
+	// Parse RFC3339 format and return just the date portion
+	t, err := time.Parse(time.RFC3339, dateStr)
+	if err != nil {
+		return dateStr
+	}
+	return t.Format("2006-01-02")
 }

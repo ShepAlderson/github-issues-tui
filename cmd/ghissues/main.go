@@ -9,43 +9,21 @@ import (
 
 	"github.com/shepbook/ghissues/internal/config"
 	"github.com/shepbook/ghissues/internal/database"
+	"github.com/shepbook/ghissues/internal/list"
 	"github.com/shepbook/ghissues/internal/sync"
 )
 
-// MainModel represents the main application state
-type MainModel struct {
-	config *config.Config
+// ConfigAdapter adapts *config.Config to list.Config interface
+type ConfigAdapter struct {
+	cfg *config.Config
 }
 
-func NewMainModel(cfg *config.Config) MainModel {
-	return MainModel{
-		config: cfg,
-	}
+func (a *ConfigAdapter) GetDisplayColumns() []string {
+	return a.cfg.Display.Columns
 }
 
-func (m MainModel) Init() tea.Cmd {
-	return nil
-}
-
-func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		if msg.Type == tea.KeyCtrlC || msg.String() == "q" {
-			return m, tea.Quit
-		}
-	}
-	return m, nil
-}
-
-func (m MainModel) View() string {
-
-	msg := "✨ ghissues is configured!\n\n"
-	if m.config != nil && m.config.Default.Repository != "" {
-		msg += fmt.Sprintf("Repository: %s\n", m.config.Default.Repository)
-	}
-	msg += "\nThe full TUI will be available in a future user story.\n"
-	msg += "\nPress 'q' or Ctrl+C to quit.\n"
-	return msg
+func (a *ConfigAdapter) GetDefaultRepository() string {
+	return a.cfg.Default.Repository
 }
 
 func main() {
@@ -97,11 +75,7 @@ func main() {
 		}
 
 		// Re-run with the new config
-		p := tea.NewProgram(NewMainModel(cfg))
-		if _, err := p.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error running application: %v\n", err)
-			os.Exit(1)
-		}
+		runListView(cfg, dbFlag)
 		return
 	}
 
@@ -125,8 +99,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Run main application
-	p := tea.NewProgram(NewMainModel(cfg))
+	// Run main application with issue list view
+	runListView(cfg, dbPath)
+}
+
+func runListView(cfg *config.Config, dbPath string) {
+	adapter := &ConfigAdapter{cfg: cfg}
+	model := list.NewModel(adapter, dbPath)
+	p := tea.NewProgram(model)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running application: %v\n", err)
 		os.Exit(1)
