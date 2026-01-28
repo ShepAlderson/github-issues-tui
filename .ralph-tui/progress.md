@@ -87,6 +87,15 @@ after each iteration and included in agent prompts for context.
 - Main loop pattern for handling refresh, comments view, and list view
 - Keybinding 'r' for manual refresh in vim-like style
 
+### Error Handling Pattern
+- Classify errors by severity: minor (network, rate limit) and critical (auth, database corruption)
+- Use `SeverityMinor` for transient errors shown in status bar, cleared on key press
+- Use `SeverityCritical` for blocking errors shown in modal requiring Enter/Space acknowledgment
+- Detect error types: network (timeout, connection), rate limit, auth (401/bad credentials), database
+- Provide actionable guidance: "Check connectivity and retry" for network, "gh auth login" for auth, "remove db file" for corruption
+- Integrate error state into list model: `HasCriticalError()`, `GetCriticalError()`, `SetMinorError()`, `ClearMinorError()`
+- Main loop checks for critical errors and displays modal before returning to list view
+
 ---
 
 ## 2026-01-28 - US-001
@@ -425,5 +434,53 @@ omments displayed chronologically** - Sorted by created_at ASC\n- ✅ **Each com
 - Auto-refresh threshold (5 minutes) balances freshness with API usage
 - Main loop pattern: use for loop in main to handle multiple view types and refresh
 - Keybinding 'r' follows vim-like conventions for refresh/sync
+
+---
+## ✓ Iteration 9 - US-009: Data Refresh
+*2026-01-28T09:02:35.767Z (892s)*
+
+**Status:** Completed
+
+**Notes:**
+**Incremental sync only** - Uses GitHub API 'since' parameter to fetch only updates\n- ✅ **Handles deleted issues** - Compares local vs remote, removes deleted ones\n- ✅ **Handles new comments** - Re-fetches all comments when issue is updated\n\n### New Pattern Added\n**Data Refresh Pattern** - Incremental sync using GitHub API 'since' parameter, auto-refresh based on time since last sync, main loop pattern for handling refresh and view switching\n\nAll tests pass and the code is committed.\n\n
+
+---
+
+## ✓ Iteration 10 - US-013: Error Handling
+*2026-01-28*
+
+**Status:** Completed
+
+**Notes:**
+- Implemented comprehensive error handling with clear user messages
+- Files changed:
+  - internal/error/error.go (new) - Error classification with SeverityMinor/SeverityCritical
+  - internal/error/error_test.go (new) - Tests for error classification
+  - internal/error/modal.go (new) - Modal dialog for critical errors
+  - internal/error/modal_test.go (new) - Tests for error modal
+  - internal/list/list.go - Added ErrorInfo, AppError fields, SetMinorError, ClearMinorError, SetCriticalError, HasCriticalError, GetCriticalError, AcknowledgeCriticalError methods
+  - internal/list/list_test.go - Tests for error handling methods
+  - cmd/ghissues/main.go - Integration with main loop, runErrorModal function
+
+**Acceptance Criteria Met:**
+- ✅ **Minor errors (network timeout, rate limit) shown in status bar** - Error message with guidance shown in red in status bar
+- ✅ **Critical errors (invalid token, database corruption) shown as modal** - Modal with error indicator and guidance requires Enter/Space to dismiss
+- ✅ **Modal errors require acknowledgment before continuing** - Enter or Space key required to dismiss modal
+- ✅ **Errors include actionable guidance where possible** - Network errors suggest retry, auth errors suggest gh auth login, database errors suggest file removal
+- ✅ **Network errors suggest checking connectivity and retrying** - "Check your internet connection and try again with 'r'"
+
+**New Pattern Added to Codebase:**
+- **Error Handling Pattern** - Classify errors by severity (minor/critical), display minor errors in status bar, display critical errors as modals requiring acknowledgment, provide actionable guidance for all error types
+
+**Learnings:**
+- Package naming: Don't name packages after built-in types ("error" conflicts with Go's error interface). Use aliased imports like `apperror "github.com/shepbook/ghissues/internal/error"`
+- Error classification should happen early to avoid error string checking throughout the codebase
+- Separate error state into minor (transient, retryable) and critical (blocking, require acknowledgment)
+- Clear minor errors on any key press to provide immediate feedback
+- Modal errors need explicit acknowledgment (Enter/Space) before continuing
+- Status bar error display: Use contrasting colors (red foreground) and error indicators (⚠️) to make errors visible
+- Error guidance should be specific: "Check your internet connection and try again" vs generic "An error occurred"
+- Network errors should suggest retry capability when applicable
+- Database corruption errors should suggest database file removal
 
 ---

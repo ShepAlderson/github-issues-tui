@@ -276,14 +276,15 @@
         "Network errors suggest checking connectivity and retrying"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-005"
       ],
       "labels": [
         "tui",
         "errors"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-014",
@@ -309,6 +310,6 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-01-28T09:02:35.710Z"
+    "updatedAt": "2026-01-28T09:13:56.497Z"
   }
 }
