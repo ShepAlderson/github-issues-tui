@@ -56,7 +56,7 @@
         "Sync can be cancelled with Ctrl+C gracefully"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "dependsOn": [
         "US-002",
         "US-004"
@@ -64,7 +64,8 @@
       "labels": [
         "sync",
         "api"
-      ]
+      ],
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "US-004",
@@ -303,6 +304,6 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-01-28T08:06:23.836Z"
+    "updatedAt": "2026-01-28T08:17:27.859Z"
   }
 }

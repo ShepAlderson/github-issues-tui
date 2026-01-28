@@ -38,6 +38,20 @@ after each iteration and included in agent prompts for context.
 - Create parent directories with `os.MkdirAll(dir, 0755)` before checking writability
 - Provide clear error messages with override options
 
+### GitHub API Pagination Pattern
+- Parse Link header to find `rel="next"` for more pages
+- Use `per_page=100` (max) to minimize API calls
+- Sleep briefly between requests to be respectful to the API
+- Implement progress reporting with channel-based updates
+- Store `Fetched` and `Total` in progress messages for progress bar
+
+### Sync TUI Pattern with Cancellation
+- Use separate goroutine for API fetching
+- Send progress updates through channel to Bubbletea model
+- Check `cancelled` flag in fetch loop for graceful cancellation
+- Update progress bar using `tea.Msg` with progress data
+- Handle `tea.KeyCtrlC` for user cancellation
+
 ---
 
 ## 2026-01-28 - US-001
@@ -96,5 +110,55 @@ after each iteration and included in agent prompts for context.
 
 **Notes:**
 n 'ghissues config' to save a token to your config file\n3. Login with 'gh auth login' to use gh CLI authentication\n```\n\n**Token Validation (AC met: ✅)**\n- `ValidateToken()` function created (empty check)\n- Framework for API validation ready for future stories\n\n**Config File Security (AC met: ✅)**\n- Already implemented in US-001 with 0600 permissions\n\n**New Pattern Added to Codebase:**\n- Authentication Resolution Pattern with priority-based resolution and actionable error messages\n\n
+
+---
+## ✓ Iteration 4 - US-003: Initial Issue Sync
+*2026-01-28T09:30:00Z*
+
+**Status:** Completed
+
+**Notes:**
+- Implemented issue sync functionality with GitHub API integration
+- Files changed:
+  - internal/database/schema.go (new) - database schema for issues/comments
+  - internal/database/schema_test.go (new) - schema tests
+  - internal/github/client.go (new) - GitHub API client with pagination
+  - internal/github/client_test.go (new) - client tests
+  - internal/sync/sync.go (new) - sync TUI with progress bar
+  - internal/sync/sync_test.go (new) - sync tests
+  - cmd/ghissues/main.go (updated) - add sync subcommand
+  - go.mod (updated) - add dependencies
+
+**Acceptance Criteria Met:**
+- ✅ Progress bar displays during fetch showing issues fetched/total
+- ✅ All open issues are fetched (handles pagination automatically)
+- ✅ Issues stored in local SQLite database at configured path
+- ✅ Issue data includes: number, title, body, author, dates, comment count, labels, assignees
+- ✅ Comments for each issue are fetched and stored
+- ✅ Sync can be cancelled with Ctrl+C gracefully
+
+**New Pattern Added to Codebase:**
+- GitHub API Pagination Pattern: Parse Link header for `rel="next"` to determine more pages
+- Progress reporting with channel-based updates for real-time UI feedback
+
+**Learnings:**
+- SQLite (via mattn/go-sqlite3) provides local database storage
+- ON CONFLICT DO UPDATE for upsert operations in SQLite
+- GitHub API Link header format for pagination
+- Channel-based progress updates for real-time sync feedback
+- Bubbletea progress bar with gradient styling
+- Goroutines for concurrent API fetching with graceful cancellation
+- `Ctrl+C` handling with `tea.KeyCtrlC` in Bubbletea
+
+---
+
+## ✓ Iteration 3 - US-004: Database Storage Location
+*2026-01-28T08:06:23.890Z (172s)*
+
+**Status:** Completed
+
+**Notes:**
+ignature":""}],"model":"hf:moonshotai/Kimi-K2.5","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":27710,"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0},"context_management":null},"parent_tool_use_id":null,"session_id":"89be9b4d-9f0d-491b-94a3-c85e015bf603","uuid":"a495bd16-c031-406a-be5f-cb031c0ec0cd"}
+{"type":"assistant","message":{"id":"msg_6187ff4b-fd89-4d49-8f33-743145e8e69d","type":"message","role":"assistant","content":[{"type":"text","text":"
 
 ---
