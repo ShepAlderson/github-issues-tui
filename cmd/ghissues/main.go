@@ -1,12 +1,14 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/shepbook/ghissues/internal/config"
+	"github.com/shepbook/ghissues/internal/database"
 )
 
 // MainModel represents the main application state
@@ -46,9 +48,17 @@ func (m MainModel) View() string {
 }
 
 func main() {
+	// Parse global flags
+	var dbFlag string
+	flag.StringVar(&dbFlag, "db", "", "Database file path (overrides config)")
+
+	// Custom flag parsing to allow subcommands
+	flag.CommandLine.SetOutput(os.Stdout)
+	flag.Parse()
+
 	// Handle subcommands
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
+	if len(flag.Args()) > 0 {
+		switch flag.Args()[0] {
 		case "config":
 			if err := runConfig(); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -62,7 +72,7 @@ func main() {
 			printHelp()
 			os.Exit(0)
 		default:
-			fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", os.Args[1])
+			fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", flag.Args()[0])
 			printHelp()
 			os.Exit(1)
 		}
@@ -92,6 +102,19 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Resolve database path (flag > config > default)
+	dbPath := database.ResolvePath(dbFlag, cfg.Database.Path)
+
+	// Ensure database path is writable
+	if err := database.EnsureWritable(dbPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "\nDatabase path: %s\n", dbPath)
+		fmt.Fprintf(os.Stderr, "\nYou can override the database location using:\n")
+		fmt.Fprintf(os.Stderr, "  --db flag:        ghissues --db /path/to/db\n")
+		fmt.Fprintf(os.Stderr, "  Config file:      Set database.path in ~/.config/ghissues/config.toml\n")
 		os.Exit(1)
 	}
 
@@ -126,8 +149,15 @@ Usage:
   ghissues help         Show this help message
   ghissues version      Show version
 
+Global Flags:
+  --db <path>           Override database file path (default: .ghissues.db)
+
 Configuration:
   The configuration is stored at ~/.config/ghissues/config.toml
+  Database location priority:
+    1. --db flag (highest priority)
+    2. database.path in config file
+    3. .ghissues.db in current directory (default)
 
 First-Time Setup:
   On first run, ghissues will prompt you for:

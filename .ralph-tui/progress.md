@@ -31,6 +31,13 @@ after each iteration and included in agent prompts for context.
 - Use `exec.LookPath()` before attempting to execute external commands
 - Store token source information for debugging authentication issues
 
+### Database Path Resolution Pattern
+- Priority order: CLI flag -> config file -> default path
+- Test writability by creating and removing a temp file in the directory
+- Use `filepath.Abs()` to normalize relative paths
+- Create parent directories with `os.MkdirAll(dir, 0755)` before checking writability
+- Provide clear error messages with override options
+
 ---
 
 ## 2026-01-28 - US-001
@@ -44,6 +51,21 @@ after each iteration and included in agent prompts for context.
   - Bubbletea tests: manually trigger state changes since we can't simulate full TUI flow
   - Repository validation: use simple parsing + regex for GitHub username/repo validation
   - Setup flow: state machine pattern works well for multi-step wizards
+---
+
+## 2026-01-28 - US-004
+- Implemented database storage location configuration with priority-based resolution
+- Files changed:
+  - internal/database/path.go (new)
+  - internal/database/path_test.go (new)
+  - cmd/ghissues/main.go (updated with --db flag)
+- **Learnings:**
+  - `flag` package usage: Define flags with `flag.StringVar()` before `flag.Parse()`
+  - Flag package intercepts --help, use custom help subcommand instead
+  - Database writability test: Create temp file in directory, then remove it
+  - Path resolution pattern: flag > config > default with clear priority
+  - `filepath.Abs()` resolves relative paths to absolute paths
+  - `os.Chmod()` for read-only testing may not work on all platforms - use `t.Skip()`
 ---
 
 ## 2026-01-28 - US-002
@@ -65,5 +87,14 @@ after each iteration and included in agent prompts for context.
 
 **Notes:**
 68→  - Gotchas encountered\n    69→---\n    70→```\n    71→\n    72→If you discovered a **reusable pattern**, also add it to the `## Codebase Patterns` section at the TOP of progress.md.\n    73→\n    74→## Stop Condition\n    75→**IMPORTANT**: If the work is already complete (implemented in a previous iteration or already exists), verify it meets the acceptance criteria and signal completion immediately.\n    76→\n    77→When finished (or if already complete), signal completion with:\n    78→
+
+---
+## ✓ Iteration 2 - US-002: GitHub Authentication
+*2026-01-28T08:03:31.153Z (580s)*
+
+**Status:** Completed
+
+**Notes:**
+n 'ghissues config' to save a token to your config file\n3. Login with 'gh auth login' to use gh CLI authentication\n```\n\n**Token Validation (AC met: ✅)**\n- `ValidateToken()` function created (empty check)\n- Framework for API validation ready for future stories\n\n**Config File Security (AC met: ✅)**\n- Already implemented in US-001 with 0600 permissions\n\n**New Pattern Added to Codebase:**\n- Authentication Resolution Pattern with priority-based resolution and actionable error messages\n\n
 
 ---
