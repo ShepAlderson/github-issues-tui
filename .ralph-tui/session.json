@@ -1,0 +1,239 @@
+{
+  "version": 1,
+  "sessionId": "798b71f4-3204-4d6a-b397-92b709728887",
+  "status": "running",
+  "startedAt": "2026-01-28T07:46:26.582Z",
+  "updatedAt": "2026-01-28T10:04:58.975Z",
+  "currentIteration": 13,
+  "maxIterations": 10,
+  "tasksCompleted": 13,
+  "isPaused": false,
+  "agentPlugin": "claude",
+  "trackerState": {
+    "plugin": "json",
+    "prdPath": "./tasks/prd.json",
+    "totalTasks": 14,
+    "tasks": [
+      {
+        "id": "US-001",
+        "title": "First-Time Setup",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-002",
+        "title": "GitHub Authentication",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-003",
+        "title": "Initial Issue Sync",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-004",
+        "title": "Database Storage Location",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-005",
+        "title": "Issue List View",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-006",
+        "title": "Issue Sorting",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-007",
+        "title": "Issue Detail View",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-008",
+        "title": "Comments View",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-009",
+        "title": "Data Refresh",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-010",
+        "title": "Last Synced Indicator",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-011",
+        "title": "Keybinding Help",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-012",
+        "title": "Color Themes",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-013",
+        "title": "Error Handling",
+        "status": "completed",
+        "completedInSession": true
+      },
+      {
+        "id": "US-014",
+        "title": "Multi-Repository Configuration",
+        "status": "open",
+        "completedInSession": false
+      }
+    ]
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "status": "completed",
+      "taskId": "US-001",
+      "taskTitle": "First-Time Setup",
+      "taskCompleted": true,
+      "durationMs": 433104,
+      "startedAt": "2026-01-28T07:46:36.761Z",
+      "endedAt": "2026-01-28T07:53:49.865Z"
+    },
+    {
+      "iteration": 2,
+      "status": "completed",
+      "taskId": "US-002",
+      "taskTitle": "GitHub Authentication",
+      "taskCompleted": true,
+      "durationMs": 580062,
+      "startedAt": "2026-01-28T07:53:51.022Z",
+      "endedAt": "2026-01-28T08:03:31.084Z"
+    },
+    {
+      "iteration": 3,
+      "status": "completed",
+      "taskId": "US-004",
+      "taskTitle": "Database Storage Location",
+      "taskCompleted": true,
+      "durationMs": 171677,
+      "startedAt": "2026-01-28T08:03:32.158Z",
+      "endedAt": "2026-01-28T08:06:23.835Z"
+    },
+    {
+      "iteration": 4,
+      "status": "completed",
+      "taskId": "US-003",
+      "taskTitle": "Initial Issue Sync",
+      "taskCompleted": true,
+      "durationMs": 662960,
+      "startedAt": "2026-01-28T08:06:24.898Z",
+      "endedAt": "2026-01-28T08:17:27.858Z"
+    },
+    {
+      "iteration": 5,
+      "status": "completed",
+      "taskId": "US-005",
+      "taskTitle": "Issue List View",
+      "taskCompleted": true,
+      "durationMs": 603451,
+      "startedAt": "2026-01-28T08:17:28.928Z",
+      "endedAt": "2026-01-28T08:27:32.379Z"
+    },
+    {
+      "iteration": 6,
+      "status": "completed",
+      "taskId": "US-006",
+      "taskTitle": "Issue Sorting",
+      "taskCompleted": true,
+      "durationMs": 372701,
+      "startedAt": "2026-01-28T08:27:33.462Z",
+      "endedAt": "2026-01-28T08:33:46.163Z"
+    },
+    {
+      "iteration": 7,
+      "status": "completed",
+      "taskId": "US-007",
+      "taskTitle": "Issue Detail View",
+      "taskCompleted": true,
+      "durationMs": 412983,
+      "startedAt": "2026-01-28T08:33:47.301Z",
+      "endedAt": "2026-01-28T08:40:40.284Z"
+    },
+    {
+      "iteration": 8,
+      "status": "completed",
+      "taskId": "US-008",
+      "taskTitle": "Comments View",
+      "taskCompleted": true,
+      "durationMs": 421544,
+      "startedAt": "2026-01-28T08:40:41.352Z",
+      "endedAt": "2026-01-28T08:47:42.896Z"
+    },
+    {
+      "iteration": 9,
+      "status": "completed",
+      "taskId": "US-009",
+      "taskTitle": "Data Refresh",
+      "taskCompleted": true,
+      "durationMs": 891729,
+      "startedAt": "2026-01-28T08:47:43.980Z",
+      "endedAt": "2026-01-28T09:02:35.709Z"
+    },
+    {
+      "iteration": 10,
+      "status": "completed",
+      "taskId": "US-013",
+      "taskTitle": "Error Handling",
+      "taskCompleted": true,
+      "durationMs": 679721,
+      "startedAt": "2026-01-28T09:02:36.775Z",
+      "endedAt": "2026-01-28T09:13:56.496Z"
+    },
+    {
+      "iteration": 11,
+      "status": "completed",
+      "taskId": "US-010",
+      "taskTitle": "Last Synced Indicator",
+      "taskCompleted": true,
+      "durationMs": 539760,
+      "startedAt": "2026-01-28T09:13:57.579Z",
+      "endedAt": "2026-01-28T09:22:57.339Z"
+    },
+    {
+      "iteration": 12,
+      "status": "completed",
+      "taskId": "US-011",
+      "taskTitle": "Keybinding Help",
+      "taskCompleted": true,
+      "durationMs": 664388,
+      "startedAt": "2026-01-28T09:22:58.422Z",
+      "endedAt": "2026-01-28T09:34:02.810Z"
+    },
+    {
+      "iteration": 13,
+      "status": "completed",
+      "taskId": "US-012",
+      "taskTitle": "Color Themes",
+      "taskCompleted": true,
+      "durationMs": 1040913,
+      "startedAt": "2026-01-28T09:34:03.890Z",
+      "endedAt": "2026-01-28T09:51:24.803Z"
+    }
+  ],
+  "skippedTaskIds": [],
+  "cwd": "/Users/shepbook/git/github-issues-tui",
+  "activeTaskIds": [],
+  "subagentPanelVisible": true
+}
